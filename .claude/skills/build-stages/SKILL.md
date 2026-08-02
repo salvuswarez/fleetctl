@@ -12,8 +12,8 @@ description: The S0–S8 build stages, what each contains, its exit criterion, a
 | # | Stage | Exit criterion | Status |
 |---|-------|----------------|--------|
 | **S0** | Repo bootstrap | CI green on an empty package | ✅ done |
-| **S1** | Core kernel | `FakeTransport` + `LocalArtifactStore` run a trivial step end-to-end in tests, with audit records asserted | ⬜ next |
-| **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ |
+| **S1** | Core kernel | `FakeTransport` + `LocalArtifactStore` run a trivial step end-to-end in tests, with audit records asserted | ✅ done |
+| **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ next |
 | **S3** | Config-as-code + workflows | `fleetctl run kodi-refresh --dry-run` prints a correct plan; `config show <device>` explains every key | ⬜ |
 | **S4** | Policy + audit hardening | The gold device is structurally undeployable-to without a config edit | ⬜ |
 | **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ⬜ |
@@ -49,7 +49,6 @@ Full detail in `docs/architecture.md` §14 ("Open before S1").
 Do not build ahead of the current stage. Concretely:
 
 - No empty `core/` subpackages with stub `__init__.py` files "ready for later."
-- No config loader before S3 — and therefore no `config/*.example` promising one.
 - No abstraction whose second adapter does not exist yet in the same stage.
 - No policy hooks before S4; no MCP surface before S6.
 
