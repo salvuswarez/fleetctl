@@ -1,11 +1,4 @@
-"""The artifact store seam, and a local-filesystem adapter.
-
-`latest` and `require_kind` live on the protocol rather than in callers on
-purpose. A store that only exposed put/get/list would be a shallow file
-facade: every app pack would reimplement `sorted(candidates)[-1]` and the
-"this reference points outside the builds directory" guard, and one of them
-would get it wrong.
-"""
+"""The artifact store seam, and a local-filesystem adapter."""
 
 from __future__ import annotations
 
@@ -63,10 +56,6 @@ class ArtifactStore(Protocol):
 def require_kind(ref: ArtifactRef, kind: str) -> ArtifactRef:
     """Reject a reference that points outside the expected namespace.
 
-    Deploy ships built profiles, never raw captures. Enforcing that here
-    rather than in each caller is what keeps the rule from being forgotten
-    by the next app pack.
-
     **PARAMETERS:**
         `ref` (ArtifactRef): Reference to check.  <br>
         `kind` (str): The namespace it must belong to.  <br>
@@ -84,10 +73,6 @@ def require_kind(ref: ArtifactRef, kind: str) -> ArtifactRef:
 
 class LocalArtifactStore:
     """Artifact store backed by a local directory tree.
-
-    The second adapter that makes this seam real rather than hypothetical,
-    and the one that lets the whole build/deploy pipeline be tested without
-    a network share.
 
     **PARAMETERS:**
         `root` (Path): Directory holding one subdirectory per `kind`.  <br>
@@ -140,11 +125,6 @@ class LocalArtifactStore:
 
     def list(self, kind: str) -> list[ArtifactInfo]:
         """List everything under `kind`, newest first.
-
-        A missing directory yields an empty list; an unreadable sidecar
-        drops only its own metadata, never the artifact from the listing.
-        The predecessor swallowed such failures wholesale, so a transient
-        error made backups silently vanish from the picker.
 
         **RETURNS:**
             `list[ArtifactInfo]`: Descriptions, newest first.  <br>

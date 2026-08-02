@@ -1,14 +1,4 @@
-"""The shared Kodi base image: fetching it, and keeping devices on it.
-
-A profile is only half of what makes a device match its siblings; the other
-half is running the same Kodi build. Publishing one APK as an artifact and
-installing it where the version differs is what stops a fleet drifting into
-several Kodi versions with subtly different behaviour.
-
-The version check matters more than it looks: the predecessor pushed the APK
-on *every* deploy, roughly 100MB over ADB each time, for no change in the
-common case where the fleet was already on the right version.
-"""
+"""The shared Kodi base image: fetching it, and keeping devices on it."""
 
 from __future__ import annotations
 
@@ -154,8 +144,6 @@ def fetch_base(context: FleetStepContext) -> StepResult:
 
 def check_update(context: FleetStepContext) -> StepResult:
     """Report whether a newer stable Kodi exists than the published base.
-
-    Reads only — nothing is downloaded and no device is touched.
 
     **RETURNS:**
         `StepResult`: Facts carry `current`, `latest`, and `update_available`.  <br>

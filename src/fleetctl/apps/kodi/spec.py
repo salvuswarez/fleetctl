@@ -1,7 +1,4 @@
-"""What Kodi's state is — the app's half of the `state` contract.
-
-Everything here is a fact about Kodi. Nothing here is a fact about a device.
-"""
+"""What Kodi's state is — the app's half of the `state` contract."""
 
 from __future__ import annotations
 

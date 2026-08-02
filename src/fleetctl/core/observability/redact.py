@@ -1,16 +1,4 @@
-"""Redaction, applied before anything is written.
-
-Two lessons from the predecessor drive this. Its `SmbConfig` was a dataclass
-holding a plaintext password with no `repr=False`, so any log of the config
-object would have printed the credential. And its ADB layer logged full
-command strings at debug level, while device settings routinely carry
-credential-bearing URLs (an IPTV playlist URL with `username=`/`password=`
-embedded is the common case).
-
-Neither was a bug anyone had written yet. Both were one careless line away,
-which is why this is a type applied at a chokepoint rather than a rule
-people are asked to remember.
-"""
+"""Redaction, applied before anything is written."""
 
 from __future__ import annotations
 
@@ -48,10 +36,6 @@ _DEFAULT_SENSITIVE_KEYS: frozenset[str] = frozenset({"password", "passwd", "pwd"
 class Redactor:
     """Removes credential-shaped content from text and structured records.
 
-    Pure: text in, text out. That makes the leak paths it closes directly
-    testable, which is the point — a redactor nobody can test is a redactor
-    nobody trusts.
-
     **PARAMETERS:**
         `patterns` (Sequence[re.Pattern[str]]): Regexes whose match is replaced, preserving any `keep` and `tail` groups.  <br>
         `sensitive_keys` (frozenset[str]): Mapping keys whose values are masked wholesale, matched case-insensitively against the final path segment.  <br>
@@ -76,10 +60,6 @@ class Redactor:
 
     def mapping(self, value: Mapping[str, Any]) -> dict[str, Any]:
         """Mask sensitive values in a structured record, recursively.
-
-        A key match masks the whole value; every other string is still run
-        through `text`, so a credential hiding inside an innocuously-named
-        field is caught too.
 
         **PARAMETERS:**
             `value` (Mapping[str, Any]): Record to redact.  <br>

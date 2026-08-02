@@ -1,26 +1,4 @@
-"""Who may do what, to which devices.
-
-A fleet tool that can wipe profiles and disable system packages should be
-able to express restraint. Nothing here is on by default: with no `policy:`
-block the policy is permissive, because a tool that refuses to work out of
-the box is a tool nobody configures.
-
-What it makes expressible, for whoever wants it:
-
-**Approval keys off effect class, not step names.** An allow-list of step ids
-silently permits the next destructive step someone adds; gating on
-`DESTRUCTIVE` gates it automatically. This matters most for a non-human
-caller, which cannot read a convention.
-
-**Protected devices outrank actors.** Where a device genuinely must not be
-touched by a given step — a capture source mid-experiment, a device someone
-else depends on this evening — marking it is stronger than remembering it.
-The check runs before actor permissions, so broadening someone's rights does
-not reach a protected device.
-
-**Blast radius is capped per actor.** Useful mainly for agents and
-automations, where "run it on everything" is one plausible misreading away.
-"""
+"""Who may do what, to which devices."""
 
 from __future__ import annotations
 
@@ -45,9 +23,6 @@ class Verdict(str, Enum):
 @dataclass(frozen=True, slots=True)
 class Decision:
     """A policy outcome, with the reason that produced it.
-
-    The reason is not decoration: a denial nobody can explain is a bug report
-    waiting to happen, and this text is what a user or an agent is shown.
 
     **PARAMETERS:**
         `verdict` (Verdict): What was decided.  <br>
@@ -140,10 +115,6 @@ class Policy:
 
     def check(self, *, actor: str, step_id: str, effect: Effect, device: Device | None = None) -> Decision:
         """Decide whether one action may proceed.
-
-        Order matters: device protection is evaluated before the actor's own
-        permissions, so a protected device cannot be reached by granting
-        someone broader rights.
 
         **PARAMETERS:**
             `actor` (str): Who is asking, e.g. ``cli:alice`` or ``mcp:claude``.  <br>
@@ -250,10 +221,6 @@ def _effect(value: Any, pattern: str) -> Effect:
 
 def permissive() -> Policy:
     """A policy that allows everything, for a fleet with no `policy:` block.
-
-    Deliberately explicit rather than implied by an empty `Policy()`: with no
-    actor rules at all, `check` denies everything, which would make an
-    unconfigured install refuse to do anything.
 
     **RETURNS:**
         `Policy`: Allows every actor every step.  <br>

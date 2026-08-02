@@ -1,16 +1,4 @@
-"""Workflows: named, ordered step sequences with declarative targeting.
-
-The predecessor's pipeline was implicit — you knew to run capture, then
-build, then deploy because the documentation said so. Nothing recorded the
-ordering, nothing expressed "every device tagged kodi", and a fleet-wide run
-had no vocabulary for concurrency or what to do when one device fails.
-
-Deliberately *not* a template language. Artifact handoff between steps works
-by querying the store for the newest artifact of a kind, which is behaviour
-the steps need anyway — adding `{{ }}` interpolation would mean owning an
-expression parser, a scoping model, and a debugging story with no debugger,
-to solve a problem that is already solved.
-"""
+"""Workflows: named, ordered step sequences with declarative targeting."""
 
 from __future__ import annotations
 
@@ -34,8 +22,6 @@ class OnError(str, Enum):
 @dataclass(frozen=True, slots=True)
 class Target:
     """Which devices a step runs against.
-
-    An empty target means fleet-level: the step runs once, with no device.
 
     **PARAMETERS:**
         `tags` (tuple[str, ...]): Every tag a device must carry.  <br>

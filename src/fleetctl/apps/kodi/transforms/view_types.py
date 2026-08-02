@@ -1,14 +1,4 @@
-"""Corrections to a skin's compiled view-type routing.
-
-A skin maps a container's content type to a numbered view through boolean
-expressions in a compiled includes file. Shipped defaults can render the same
-content differently depending on whether it came from the library or a
-plugin, which reads as a bug to anyone using the device.
-
-The expressions themselves live in the profile recipe rather than here: they
-are skin-version-specific, and a skin update is a config edit rather than a
-code change.
-"""
+"""Corrections to a skin's compiled view-type routing."""
 
 from __future__ import annotations
 

@@ -1,19 +1,4 @@
-"""The `state` verb: snapshotting and restoring an application's on-device state.
-
-This is the deepest verb in the vocabulary, and deliberately so. An app pack
-knows *what* its state is — which directories matter, what is disposable
-cache. A device pack knows *where* that lives and *how* to get bytes in and
-out of it: the filesystem layout, the archive tooling that actually works on
-that hardware, the staging directory, the free-space headroom.
-
-Putting archive handling here rather than in the app pack is what keeps the
-ring rule honest. The alternative was `apps/kodi` issuing `tar` commands —
-but whether `tar -z` is safe to use is a *vendor* fact (it silently
-truncates on Fire OS), so the app would have been encoding a quirk it has no
-business knowing, and a second device type would have inherited it untested.
-
-The app declares an `AppStateSpec`. The pack does the rest.
-"""
+"""The `state` verb: snapshotting and restoring an application's on-device state."""
 
 from __future__ import annotations
 
@@ -27,9 +12,6 @@ from .errors import FleetError
 @dataclass(frozen=True, slots=True)
 class AppStateSpec:
     """How an app describes its own state to whichever pack holds it.
-
-    Contains no path and no archive detail: both are the device pack's
-    business.
 
     **PARAMETERS:**
         `app_id` (str): The app pack's id, e.g. ``kodi``.  <br>
@@ -64,11 +46,7 @@ class AppStateSpec:
 
 
 class StateManager(Protocol):
-    """Moves an application's state on and off a device.
-
-    Implemented by device packs. An app pack calls this and never issues an
-    archive or transfer command itself.
-    """
+    """Moves an application's state on and off a device."""
 
     @property
     def platform(self) -> str:
@@ -79,9 +57,6 @@ class StateManager(Protocol):
 
     def snapshot(self, spec: AppStateSpec, destination: Path) -> Path:
         """Archive the app's state and retrieve it.
-
-        Excluded paths are removed on the device first, so the archive is
-        already trimmed rather than being cleaned up afterwards.
 
         **PARAMETERS:**
             `spec` (AppStateSpec): What state to capture.  <br>
@@ -96,10 +71,6 @@ class StateManager(Protocol):
 
     def restore(self, spec: AppStateSpec, archive: Path) -> None:
         """Replace the app's state with the contents of `archive`.
-
-        The archive is expected to be flat: the app's `members` at its root,
-        with no wrapping directory, so it extracts straight into the state
-        root with no path rewriting.
 
         **PARAMETERS:**
             `spec` (AppStateSpec): Whose state is being replaced.  <br>

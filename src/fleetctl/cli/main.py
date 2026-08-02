@@ -1,10 +1,4 @@
-"""The `fleetctl` command group.
-
-`run` is deliberately generic. A step registers once and becomes runnable
-here with no command written for it, which is the same property that will let
-the Home Assistant services and the MCP tools be generated rather than
-hand-maintained.
-"""
+"""The `fleetctl` command group."""
 
 from __future__ import annotations
 
@@ -426,11 +420,7 @@ def workflow_run(ctx: click.Context, name: str, dry_run: bool, expected_digest: 
 
 
 def _record_denial(container: Container, step_id: str, target: str, reason: str) -> None:
-    """Audit a refusal.
-
-    A policy that silently refuses is undebuggable, and a denial is exactly
-    the kind of event worth being able to review later.
-    """
+    """Audit a refusal."""
     # Bound here because a denial happens before any step envelope runs, and a
     # record that cannot say who was refused is half a record.
     with correlate(actor=container.actor, step_id=step_id):
@@ -438,11 +428,7 @@ def _record_denial(container: Container, step_id: str, target: str, reason: str)
 
 
 def _task_runner(container: Container) -> Any:
-    """Build the callback the engine uses to execute one planned task.
-
-    Constructing a transport and a context is composition-root work, which is
-    why the engine takes this rather than doing it itself.
-    """
+    """Build the callback the engine uses to execute one planned task."""
 
     def _run(task: Any, op_id: str) -> OperationStatus:
         step = container.registry.step(task.use)
@@ -459,11 +445,7 @@ def _task_runner(container: Container) -> Any:
 @click.option("--dry-run", is_flag=True, help="Report what was found without writing the inventory.")
 @click.pass_context
 def scan(ctx: click.Context, subnet: str, dry_run: bool) -> None:
-    """Discover devices on a subnet and merge them into the inventory.
-
-    SUBNET is a CIDR block (192.168.1.0/24) or a three-octet prefix
-    (192.168.1).
-    """
+    """Discover devices on a subnet and merge them into the inventory."""
     container = _container(ctx)
     try:
         hosts = Sweeper().sweep(subnet)
@@ -518,11 +500,7 @@ def scan(ctx: click.Context, subnet: str, dry_run: bool) -> None:
 @click.option("--actor", default="mcp:agent", help="Identity recorded on every audit record and matched against policy.")
 @click.pass_context
 def mcp_serve(ctx: click.Context, actor: str) -> None:
-    """Serve the agent toolkit over MCP on stdio.
-
-    Policy applies exactly as it does here: an agent can only reach a device
-    through a registered step, and every refusal is audited.
-    """
+    """Serve the agent toolkit over MCP on stdio."""
     options = ctx.obj or {}
     try:
         from ..mcp.server import serve

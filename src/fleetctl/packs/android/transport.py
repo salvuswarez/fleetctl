@@ -1,25 +1,4 @@
-"""ADB transport: the real hardware path.
-
-Lives in the Android pack rather than the kernel because ADB *is* Android —
-a kernel that knows about it could not stay device-agnostic.
-
-Two behaviours here are not obvious and were both established against real
-hardware. Both are load-bearing; neither should be simplified without
-re-measuring on a device.
-
-**Uploads go over netcat, not the ADB push protocol.** Measured against a
-real Fire TV from both a workstation and Home Assistant: `push()` moved zero
-bytes and hung until timeout for anything beyond a few megabytes, and the
-destination file was never created. The same host sustained 5-12 MB/s
-streaming into an on-device `nc`. `shell()` and `pull()` are unaffected and
-are used as-is.
-
-**The listener cannot be backgrounded.** `adb_shell` closes the shell stream
-when a command returns, and the device tears down the process group with it,
-killing a `&`-backgrounded `nc` before anything connects. `nohup` and
-`setsid` do not help. The listener therefore runs on its own connection held
-open by a worker thread, and exits naturally when the transfer socket closes.
-"""
+"""ADB transport: the real hardware path."""
 
 from __future__ import annotations
 
@@ -68,9 +47,6 @@ CAPABILITIES: frozenset[Capability] = frozenset(
 
 class AdbTransport:
     """One ADB connection to a device, held open for a whole operation.
-
-    Held open deliberately: the auth handshake is expensive, and the
-    predecessor paid roughly one per command until this was fixed.
 
     **PARAMETERS:**
         `address` (str): Device IPv4 address.  <br>
@@ -208,11 +184,6 @@ class AdbTransport:
     def put(self, local_path: Path, remote_path: str, *, effect: Effect = Effect.MUTATING) -> int:
         """Upload a file and verify it landed intact.
 
-        The digest check is not optional. `nc` exits as soon as it sees the
-        connection close and drops whatever is still buffered, so a naive
-        send loses its tail — transfers arrived 8-24 KB short. The digest is
-        what turns a short write into an error rather than a corrupt deploy.
-
         **RETURNS:**
             `int`: Bytes uploaded.  <br>
 
@@ -265,11 +236,7 @@ class AdbTransport:
             listener.stop()
 
     def _connect_to_listener(self) -> socket.socket:
-        """Connect to the device's listener, retrying while it binds.
-
-        The port is deliberately not probed first: `nc -l` accepts exactly one
-        connection, so a probe would consume the listener this upload needs.
-        """
+        """Connect to the device's listener, retrying while it binds."""
         deadline = time.monotonic() + _CONNECT_TIMEOUT_S
         last: OSError | None = None
         while time.monotonic() < deadline:
@@ -281,11 +248,7 @@ class AdbTransport:
         raise last or OSError(f"netcat listener never came up on {self._address}:{NC_PORT}")
 
     def _await_size(self, remote_path: str, size: int) -> None:
-        """Block until the device-side file reaches `size`, or time out.
-
-        A timeout is logged rather than raised: `put`'s digest check is the
-        authority on whether the transfer actually succeeded.
-        """
+        """Block until the device-side file reaches `size`, or time out."""
         deadline = time.monotonic() + _SETTLE_TIMEOUT_S
         landed = -1
         while time.monotonic() < deadline:

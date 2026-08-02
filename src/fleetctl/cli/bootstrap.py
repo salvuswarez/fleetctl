@@ -1,10 +1,4 @@
-"""The CLI's composition root: the only place this adapter constructs anything.
-
-Everything a step touches is built here and injected. A step never reaches for
-a transport, an artifact store, or an audit sink — which is what makes the
-same step body runnable from Home Assistant, from a test, or from an agent
-without changing a line of it.
-"""
+"""The CLI's composition root: the only place this adapter constructs anything."""
 
 from __future__ import annotations
 
@@ -15,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from ..core.appmgr import AppManager
+from ..core.artifacts.smb import SmbArtifactStore, SmbSettings
 from ..core.artifacts.store import ArtifactStore, LocalArtifactStore
 from ..core.config.loader import load_yaml_file
 from ..core.config.secrets import EnvSecretProvider, SecretResolver
@@ -97,10 +92,6 @@ class Container:
     def connector(self) -> Callable[[str, str], Transport]:
         """Build the callback discovery uses to reach a candidate host.
 
-        Discovery does not know what a host is yet, so it cannot ask a
-        device's pack for a transport. Instead it asks by *platform*, and the
-        first installed pack for that platform supplies one.
-
         **RETURNS:**
             `Callable[[str, str], Transport]`: Takes an address and a platform; raises `TransportError` if no transport can be opened.  <br>
         """
@@ -119,9 +110,6 @@ class Container:
 
     def transport_for(self, device: Device) -> Transport:
         """Open an audited transport to a device.
-
-        The returned transport is already wrapped, so a step cannot bypass
-        auditing — it never constructs one itself.
 
         **PARAMETERS:**
             `device` (Device): The target.  <br>
@@ -169,10 +157,6 @@ class Container:
 def cli_actor() -> str:
     """Identify who is running the CLI.
 
-    Recorded on every audit event and matched against policy patterns like
-    ``cli:*``. A trail that says only "cli" cannot answer who ran something,
-    which is half the point of keeping one.
-
     **RETURNS:**
         `str`: ``cli:<username>``, falling back to ``cli:unknown`` where the OS will not say.  <br>
     """
@@ -184,10 +168,6 @@ def cli_actor() -> str:
 
 def _under_home(configured: Any, home: Path, default_name: str) -> Path:
     """Resolve a configured directory, treating a relative path as under `home`.
-
-    Resolving against the working directory instead would make where state
-    lands depend on where the command was run from, which is how a test — or
-    a user — ends up scattering audit files across a filesystem.
 
     **PARAMETERS:**
         `configured` (Any): The configured path, or None.  <br>
@@ -201,6 +181,28 @@ def _under_home(configured: Any, home: Path, default_name: str) -> Path:
         return home / default_name
     path = Path(str(configured))
     return path if path.is_absolute() else home / path
+
+
+def _artifact_store(config: Mapping[str, Any], home: Path) -> ArtifactStore:
+    """Pick the artifact backend from config.
+
+    Local unless an SMB block is configured and complete, so an install with
+    no share still works rather than failing at startup.
+
+    **PARAMETERS:**
+        `config` (Mapping[str, Any]): The `artifacts` block.  <br>
+        `home` (Path): Runtime state directory, parent of the local store.  <br>
+
+    **RETURNS:**
+        `ArtifactStore`: The configured store.  <br>
+    """
+    smb = config.get("smb")
+    if isinstance(smb, Mapping):
+        settings = SmbSettings.from_mapping(smb)
+        if settings.configured:
+            return SmbArtifactStore(settings)
+        LOGGER.warning("artifacts.smb is present but incomplete; falling back to the local store")
+    return LocalArtifactStore(_under_home(config.get("local_root"), home, "artifacts"))
 
 
 def build_container(
@@ -231,12 +233,11 @@ def build_container(
     audit_dir = _under_home(observability.get("audit_dir"), home, "audit")
 
     artifacts_config = config.get("artifacts", {}) if isinstance(config.get("artifacts"), dict) else {}
-    artifact_root = _under_home(artifacts_config.get("local_root"), home, "artifacts")
 
     return Container(
         registry=registry if registry is not None else discover(),
         inventory=DeviceStore(config_dir / "inventory" / "devices.yml"),
-        artifacts=LocalArtifactStore(artifact_root),
+        artifacts=_artifact_store(artifacts_config, home),
         operations=OperationRegistry(),
         audit=ChainedAuditWriter(JsonlAuditSink(audit_dir)),
         config=config,

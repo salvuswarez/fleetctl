@@ -17,11 +17,6 @@ ADVANCED_SETTINGS = "advancedsettings.xml"
 class RemoveThumbnailSubstitution:
     """Drop a path substitution that redirects the thumbnail cache off-device.
 
-    Caching thumbnails over a network share turns every artwork read into
-    network I/O. Combined with preloading every home tab at startup, it
-    contributed to a low-memory kill on a 1.7GB device; removing it restores
-    Kodi's default local cache.
-
     **PARAMETERS:**
         `marker` (str): Substring identifying the substitution to remove, matched case-insensitively against each entry's ``<from>``.  <br>
     """

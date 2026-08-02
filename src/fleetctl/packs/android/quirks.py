@@ -1,9 +1,4 @@
-"""Vendor quirks, as data.
-
-Each is a real, verified-on-hardware deviation from what Android normally
-does. They live here as a typed record so a vendor pack declares which ones
-apply to it, rather than every code path branching on a device model.
-"""
+"""Vendor quirks, as data."""
 
 from __future__ import annotations
 
@@ -14,10 +9,6 @@ from typing import Any, Mapping
 @dataclass(frozen=True, slots=True)
 class AndroidQuirks:
     """Which vendor deviations apply to a given device family.
-
-    Defaults describe stock Android. A vendor pack overrides only what it has
-    actually confirmed on hardware — an unverified quirk is worse than none,
-    because it makes a workaround look justified.
 
     **PARAMETERS:**
         `split_gzip` (bool): Create archives as ``tar`` then a separate ``gzip``, and extract as ``gzip -d`` then ``tar``. Required where toybox's ``tar -z`` silently truncates: `tar` reports success and the archive is byte-identical on re-pull, so the corruption is baked in at creation.  <br>
@@ -40,9 +31,6 @@ class AndroidQuirks:
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> AndroidQuirks:
         """Build quirks from a pack's ``data/quirks.yml``.
-
-        Unknown keys are ignored so a newer data file does not break an older
-        installation.
 
         **PARAMETERS:**
             `data` (Mapping[str, Any]): Parsed quirk declarations.  <br>

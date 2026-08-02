@@ -7,8 +7,10 @@
 # `src/fleetctl/core/config/`, which silently excluded a whole source package.
 .env
 *.secret
-/config/
-!/config/*.example
+# Contents, not the directory: git cannot re-include a file whose parent
+# directory is excluded, so `/config/` would have hidden the examples too.
+/config/**
+!/config/**/
 !/config/**/*.example
 
 # ADB key material — a standing authorization token for every paired device.

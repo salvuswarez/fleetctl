@@ -1,12 +1,4 @@
-"""Transport decorator that records every effect it passes through.
-
-This is the payoff of putting an interface between steps and devices. Because
-every side effect goes through `Transport`, wrapping it captures all of them —
-automatically, for every step ever written, including third-party packs whose
-authors never heard of the audit trail.
-
-Steps cannot opt out, because steps never construct their own transport.
-"""
+"""Transport decorator that records every effect it passes through."""
 
 from __future__ import annotations
 
@@ -22,11 +14,6 @@ from .base import Transport
 
 class AuditingTransport:
     """Wraps any `Transport`, recording each call as an audit event.
-
-    `READ` effects are deliberately not written to the durable trail — a
-    fleet-wide maintenance run issues thousands of probes, and burying a few
-    hundred real changes among them is how an audit log stops being read.
-    They still reach the diagnostic log through the underlying transport.
 
     **PARAMETERS:**
         `inner` (Transport): The transport actually doing the work.  <br>
@@ -59,12 +46,7 @@ class AuditingTransport:
         return self._record(AuditKind.EXEC, command, effect, lambda: self._inner.exec(command, effect=effect, timeout_s=timeout_s))
 
     def exec_ok(self, command: str, *, effect: Effect = Effect.MUTATING, timeout_s: float | None = None) -> str:
-        """Run a command, returning `""` on failure, recording the outcome either way.
-
-        A swallowed failure is exactly the case worth auditing: this is how
-        `pm disable-user` silently no-oping on old Fire OS becomes visible
-        after the fact rather than being lost.
-        """
+        """Run a command, returning `""` on failure, recording the outcome either way."""
         started = time.monotonic()
         try:
             result = self._inner.exec(command, effect=effect, timeout_s=timeout_s)
@@ -111,12 +93,7 @@ class AuditingTransport:
         *,
         detail: dict[str, object] | None = None,
     ) -> T:
-        """Run `call`, writing an audit record when `effect` warrants one.
-
-        The record is written on both the success and failure paths, and the
-        original exception is always re-raised — auditing observes control
-        flow, it never alters it.
-        """
+        """Run `call`, writing an audit record when `effect` warrants one."""
         started = time.monotonic()
         try:
             result = call()

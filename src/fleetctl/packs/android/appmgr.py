@@ -34,10 +34,6 @@ class AndroidAppManager:
     def install(self, package: Path, *, identifier: str = "") -> None:
         """Stage an APK on the device, install it, and clean up.
 
-        Staging through external storage rather than installing in place:
-        `pm install` reads a path on the device, so the file has to get there
-        first, and leaving it behind would waste space a stick does not have.
-
         **RAISES:**
             `TransportError`: If the transfer or the install failed.  <br>
         """

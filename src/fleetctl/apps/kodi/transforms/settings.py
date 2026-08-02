@@ -1,10 +1,4 @@
-"""Apply setting overrides to a profile's userdata XML files.
-
-Kodi settings files are `<settings><setting id="...">value</setting></settings>`.
-Overrides are applied to the parsed tree rather than by text substitution, so
-a value containing XML-significant characters cannot corrupt the file — which
-is the failure mode a `sed`-based approach invites.
-"""
+"""Apply setting overrides to a profile's userdata XML files."""
 
 from __future__ import annotations
 

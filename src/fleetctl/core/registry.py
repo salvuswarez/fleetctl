@@ -1,14 +1,4 @@
-"""Plugin discovery: what packs exist, and what steps they offer.
-
-Adding a device type or a step touches exactly one file — the pack that adds
-it. Nothing here enumerates packs by name, and nothing downstream branches on
-one, which is what keeps the design open to extension without modification.
-
-Discovery isolates import failures. A pack whose optional dependency is not
-installed is skipped with a warning rather than taking the whole CLI down
-with it: a broken third-party pack must not stop you managing the devices
-you can still reach.
-"""
+"""Plugin discovery: what packs exist, and what steps they offer."""
 
 from __future__ import annotations
 

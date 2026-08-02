@@ -1,13 +1,4 @@
-"""Operation records: the human-readable timeline, distinct from the audit trail.
-
-The timeline says "extracting profile"; the audit trail says which commands
-ran and whether they worked. Both matter, for different readers.
-
-Cancellation is cooperative and honest: requesting it only sets a flag, and
-the operation reports its own outcome when it observes the flag at a step
-boundary. Marking it cancelled from outside would let the record contradict
-what the work actually did.
-"""
+"""Operation records: the human-readable timeline, distinct from the audit trail."""
 
 from __future__ import annotations
 
@@ -76,9 +67,6 @@ class Operation:
 
 class OperationHandle:
     """What running work receives: log, check cancellation, finish.
-
-    A step never touches the registry directly, so it cannot read or write
-    another operation's state.
 
     **PARAMETERS:**
         `registry` (OperationRegistry): The owning registry.  <br>

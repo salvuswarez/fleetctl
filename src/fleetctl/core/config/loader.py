@@ -1,13 +1,4 @@
-"""YAML loading that understands `!ref`.
-
-`!ref env:NAME` is a YAML *tag*, so a plain safe-load rejects it as an
-unknown constructor. Registering it here turns a reference into a typed
-`SecretRef` at parse time rather than a string someone must remember to
-recognize later.
-
-Built on `SafeLoader`, so no other tag can construct arbitrary Python from a
-configuration file.
-"""
+"""YAML loading that understands `!ref`."""
 
 from __future__ import annotations
 

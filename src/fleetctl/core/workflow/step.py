@@ -1,20 +1,4 @@
-"""What a step is, and what it is allowed to touch.
-
-Three context types rather than one, because there are three kinds of step
-and a single context made two claims false:
-
-- A fleet-level step (build an artifact, fetch a base image) has no device,
-  so a shared context had to type `device` as optional and hand it a
-  transport it must never use.
-- The guarantee that "transforms cannot live in deploy" was enforced only by
-  discipline. Here it is structural: `TransformStepContext` carries a
-  transform chain and no transport, `DeviceStepContext` carries a transport
-  and no transform chain. A deploy step has nothing to transform *with*.
-
-None of them carry an audit sink, logger, or redactor. The transport arrives
-already wrapped and correlation rides a context variable, so auditing is a
-property of the wiring rather than something an author must remember.
-"""
+"""What a step is, and what it is allowed to touch."""
 
 from __future__ import annotations
 
@@ -36,9 +20,6 @@ from ..transport.base import Transport
 @dataclass(frozen=True, slots=True)
 class StepResult:
     """What a step reports back.
-
-    A bare summary string cannot carry an artifact forward to a later step,
-    which is what the predecessor's `-> str` return type made impossible.
 
     **PARAMETERS:**
         `summary` (str): Human-readable outcome, shown in the timeline.  <br>
@@ -73,12 +54,6 @@ class FleetStepContext:
 @dataclass(frozen=True, slots=True)
 class DeviceStepContext:
     """What a step targeting one device receives.
-
-    `state` is the resolved device pack's implementation of the `state` verb.
-    Handing it to the step here — rather than having the step ask for it —
-    is what lets an app pack snapshot and restore without ever learning which
-    pack it is talking to. It is guaranteed present for any step declaring
-    `Capability.STATE`, because the engine checks capabilities before running.
 
     **PARAMETERS:**
         `device` (Device): The target. Never optional here.  <br>
@@ -144,9 +119,6 @@ class TransformStepContext:
 @dataclass(frozen=True, slots=True)
 class StepSpec:
     """Everything the engine and every port adapter need to know about a step.
-
-    One registration yields a CLI command, a Home Assistant service schema,
-    and an MCP tool — none of which are written by hand.
 
     **PARAMETERS:**
         `id` (str): Dotted identifier, e.g. ``kodi.deploy``.  <br>

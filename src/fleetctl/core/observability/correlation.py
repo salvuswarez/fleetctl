@@ -1,9 +1,4 @@
-"""Correlation ids that ride along without every caller passing them.
-
-The engine sets the context once; a logging filter injects it into every
-record. Step authors write no correlation code and cannot forget to. This is
-what makes eight concurrent device operations separable in a single log.
-"""
+"""Correlation ids that ride along without every caller passing them."""
 
 from __future__ import annotations
 
@@ -45,9 +40,6 @@ def current() -> Correlation:
 def correlate(**fields: str) -> Generator[Correlation, None, None]:
     """Bind correlation fields for the duration of a block.
 
-    Fields not supplied are inherited from the enclosing context, so an
-    engine can set `run_id` once and each step add only its own `step_id`.
-
     **PARAMETERS:**
         `**fields` (str): Any of `run_id`, `step_id`, `op_id`, `actor`.  <br>
 
@@ -63,11 +55,7 @@ def correlate(**fields: str) -> Generator[Correlation, None, None]:
 
 
 class CorrelationFilter(logging.Filter):
-    """Attaches the current correlation to every log record.
-
-    Installed on handlers rather than loggers so it applies to records
-    emitted from libraries too.
-    """
+    """Attaches the current correlation to every log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Attach correlation fields to `record` and always keep it.

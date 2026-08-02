@@ -1,9 +1,4 @@
-"""Persisting the fleet.
-
-Owns the one lock around read-modify-write, so a scan completing during a
-deploy cannot lose an update, and the one atomic-write implementation (a
-uniquely-named temp file, not a fixed shared one).
-"""
+"""Persisting the fleet."""
 
 from __future__ import annotations
 

@@ -1,13 +1,4 @@
-"""Layered config resolution — pure, so it can be explained.
-
-Later layers win:
-
-    pack defaults -> fleet -> group (by tag) -> device -> step -> flags
-
-The important output is not just the merged value but *which layer supplied
-it*. "Why did this stick get that setting?" should be answerable without
-reading Python, which is what `explain` is for.
-"""
+"""Layered config resolution — pure, so it can be explained."""
 
 from __future__ import annotations
 
@@ -97,10 +88,6 @@ def _deep_merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, A
 
 def resolve(layers: Sequence[Layer]) -> Resolved:
     """Merge layers in order, recording which one supplied each key.
-
-    Mappings merge recursively; every other type replaces wholesale. A list
-    is replaced rather than concatenated — an allow-list that silently grew
-    by inheritance would be a security surprise, not a convenience.
 
     **PARAMETERS:**
         `layers` (Sequence[Layer]): Layers, lowest precedence first.  <br>

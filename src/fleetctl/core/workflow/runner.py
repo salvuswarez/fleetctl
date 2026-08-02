@@ -1,10 +1,4 @@
-"""Running one step: the common envelope every step gets.
-
-Collapses what the predecessor duplicated across five job bodies — and got
-subtly wrong in four of them, which had no `finally` cleanup. Every step gets
-its own workspace, correlation ids bound for its whole execution, a uniform
-cancelled/failed/completed outcome, and a preserved workspace when it fails.
-"""
+"""Running one step: the common envelope every step gets."""
 
 from __future__ import annotations
 
@@ -27,9 +21,6 @@ StepBody = Callable[[OperationHandle, Path], StepResult]
 
 def check_capabilities(spec: StepSpec, transport: Transport) -> None:
     """Verify a transport can satisfy a step before anything is touched.
-
-    Called at plan time so an unsupported step is reported up front rather
-    than failing partway through against real hardware.
 
     **PARAMETERS:**
         `spec` (StepSpec): The step about to run.  <br>
@@ -57,10 +48,6 @@ def run_step(
     failures_root: Path | None = None,
 ) -> OperationStatus:
     """Run one step body inside the standard envelope.
-
-    Synchronous and blocking: submit it to an executor to run steps
-    concurrently. Exceptions are recorded and not re-raised, so one failing
-    device cannot abort a fleet-wide run.
 
     **PARAMETERS:**
         `registry` (OperationRegistry): Where the operation is tracked.  <br>

@@ -1,14 +1,4 @@
-"""Merging discovery results into the known fleet. Pure: data in, data out.
-
-Two rules carried forward from the predecessor, both learned the hard way:
-
-Match by MAC, then serial, then address. Addresses drift with DHCP leases,
-so matching on address alone duplicates a device that merely moved.
-
-Only overwrite a field when the probe actually returned a value. A device
-that was asleep or partially probed keeps what was already known, rather
-than having its record blanked by a half-successful scan.
-"""
+"""Merging discovery results into the known fleet. Pure: data in, data out."""
 
 from __future__ import annotations
 

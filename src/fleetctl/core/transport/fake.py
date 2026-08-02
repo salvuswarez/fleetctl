@@ -1,13 +1,4 @@
-"""An in-memory transport for tests and dry runs.
-
-Ships as production code rather than a test fixture on purpose: it is the
-second adapter that makes the `Transport` seam real rather than hypothetical,
-and pack authors need it to test their own packs without owning the hardware.
-
-Command results are supplied up front. Anything unscripted raises rather than
-returning a plausible empty string, so a test that forgot to script a command
-fails loudly instead of silently exercising a "device returned nothing" path.
-"""
+"""An in-memory transport for tests and dry runs."""
 
 from __future__ import annotations
 

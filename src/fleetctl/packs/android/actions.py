@@ -1,13 +1,4 @@
-"""Android device actions, as functions over a `CommandRunner`.
-
-Functions rather than a class: these have no state and no lifecycle beyond
-the runner they are handed, and a class with one method per verb and no
-state is a function wearing a costume. It also keeps the dependency narrow —
-none of this needs file transfer or reachability.
-
-Vendor differences arrive as `AndroidQuirks`, never as a branch on a model
-string.
-"""
+"""Android device actions, as functions over a `CommandRunner`."""
 
 from __future__ import annotations
 
@@ -71,11 +62,6 @@ def list_disabled_packages(runner: CommandRunner) -> set[str]:
 
 def disable_packages(runner: CommandRunner, packages: Iterable[str], quirks: AndroidQuirks) -> list[PackageOutcome]:
     """Disable packages, reporting per-package whether it actually took.
-
-    `pm disable-user` can fail silently for system packages from a non-root
-    shell on some vendor builds, so where the quirk is declared this re-reads
-    the device's own list rather than trusting the command's return. The
-    predecessor reported success for ~90 packages having verified none.
 
     **PARAMETERS:**
         `runner` (CommandRunner): Connection to the device.  <br>
@@ -167,9 +153,6 @@ def reboot(runner: CommandRunner) -> None:
 
 def health(runner: CommandRunner, *, storage_path: str = "/sdcard") -> dict[str, str]:
     """Collect a quick health picture from a device.
-
-    Read-only by construction: every probe here is a `getprop` or a `df`, so
-    a check can be run against the whole fleet without gating it.
 
     **PARAMETERS:**
         `runner` (CommandRunner): Connection to the device.  <br>

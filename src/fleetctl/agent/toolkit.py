@@ -1,25 +1,4 @@
-"""What an agent may ask fleetctl to do, and on what terms.
-
-Every mutating call passes through the policy layer, and the toolkit has no
-path around it: it holds a `Container`, not a transport, and the only way to
-reach a device is through a step the registry knows about.
-
-Three properties matter more here than anywhere else in the codebase, because
-the caller cannot read a convention:
-
-**Reads are free, changes are not.** Listing devices, plans and audit records
-needs no approval. Anything that touches a device is gated on its declared
-effect class.
-
-**A plan must be confirmed before it runs.** `run_workflow` requires the
-digest of a plan the caller has already seen. If the fleet changed underneath
-— a device came online, a tag moved — the digest differs and the run is
-refused rather than silently doing something larger than was reviewed.
-
-**Refusals are recorded.** A denial is written to the audit trail with the
-actor that was refused, because a policy that silently says no is
-indistinguishable from a tool that is broken.
-"""
+"""What an agent may ask fleetctl to do, and on what terms."""
 
 from __future__ import annotations
 
@@ -42,8 +21,6 @@ LOGGER = logging.getLogger(__name__)
 
 class ApprovalRequired(FleetError):
     """A step needs explicit approval before it may run.
-
-    Distinct from a denial: this is a question, and the caller can answer it.
 
     **PARAMETERS:**
         `message` (str): What needs approving and why.  <br>
@@ -126,9 +103,6 @@ class Toolkit:
 
     def plan_workflow(self, name: str) -> dict[str, Any]:
         """Show everything a workflow would do, without doing any of it.
-
-        Producing a plan touches no device, so this is always permitted: an
-        agent that cannot look before it acts will act without looking.
 
         **PARAMETERS:**
             `name` (str): Workflow name.  <br>

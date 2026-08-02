@@ -1,14 +1,4 @@
-"""ADB key material.
-
-The private key is a standing credential: once a device authorizes it, it
-grants shell access indefinitely, with no expiry and no revocation short of
-re-pairing. It is therefore stored with restrictive permissions, kept outside
-any repository, and every use is recorded as an `AUTH` audit event so a leaked
-key's blast radius can be scoped.
-
-Loading and parsing the signer is expensive, so it is cached for the life of
-the store rather than repeated per connection.
-"""
+"""ADB key material."""
 
 from __future__ import annotations
 

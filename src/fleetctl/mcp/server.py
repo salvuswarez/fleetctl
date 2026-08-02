@@ -1,20 +1,4 @@
-"""An MCP server exposing the agent toolkit.
-
-Deliberately thin. Every decision that matters — what is allowed, what needs
-approval, whether a plan is still current — lives in `agent.toolkit` and is
-tested without a protocol. This module maps that surface onto MCP and
-translates exceptions into messages an agent can act on.
-
-Two shaping choices:
-
-**Reads are resources; changes are tools.** Listing devices or tailing the
-audit log is a resource read, which keeps the mutating tool surface small
-enough to review. Four tools can change something, and each is gated.
-
-**Errors are answers, not stack traces.** An approval requirement comes back
-as text naming exactly what needs approving and how to proceed, because an
-agent that receives a traceback will retry rather than ask.
-"""
+"""An MCP server exposing the agent toolkit."""
 
 from __future__ import annotations
 
@@ -39,10 +23,6 @@ def _render(payload: Any) -> str:
 
 def _new_server() -> Any:
     """Construct a server across SDK layouts.
-
-    The Python MCP SDK has moved this class between modules; both spellings
-    expose the same `tool`/`resource` decorators and `run()`, so trying each
-    is cheaper than pinning users to one SDK release.
 
     **RETURNS:**
         `Any`: A server instance.  <br>
@@ -107,8 +87,7 @@ def build_server(toolkit: Toolkit) -> Any:
     def plan_workflow(name: str) -> str:
         """Show everything a workflow would do, without doing any of it.
 
-        Always call this before run_workflow: the digest it returns is what
-        run_workflow requires as confirmation.
+        Call before run_workflow: returns the digest run_workflow requires.
         """
         return _guard(lambda: _render(toolkit.plan_workflow(name)))
 
@@ -116,15 +95,15 @@ def build_server(toolkit: Toolkit) -> Any:
     def run_workflow(name: str, confirm: str, approve: bool = False) -> str:
         """Run a workflow.
 
-        `confirm` must be the digest from a recent plan_workflow call. If the
-        fleet changed since then the run is refused and you should re-plan.
-        Set `approve` only after showing the user what the plan will change.
+        `confirm` must be the digest from a recent plan_workflow call; if the
+        fleet changed since, the run is refused and you should re-plan. Set
+        `approve` only after showing the user what will change.
         """
         return _guard(lambda: _render(toolkit.run_workflow(name, confirm=confirm, approve=approve)))
 
     @server.tool()
     def run_step(step_id: str, device_id: str | None = None, params: dict[str, Any] | None = None, approve: bool = False) -> str:
-        """Run a single step, optionally against one device.
+        """Run one step, optionally against one device.
 
         Set `approve` only after showing the user what the step will change.
         """
@@ -132,7 +111,7 @@ def build_server(toolkit: Toolkit) -> Any:
 
     @server.tool()
     def operation_status(op_id: str) -> str:
-        """Report one operation's current status and log."""
+        """Report one operation's current status and its log so far."""
 
         def _lookup() -> str:
             snapshots = {snapshot["id"]: snapshot for snapshot in toolkit.list_operations()}
@@ -146,11 +125,7 @@ def build_server(toolkit: Toolkit) -> Any:
 
 
 def _guard(call: Any) -> str:
-    """Turn an exception into something an agent can act on.
-
-    A traceback invites a retry; a sentence naming what to do invites the
-    right next call.
-    """
+    """Turn an exception into something an agent can act on."""
     try:
         return str(call())
     except ApprovalRequired as exc:
@@ -170,9 +145,6 @@ def _guard(call: Any) -> str:
 
 def serve(*, config_dir: Path | None = None, home: Path | None = None, actor: str = "mcp:agent") -> None:
     """Run the MCP server over stdio until the client disconnects.
-
-    stdio rather than a socket: one local agent, no listening port, and no
-    authentication surface of its own to get wrong.
 
     **PARAMETERS:**
         `config_dir` (Path | None): Directory holding `fleet.yml` and `inventory/`.  <br>

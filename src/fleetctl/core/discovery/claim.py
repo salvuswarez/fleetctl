@@ -1,13 +1,4 @@
-"""Turning hosts into devices: which pack recognizes what.
-
-Packs are tried in priority order and the first to claim a host wins. A pack
-that does not recognize a host returns `None`, which is the normal case — a
-subnet sweep finds printers, phones and laptops, and none of that is an error.
-
-One connection is opened per (host, platform) rather than per pack, since
-several packs commonly speak the same protocol. An unreachable host costs one
-failed connection, not one per installed pack.
-"""
+"""Turning hosts into devices: which pack recognizes what."""
 
 from __future__ import annotations
 
@@ -53,21 +44,12 @@ class Claim:
 
     @property
     def recordable(self) -> bool:
-        """RETURNS: bool: Whether this belongs in the inventory at all.
-
-        An identified device does; so does one that refused the key, because
-        knowing it is there and needs approval is actionable. A host nothing
-        recognized does not — that is somebody's printer.
-        """
+        """RETURNS: bool: Whether this belongs in the inventory at all."""
         return self.device is not None
 
 
 def device_id_for(facts: dict[str, str], host: Host) -> str:
     """Derive a stable identifier for a discovered device.
-
-    Prefers the device's own name, then its serial, then its MAC — anything
-    but the address, which changes with the DHCP lease and would make every
-    scan look like a new device.
 
     **PARAMETERS:**
         `facts` (dict[str, str]): What the claiming pack reported.  <br>
@@ -126,11 +108,7 @@ def claim_host(host: Host, packs: Sequence[DevicePack], connect: Connector) -> C
 
 
 def _probe(pack: DevicePack, transport: Transport, host: Host) -> dict[str, str] | None:
-    """Run one pack's probe, treating a raised error as "not mine".
-
-    A pack that raises instead of returning `None` must not take down the
-    whole scan — the predecessor lost entire sweeps to one unresponsive host.
-    """
+    """Run one pack's probe, treating a raised error as "not mine"."""
     try:
         return pack.probe(transport)
     except Exception as exc:  # noqa: BLE001 - a bad probe is not a fatal scan
@@ -152,11 +130,7 @@ def _device_from(facts: dict[str, str], host: Host) -> Device:
 
 
 def _unauthorized_device(host: Host) -> Device:
-    """Build the inventory record for a host that refused our credentials.
-
-    Its type is unknown — it would not talk to us — so nothing is invented
-    beyond what the network itself revealed.
-    """
+    """Build the inventory record for a host that refused our credentials."""
     return Device(
         id=device_id_for({}, host),
         address=host.address,

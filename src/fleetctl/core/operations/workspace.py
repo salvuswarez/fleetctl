@@ -1,14 +1,4 @@
-"""Per-operation staging directories, and keeping the evidence when work fails.
-
-Each operation gets its own directory: the predecessor shared one fixed
-staging path across every job, so a fleet-wide deploy had sibling threads
-deleting each other's downloads mid-push.
-
-Workspaces are removed on exit — but on failure the contents are preserved
-first. The predecessor tore the directory down in a `finally` on every path,
-which destroyed the archive that had just failed to deploy: the single most
-useful artifact for diagnosing it.
-"""
+"""Per-operation staging directories, and keeping the evidence when work fails."""
 
 from __future__ import annotations
 
@@ -50,11 +40,7 @@ def workspace(root: Path, op_id: str, *, failures_root: Path | None = None) -> G
 
 
 def _preserve(path: Path, failures_root: Path, op_id: str) -> None:
-    """Copy a failed operation's workspace aside, best-effort.
-
-    Never raises: losing the forensic copy must not mask the failure that
-    made it worth keeping.
-    """
+    """Copy a failed operation's workspace aside, best-effort."""
     try:
         failures_root.mkdir(parents=True, exist_ok=True)
         destination = failures_root / op_id

@@ -1,9 +1,4 @@
-"""Finding hosts that are up, and their hardware addresses.
-
-Knows nothing about device types. Its whole job is to narrow a /24 down to
-the handful of addresses worth probing, so discovery does not pay a
-connection attempt against 254 empty addresses.
-"""
+"""Finding hosts that are up, and their hardware addresses."""
 
 from __future__ import annotations
 
@@ -101,17 +96,6 @@ class Sweeper:
 def replied(output: str, *, returncode: int, is_windows: bool) -> bool:
     """Decide whether a host actually answered a ping.
 
-    Windows `ping` exits **0 even when nothing replied**: the local router
-    answers "Destination host unreachable" on behalf of dead addresses, and
-    that counts as the command succeeding. Trusting the exit code reported
-    252 of 254 addresses on a real /24 as live — every empty address in the
-    range. The reply text is the only reliable signal, so a real echo reply
-    (`TTL=`) is required, and an unreachable/timeout reply is rejected even
-    when the exit code says otherwise.
-
-    POSIX `ping` reports total loss through its exit code, so there the code
-    is authoritative.
-
     **PARAMETERS:**
         `output` (str): The command's stdout.  <br>
         `returncode` (int): Its exit status.  <br>
@@ -154,9 +138,6 @@ def expand_subnet(subnet: str) -> list[str]:
 
 def arp_table() -> dict[str, str]:
     """Read the local ARP cache.
-
-    A MAC is what makes a device identifiable across a DHCP lease change, so
-    it is worth collecting even though the sweep itself does not need it.
 
     **RETURNS:**
         `dict[str, str]`: Address to lowercase colon-separated MAC. Empty when `arp` is unavailable, which is a degraded result rather than an error.  <br>

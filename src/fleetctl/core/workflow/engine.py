@@ -1,10 +1,4 @@
-"""Executing a plan.
-
-The engine owns ordering, concurrency, and what a failure means. It does not
-own how a task is turned into a running step — that is the caller's, because
-constructing a transport and a context is composition-root work and differs
-between the CLI, Home Assistant, and a test.
-"""
+"""Executing a plan."""
 
 from __future__ import annotations
 
@@ -91,10 +85,6 @@ class WorkflowEngine:
     def run(self, plan: Plan, *, run_id: str | None = None) -> RunReport:
         """Execute a plan.
 
-        Blocked tasks are recorded and skipped rather than attempted: the plan
-        already established they cannot run, and trying anyway would produce a
-        failure that says nothing new.
-
         **PARAMETERS:**
             `plan` (Plan): What to run.  <br>
             `run_id` (str | None): Correlation id for the whole run. Defaults to one derived from the workflow name and the clock.  <br>
@@ -151,11 +141,7 @@ class WorkflowEngine:
         )
 
     def _record_skip(self, task: PlannedTask, run_id: str) -> None:
-        """Record a task the plan already ruled out.
-
-        Audited as a decision rather than left silent: a device quietly
-        dropped from a fleet-wide run is exactly the outcome nobody notices.
-        """
+        """Record a task the plan already ruled out."""
         if self._audit is None:
             return
         self._audit.write(

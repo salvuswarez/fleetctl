@@ -1,11 +1,4 @@
-"""Distribution version lookup.
-
-Kept out of ``__init__.py`` so importing the package never executes code,
-and guarded so that importing from a source tree without an installed
-distribution degrades instead of raising. `fleetctl` is consumed as a
-library as well as a CLI, and a metadata lookup failure must not take down
-an embedding host.
-"""
+"""Distribution version lookup."""
 
 from __future__ import annotations
 

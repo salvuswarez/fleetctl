@@ -1,20 +1,4 @@
-"""Kodi's steps: capture, build, deploy.
-
-The split is deliberate and structural.
-
-**capture** pulls a device's live profile into a raw artifact. **build**
-applies every profile transform once and publishes a deployable artifact.
-**deploy** does no shaping at all — it hands an artifact to the device pack
-and applies only what genuinely differs per device.
-
-Doing the shaping once in `build` rather than per-device in `deploy` means
-identical work is not repeated for every device, and a deploy cannot fail for
-reasons that have nothing to do with the device it is deploying to.
-
-Note what is absent from this module: any on-device path, any archive
-command, any free-space arithmetic. Those reach the device through the
-`state` verb, which the resolved device pack implements.
-"""
+"""Kodi's steps: capture, build, deploy."""
 
 from __future__ import annotations
 
@@ -98,10 +82,6 @@ def capture(context: DeviceStepContext) -> StepResult:
 def build(context: TransformStepContext) -> StepResult:
     """Shape a captured profile into a deployable build.
 
-    Every transform runs here, once. The output archive is flat — the
-    profile's members at the root, no wrapping directory — so a device can
-    unpack it straight into its state root with no path rewriting.
-
     **PARAMETERS:**
         `context` (TransformStepContext): The transform chain, artifact store, and resolved config. Carries no transport, so this step cannot touch a device.  <br>
 
@@ -143,9 +123,6 @@ def build(context: TransformStepContext) -> StepResult:
 def deploy(context: DeviceStepContext) -> StepResult:
     """Deploy a built profile to a device.
 
-    Does no shaping. What remains here is only what genuinely varies per
-    device: which build to send, and the device's own overrides.
-
     **PARAMETERS:**
         `context` (DeviceStepContext): The device, its resolved state manager, and config.  <br>
 
@@ -172,10 +149,6 @@ def deploy(context: DeviceStepContext) -> StepResult:
 def _find_profile(extracted: Path) -> Path:
     """Locate the profile root inside an extracted archive.
 
-    A capture wraps the profile in its on-device directory name; a build is
-    already flat. Accepting both means a build can be rebuilt from its own
-    output without a special case.
-
     **RAISES:**
         `FleetError`: If no directory containing profile members is found.  <br>
     """
@@ -194,9 +167,6 @@ def _looks_like_profile(path: Path) -> bool:
 def _pack_flat(profile: Path, destination: Path) -> list[str]:
     """Write the profile's members to a flat gzipped tar.
 
-    Flat means `addons/...` rather than `.kodi/addons/...`, so the device
-    extracts straight into its state root.
-
     **RETURNS:**
         `list[str]`: Member names actually included.  <br>
     """
@@ -212,10 +182,6 @@ def _pack_flat(profile: Path, destination: Path) -> list[str]:
 
 def _verify_archive(path: Path) -> None:
     """Fail loudly if an archive is truncated or corrupt.
-
-    A capture that raises no error can still produce a truncated archive.
-    The predecessor did not check, so a bad archive was published as if it
-    were good and only surfaced much later, on an unrelated device's deploy.
 
     **RAISES:**
         `FleetError`: If the archive cannot be fully read.  <br>

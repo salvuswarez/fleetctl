@@ -1,15 +1,4 @@
-"""The audit trail: what actually happened, to what, and whether it worked.
-
-Distinct from the operation timeline. The timeline says "disabling 90 bloat
-packages"; the audit trail says which 90, and which of them actually took.
-The predecessor could not answer the second question, which mattered because
-`pm disable-user` silently no-ops on older Fire OS — a run could report
-success having changed nothing.
-
-Records are append-only and hash-chained. Chaining is per destination file
-(one per day) with independent anchors, so the retention window expiring does
-not invalidate verification of what remains.
-"""
+"""The audit trail: what actually happened, to what, and whether it worked."""
 
 from __future__ import annotations
 
@@ -224,15 +213,6 @@ def _parse_line(line: str) -> AuditEvent | None:
 class ChainedAuditWriter:
     """Serializes writes and links each record to the one before it.
 
-    Chaining lives here rather than in a sink so every adapter gets identical
-    semantics — otherwise the in-memory sink used by tests would exercise a
-    different code path from the one production runs.
-
-    A hash chain needs a total order over a single writer. Steps run
-    concurrently, so this holds the lock across sequencing *and* writing;
-    without that, interleaved appends would produce a chain that verification
-    reports as tampered, which is worse than having no verification.
-
     **PARAMETERS:**
         `sink` (AuditSink): Where chained records are handed off to.  <br>
         `redactor` (Redactor): Applied before hashing, so what is verified is what was written.  <br>
@@ -247,17 +227,7 @@ class ChainedAuditWriter:
         self._resumed = not resume
 
     def _resume_locked(self) -> None:
-        """Continue an existing chain rather than starting a new one.
-
-        Every CLI invocation is a fresh process. Without this, each one would
-        re-anchor at genesis and `audit verify` would report the trail as
-        broken from the second run onward — a verifier that cries wolf is
-        worse than no verifier.
-
-        A sink that cannot be read is not fatal: this starts a new segment and
-        logs, because failing to write the audit trail at all would be worse
-        than a discontinuity in it.
-        """
+        """Continue an existing chain rather than starting a new one."""
         self._resumed = True
         try:
             existing = self._sink.read_all()

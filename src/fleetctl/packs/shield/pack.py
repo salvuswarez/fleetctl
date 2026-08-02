@@ -1,9 +1,4 @@
-"""The Shield pack: probe, capabilities, and maintenance.
-
-Deliberately thin. Everything it does comes from `packs.android` plus its own
-data files — which is the result the architecture predicted, and the reason
-this stage exists.
-"""
+"""The Shield pack: probe, capabilities, and maintenance."""
 
 from __future__ import annotations
 
@@ -149,9 +144,6 @@ class ShieldPack:
     def check(self, context: DeviceStepContext) -> StepResult:
         """Report what the device says about itself.
 
-        Read-only throughout, so it stays runnable against the whole fleet
-        without approval under any policy.
-
         **RETURNS:**
             `StepResult`: Facts gathered, with anything the device declined to answer simply absent.  <br>
         """
@@ -162,11 +154,6 @@ class ShieldPack:
 
     def maintain(self, context: DeviceStepContext) -> StepResult:
         """Disable configured packages and trim caches.
-
-        Reports honestly when there is nothing configured to do: an empty
-        bloat list is the current, deliberate state, and a step claiming
-        success for work it did not do is the failure mode this project keeps
-        running into.
 
         **RETURNS:**
             `StepResult`: A summary plus per-package outcomes.  <br>

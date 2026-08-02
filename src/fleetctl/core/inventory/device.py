@@ -1,13 +1,4 @@
-"""The device record.
-
-Deliberately free of any app's concerns. The predecessor's device model
-carried `display` (Kodi resolution/overscan) and `settings` (Kodi setting
-overrides) as core inventory fields, which meant a PC in the store had a
-field meaning "Kodi videoscreen.resolution".
-
-App state lives under `vars`, namespaced by the app that owns it. `apps.kodi`
-reads `device.vars["kodi"]`; the kernel never looks inside.
-"""
+"""The device record."""
 
 from __future__ import annotations
 
@@ -18,13 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DeviceStatus(str, Enum):
-    """Whether a device can currently be acted on.
-
-    A device that exists but cannot be reached is still worth recording. The
-    alternative is dropping it from the inventory, which makes "I know it is
-    there and something is wrong" indistinguishable from "I have never seen
-    it" — and leaves the user with nothing to act on.
-    """
+    """Whether a device can currently be acted on."""
 
     OK = "ok"
     UNAUTHORIZED = "unauthorized"

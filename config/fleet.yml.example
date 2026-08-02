@@ -1,0 +1,35 @@
+# fleetctl fleet config. Copy to fleet.yml and fill in.
+# Holds `!ref` pointers, never secret values -> safe to share.
+
+artifacts:
+  # SMB share, matching the predecessor's layout. Drop this block to keep
+  # artifacts local under ~/.fleetctl/artifacts.
+  smb:
+    host: 192.168.1.50
+    share: Kodi
+    root: fleetctl
+    user: !ref env:FLEETCTL_SMB_USER
+    password: !ref env:FLEETCTL_SMB_PASS
+
+observability:
+  # Relative paths resolve under ~/.fleetctl, not the working directory.
+  audit_dir: audit
+
+# Optional. Absent -> permissive, everything allowed.
+policy:
+  actors:
+    "cli:*":
+      allow: ["*"]
+    "ha:*":
+      allow: ["*"]
+      confirm: [destructive]
+    "mcp:*":
+      allow: ["*"]
+      confirm: [mutating, destructive]
+      max_devices: 3
+
+  # Devices named here are off-limits for the listed steps, regardless of actor.
+  # protected:
+  #   - match: {tags: [reference]}
+  #     deny: ["kodi.deploy"]
+  #     reason: Prove the change on a spare first.

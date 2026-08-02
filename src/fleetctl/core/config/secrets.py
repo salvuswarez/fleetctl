@@ -1,18 +1,4 @@
-"""Secret references, and the seam that resolves them.
-
-Config files hold pointers, never values:
-
-    password: !ref env:FLEETCTL_SMB_PASS
-
-Home Assistant's own standard is the model — credentials come from a config
-entry and never appear in a YAML file a user edits. Generalized here so each
-consumer resolves its own way: the CLI from the environment, Home Assistant
-from its config entry, a headless runner from the OS keyring.
-
-The property this buys is concrete: a `fleet.yml` is safe to paste into a
-bug report. That matters because the predecessor once leaked real device
-data into a committed doc and needed a history rewrite to scrub it.
-"""
+"""Secret references, and the seam that resolves them."""
 
 from __future__ import annotations
 
@@ -60,13 +46,6 @@ class SecretRef:
 
 class Secret:
     """A resolved secret that will not render itself.
-
-    `str()` and `repr()` both mask. Reading the value requires calling
-    `reveal()` deliberately, which makes the leak paths greppable.
-
-    The predecessor's SMB config was a plain dataclass holding a password
-    with no `repr=False`, so any log of that object would have printed the
-    credential.
 
     **PARAMETERS:**
         `value` (str): The secret value.  <br>
@@ -125,10 +104,6 @@ class EnvSecretProvider:
 @dataclass(frozen=True, slots=True)
 class MappingSecretProvider:
     """Resolves references from an in-memory mapping.
-
-    Backs the Home Assistant config-entry provider (whose entry data is a
-    mapping) and makes secret resolution testable without touching the
-    environment or a keyring.
 
     **PARAMETERS:**
         `values` (Mapping[str, str]): Locator to secret value.  <br>

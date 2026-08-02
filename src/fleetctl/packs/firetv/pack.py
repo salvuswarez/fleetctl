@@ -62,11 +62,7 @@ CHECK = StepSpec(
 
 
 def _load(name: str) -> dict[str, Any]:
-    """RETURNS: dict[str, Any]: A parsed data file shipped with this pack.
-
-    Read through `importlib.resources` rather than `Path(__file__).parent` so
-    the pack keeps working when installed as a zipimport or from a wheel.
-    """
+    """RETURNS: dict[str, Any]: A parsed data file shipped with this pack."""
     text = resources.files(f"fleetctl.packs.{PACK_ID}.data").joinpath(name).read_text(encoding="utf-8")
     loaded = yaml.safe_load(text)
     return loaded if isinstance(loaded, dict) else {}
@@ -130,10 +126,6 @@ class FireTvPack:
     def transport_for(self, device: Device, settings: Mapping[str, Any]) -> AdbTransport:
         """Open a connected transport to `device`.
 
-        The pack builds this, not the composition root: which protocol a
-        device speaks is the pack's knowledge, and `use_netcat` comes from its
-        own quirk data.
-
         **PARAMETERS:**
             `device` (Device): The target.  <br>
             `settings` (Mapping[str, Any]): Must carry `key_dir`, the directory holding ADB key material.  <br>
@@ -161,9 +153,6 @@ class FireTvPack:
     def check(self, context: DeviceStepContext) -> StepResult:
         """Report what the device says about itself.
 
-        Read-only throughout, so it stays runnable against the whole fleet
-        without approval under any policy.
-
         **RETURNS:**
             `StepResult`: Facts gathered, with anything the device declined to answer simply absent.  <br>
         """
@@ -174,11 +163,6 @@ class FireTvPack:
 
     def maintain(self, context: DeviceStepContext) -> StepResult:
         """Disable bloatware, apply performance settings, and trim caches.
-
-        Every package disable is reported individually rather than as one
-        summary line: `pm disable-user` can fail silently here, so a run that
-        claims success without per-package verification is exactly the kind of
-        report that hid the problem in the predecessor.
 
         **PARAMETERS:**
             `context` (DeviceStepContext): The device, its transport, and resolved config.  <br>

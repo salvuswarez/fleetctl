@@ -1,11 +1,4 @@
-"""Android implementation of the `state` verb.
-
-Everything an app pack would otherwise have had to know lives here: where an
-app's data directory is, how to build an archive that survives this device's
-tooling, how much headroom an unpack needs, and how long to wait for it.
-
-`apps/kodi` issues no `tar` command and knows no on-device path.
-"""
+"""Android implementation of the `state` verb."""
 
 from __future__ import annotations
 
@@ -87,9 +80,6 @@ class AndroidStateManager:
     def restore(self, spec: AppStateSpec, archive: Path) -> None:
         """Push `archive` and replace the app's state with its contents.
 
-        The archive must be flat — the app's `members` at its root — so it
-        extracts straight into the state root with no path rewriting.
-
         **RAISES:**
             `FleetError`: If the device lacks free space to unpack it.  <br>
             `TransportError`: If the transfer or extraction failed.  <br>
@@ -122,12 +112,7 @@ class AndroidStateManager:
         self._verify(root, spec)
 
     def _verify(self, root: str, spec: AppStateSpec) -> None:
-        """Fail loudly if extraction left the state unusable.
-
-        `tar` exiting cleanly is not proof the payload arrived: a truncated
-        archive extracts "successfully" into a half-populated tree, which the
-        app then starts against and rebuilds from scratch.
-        """
+        """Fail loudly if extraction left the state unusable."""
         for member in spec.members:
             listing = self._transport.exec_ok(f"ls {shlex.quote(posixpath.join(root, member))}", effect=Effect.READ)
             if not listing.strip():

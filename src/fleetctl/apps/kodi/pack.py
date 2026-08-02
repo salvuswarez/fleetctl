@@ -54,9 +54,6 @@ class KodiApp:
     def transforms(self) -> tuple[ProfileTransform, ...]:
         """Build the transform chain from the recipe.
 
-        Order matters: addons are pruned first, so settings overrides are not
-        applied to files that are about to be deleted.
-
         **RETURNS:**
             `tuple[ProfileTransform, ...]`: The chain, in application order.  <br>
         """
@@ -75,11 +72,7 @@ class KodiApp:
         return tuple(chain)
 
     def workflows(self) -> list[Workflow]:
-        """RETURNS: list[Workflow]: Workflows shipped with this app.
-
-        A user-defined workflow of the same name takes precedence, so a
-        shipped one is a starting point rather than a constraint.
-        """
+        """RETURNS: list[Workflow]: Workflows shipped with this app."""
         directory = resources.files(f"fleetctl.apps.{APP_ID}.data.workflows")
         found: list[Workflow] = []
         for entry in directory.iterdir():

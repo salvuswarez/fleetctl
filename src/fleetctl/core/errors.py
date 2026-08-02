@@ -1,9 +1,4 @@
-"""Exception hierarchy, rooted at one base so callers can catch by layer.
-
-A step catches `TransportError` without knowing whether it was talking ADB
-or SSH. Domain context lives on the exception as attributes rather than only
-in the message string, so a handler can branch on it.
-"""
+"""Exception hierarchy, rooted at one base so callers can catch by layer."""
 
 from __future__ import annotations
 
@@ -28,10 +23,6 @@ class TransportError(FleetError):
 class CommandFailedError(TransportError):
     """A command ran but reported failure.
 
-    Deliberately distinct from "the command ran and produced no output" — the
-    predecessor collapsed both to `""`, which is how a dropped connection
-    during a destructive command could look identical to success.
-
     **PARAMETERS:**
         `message` (str): Human-readable description.  <br>
         `target` (str): Address or id of the device involved.  <br>
@@ -48,11 +39,6 @@ class CommandFailedError(TransportError):
 class DeviceUnauthorizedError(TransportError):
     """The device is reachable but rejected our credentials.
 
-    Deliberately distinct from a plain `TransportError`: an address with
-    nothing listening and an address that refused the key look identical in a
-    scan's output, but the first means "not a device I manage" and the second
-    means "approve the prompt on the screen". Only one of those is actionable.
-
     **PARAMETERS:**
         `target` (str): Address or id of the device involved.  <br>
         `detail` (str): What the underlying transport reported.  <br>
@@ -65,9 +51,6 @@ class DeviceUnauthorizedError(TransportError):
 
 class UnsupportedCapabilityError(TransportError):
     """A transport was asked for something it does not implement.
-
-    Raised rather than silently no-oping so an over-declared capability fails
-    loudly at the call site instead of appearing to succeed.
 
     **PARAMETERS:**
         `capability` (str): The capability that was required.  <br>

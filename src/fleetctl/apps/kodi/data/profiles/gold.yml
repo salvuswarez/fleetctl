@@ -72,9 +72,14 @@ apply_settings:
       script-skinvariables-generator-hash: "invalidated-by-deploy"
 
     addon_data/plugin.video.themoviedb.helper/settings.xml:
-      # Was `10`: up to ten concurrent background discover/image threads at
-      # once. A lower cap staggers the load instead of bursting it.
-      max_threads: "4"
+      # Concurrent background discover/image threads. The predecessor capped
+      # this at 4 as part of a low-memory fix on a 1.7GB stick, alongside the
+      # hub-preloading and thumbnail-cache changes below. Set back to the
+      # addon default of 10 deliberately (2026-08-02) -- the other two fixes
+      # carry most of that weight, and current devices have more headroom. If
+      # a memory-pressure crash reappears on a smaller device, this is the
+      # first value to drop again.
+      max_threads: "10"
       # Trakt was never authenticated in this household, so every scrobble
       # failed silently on every playback.
       trakt_scrobbling: "false"

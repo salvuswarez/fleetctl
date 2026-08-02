@@ -12,10 +12,6 @@ from typing import Any, Mapping, Sequence
 class PruneAddons:
     """Remove every addon folder not covered by the allow-list.
 
-    Prefixes cover dependency and engine categories — libraries and services
-    other addons rely on, never a standalone content source — so a build does
-    not have to enumerate every transitive dependency by name.
-
     **PARAMETERS:**
         `allow` (Sequence[str]): Exact addon ids to keep.  <br>
         `allow_prefixes` (Sequence[str]): Id prefixes to keep.  <br>

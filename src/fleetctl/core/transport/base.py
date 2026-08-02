@@ -1,15 +1,4 @@
-"""The transport protocols.
-
-Segregated deliberately: a device probe needs `CommandRunner` and nothing
-else, so it should not depend on file transfer or power management. The
-composed `Transport` exists for callers that genuinely need everything.
-
-Every mutating entry point takes an explicit `effect`. The alternative —
-having the audit decorator infer effect by pattern-matching command strings —
-would require the kernel to recognize `pm`, `getprop` and `settings put`,
-which is device vocabulary that must not exist in `core/`. The caller knows;
-the kernel cannot.
-"""
+"""The transport protocols."""
 
 from __future__ import annotations
 
@@ -60,9 +49,6 @@ class CommandRunner(Protocol):
     def exec_ok(self, command: str, *, effect: Effect = Effect.MUTATING, timeout_s: float | None = None) -> str:
         """Run a command, returning `""` on failure instead of raising.
 
-        Use only where "no output" and "failed" are equally acceptable, such
-        as an informational probe during discovery.
-
         **PARAMETERS:**
             `command` (str): Command to run on the target.  <br>
             `effect` (Effect, optional): How much this command changes. Defaults to `Effect.MUTATING`.  <br>
@@ -109,9 +95,6 @@ class FileTransfer(Protocol):
     def free_bytes(self, remote_path: str) -> int:
         """Report free space on the filesystem holding `remote_path`.
 
-        Used to bail out before pushing something that would not fit, rather
-        than filling the target and failing partway through.
-
         **PARAMETERS:**
             `remote_path` (str): Any path on the filesystem to measure.  <br>
 
@@ -122,11 +105,7 @@ class FileTransfer(Protocol):
 
 @runtime_checkable
 class Transport(Reachable, CommandRunner, FileTransfer, Protocol):
-    """Everything a step may do to a device.
-
-    Implementations declare what they actually support; the engine checks
-    that against a step's requirements at plan time.
-    """
+    """Everything a step may do to a device."""
 
     def capabilities(self) -> frozenset[Capability]:
         """RETURNS: frozenset[Capability]: What this transport can actually do."""

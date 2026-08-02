@@ -1,13 +1,4 @@
-"""How an artifact is named and where it lives.
-
-Single owner of "what is this thing called". The predecessor derived
-filenames and remote paths by string formatting in three places, which is
-how a reference that worked for listing could fail for retrieval.
-
-`kind` is a namespace, not a type hierarchy: an app pack decides it wants
-``captures`` and ``builds``, and the store never needs to know what those
-mean.
-"""
+"""How an artifact is named and where it lives."""
 
 from __future__ import annotations
 
@@ -32,9 +23,6 @@ def is_safe_segment(part: str) -> bool:
 
 def sanitize(name: str) -> str:
     """Reduce an untrusted name to something safe to use as a path segment.
-
-    Device names arrive from the device itself over the network and must
-    never be trusted as path input.
 
     **PARAMETERS:**
         `name` (str): Raw name, e.g. one reported by a device.  <br>
@@ -108,11 +96,6 @@ class ArtifactRef:
 
     def local_path(self, staging: Path) -> Path:
         """Where this artifact lands inside a staging directory.
-
-        Only the basename is used: `kind` is a store-side namespace and must
-        never be joined into a local path, which in the predecessor produced
-        an unreachable nested path that made "deploy this specific backup"
-        fail outright.
 
         **PARAMETERS:**
             `staging` (Path): The operation's staging directory.  <br>

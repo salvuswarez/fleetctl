@@ -1,20 +1,4 @@
-"""Planning: work out everything that would happen, before anything happens.
-
-A plan resolves targets to devices and checks capabilities *against the
-device pack's declaration*, not against a live connection — so producing one
-touches no hardware and a dry run is genuinely dry.
-
-That leaves two capability gates, deliberately. The pack declares which verbs
-it implements and the plan checks those; the transport declares which
-primitives it actually has and `check_capabilities` re-checks at run time.
-The first catches "this device type cannot do this" before a fleet-wide run
-starts; the second catches a transport that turned out narrower than its pack
-promised.
-
-The plan hash exists so an agent cannot plan against one fleet and execute
-against another: if a device came online, a tag changed, or a step's
-parameters differ, the hash differs and the run is refused.
-"""
+"""Planning: work out everything that would happen, before anything happens."""
 
 from __future__ import annotations
 
@@ -122,9 +106,6 @@ class Plan:
     def digest(self) -> str:
         """Hash what this plan would do.
 
-        Covers the workflow name and every task's step, target, effect and
-        parameters. Anything that would change what happens changes the hash.
-
         **RETURNS:**
             `str`: Hex SHA-256 of the plan.  <br>
         """
@@ -164,10 +145,6 @@ def build_plan(
     actor: str = "cli",
 ) -> Plan:
     """Expand a workflow into everything it would do.
-
-    Never connects to anything: capability checks use each device pack's
-    declaration, so a plan is safe to produce for a fleet that is entirely
-    offline.
 
     **PARAMETERS:**
         `workflow` (Workflow): The workflow to plan.  <br>

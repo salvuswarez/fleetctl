@@ -1,14 +1,4 @@
-"""Effect classification and the capability vocabulary.
-
-`Effect` is the highest-consequence declaration in the codebase: the policy
-layer decides what needs approval from it, and the observability layer
-decides what reaches the durable audit trail from it. A destructive action
-labelled `READ` bypasses both.
-
-The default is deliberately `MUTATING` rather than `READ` — an unlabelled
-command is audited, not dropped. Under-labelling should cost noise, never
-silence.
-"""
+"""Effect classification and the capability vocabulary."""
 
 from __future__ import annotations
 
@@ -16,10 +6,7 @@ from enum import Enum
 
 
 class Effect(str, Enum):
-    """How much a single action changes on the target.
-
-    Ordered by consequence: `READ` < `MUTATING` < `DESTRUCTIVE`.
-    """
+    """How much a single action changes on the target."""
 
     READ = "read"
     MUTATING = "mutating"
@@ -27,21 +14,12 @@ class Effect(str, Enum):
 
     @property
     def is_auditable(self) -> bool:
-        """RETURNS: bool: Whether this effect belongs in the durable audit trail.
-
-        `READ` goes to the rotating diagnostic log only — a fleet-wide
-        maintenance run issues thousands of probe commands, and keeping them
-        out of the audit stream is what keeps it reviewable.
-        """
+        """RETURNS: bool: Whether this effect belongs in the durable audit trail."""
         return self is not Effect.READ
 
 
 class Capability(str, Enum):
-    """What a device pack promises it can do, and a step declares it needs.
-
-    Checked at plan time, before anything is touched, so a device that cannot
-    satisfy a step is reported rather than half-processed.
-    """
+    """What a device pack promises it can do, and a step declares it needs."""
 
     REACH = "reach"
     FACTS = "facts"
