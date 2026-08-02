@@ -53,8 +53,8 @@ integration.
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
 | `cancel_operation` | `cancel_operation(id)` | `Toolkit.cancel_operation(id)` |
-| (entry unload) | `shutdown()` | `container.shutdown()` |
 | `rerun_operation` | `rerun_operation(id)` | `Toolkit.rerun_operation(id)` |
+| (entry unload) | `shutdown()` | `container.shutdown()` |
 
 Both keep the predecessor's semantics: cancel is a request the work observes
 at its next step boundary, never a kill; rerun mints a new operation and

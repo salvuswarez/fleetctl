@@ -606,3 +606,52 @@ def test_scan_tells_you_which_hosts_refused_the_key(workspace: Path, monkeypatch
     assert "refused this key" in result.output
     assert "Approve the debugging prompt" in result.output
     assert "1 host(s) not recognized" in result.output
+
+
+def test_dotted_overrides_nest_so_they_merge_with_device_vars() -> None:
+    """`--set kodi.display.resolution_index=18` is how apply-display survives
+    without a command of its own; a flat key would sit beside `kodi`, not in it."""
+    # Act
+    from fleetctl.cli.main import _parse_overrides
+
+    parsed = _parse_overrides(("kodi.display.resolution_index=18", "kodi.display.overscan.right=1920"))
+
+    # Assert
+    assert parsed == {"kodi": {"display": {"resolution_index": 18, "overscan": {"right": 1920}}}}
+
+
+def test_override_values_arrive_typed() -> None:
+    """A step comparing `dry_run` to True would never match the string "true"."""
+    # Act
+    from fleetctl.cli.main import _parse_overrides
+
+    parsed = _parse_overrides(("dry_run=true", "count=3", "name=gold", "subnet=192.168.1.0/24"))
+
+    # Assert
+    assert parsed == {"dry_run": True, "count": 3, "name": "gold", "subnet": "192.168.1.0/24"}
+
+
+def test_an_override_that_is_not_a_pair_is_rejected() -> None:
+    # Act / Assert
+    import click
+
+    from fleetctl.cli.main import _parse_overrides
+
+    with pytest.raises(click.UsageError):
+        _parse_overrides(("just-a-key",))
+
+
+def test_a_dotted_override_layers_over_a_devices_own_vars(workspace: Path) -> None:
+    """The override must replace one leaf, not the whole display block."""
+    # Arrange
+    from fleetctl.cli.main import _parse_overrides
+    from fleetctl.core.config.layering import for_device
+
+    device_vars = {"kodi": {"display": {"resolution_index": 18, "overscan": {"left": 0, "right": 1920}}}}
+
+    # Act
+    resolved = for_device(device=device_vars, flags=_parse_overrides(("kodi.display.overscan.right=1900",)))
+
+    # Assert
+    assert resolved.values["kodi"]["display"]["overscan"] == {"left": 0, "right": 1900}
+    assert resolved.values["kodi"]["display"]["resolution_index"] == 18

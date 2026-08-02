@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+import yaml
 
 from .._version import get_version
 from ..core.config.layering import for_device
@@ -254,17 +255,39 @@ def _transforms_for(container: Container, provider: str) -> tuple[Any, ...]:
 
 
 def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, Any]:
-    """RETURNS: dict[str, Any]: `KEY=VALUE` pairs as a mapping.
+    """Turn `--set` entries into a config layer.
+
+    Dotted keys nest, so `--set kodi.display.resolution_index=18` lands where
+    a device's `vars` would have put it and merges with the rest rather than
+    replacing the branch. Values are read as YAML scalars, so numbers and
+    booleans arrive typed.
+
+    **PARAMETERS:**
+        `overrides` (tuple[str, ...]): Raw `KEY=VALUE` entries.  <br>
+
+    **RETURNS:**
+        `dict[str, Any]`: A nested mapping, ready to merge as the highest layer.  <br>
 
     **RAISES:**
         `click.UsageError`: If an entry is not `KEY=VALUE`.  <br>
     """
     parsed: dict[str, Any] = {}
     for entry in overrides:
-        key, separator, value = entry.partition("=")
+        key, separator, raw = entry.partition("=")
         if not separator:
             raise click.UsageError(f"--set expects KEY=VALUE, got {entry!r}")
-        parsed[key.strip()] = value.strip()
+        try:
+            value = yaml.safe_load(raw.strip())
+        except yaml.YAMLError:
+            value = raw.strip()
+
+        branch = parsed
+        *parents, leaf = [part.strip() for part in key.strip().split(".")]
+        for part in parents:
+            existing = branch.get(part)
+            branch[part] = existing if isinstance(existing, dict) else {}
+            branch = branch[part]
+        branch[leaf] = raw.strip() if value is None else value
     return parsed
 
 
