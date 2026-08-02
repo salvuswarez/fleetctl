@@ -30,6 +30,10 @@ CI runs exactly these, on Python 3.12 and 3.13.
   formatting, never f-strings in log calls.
 - `Protocol` for seams, frozen dataclasses for value objects, Pydantic for
   anything parsed from YAML or crossing a wire.
+- `@contextmanager` functions annotate as `-> Generator[T, None, None]`,
+  not `-> Iterator[T]` (deprecated). The three-argument form is required
+  while we support Python 3.12 — the single-argument `Generator[T]` needs
+  3.13.
 - `__init__.py` holds a module docstring only — no re-exports, no `__all__`.
 
 ## Docstring format

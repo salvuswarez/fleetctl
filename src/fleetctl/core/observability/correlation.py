@@ -11,7 +11,7 @@ import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
-from typing import Iterator
+from typing import Generator
 
 _UNSET = "-"
 
@@ -42,7 +42,7 @@ def current() -> Correlation:
 
 
 @contextmanager
-def correlate(**fields: str) -> Iterator[Correlation]:
+def correlate(**fields: str) -> Generator[Correlation, None, None]:
     """Bind correlation fields for the duration of a block.
 
     Fields not supplied are inherited from the enclosing context, so an
