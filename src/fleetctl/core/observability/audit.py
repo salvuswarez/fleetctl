@@ -1,0 +1,284 @@
+"""The audit trail: what actually happened, to what, and whether it worked.
+
+Distinct from the operation timeline. The timeline says "disabling 90 bloat
+packages"; the audit trail says which 90, and which of them actually took.
+The predecessor could not answer the second question, which mattered because
+`pm disable-user` silently no-ops on older Fire OS — a run could report
+success having changed nothing.
+
+Records are append-only and hash-chained. Chaining is per destination file
+(one per day) with independent anchors, so the retention window expiring does
+not invalidate verification of what remains.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Protocol
+
+from ..effects import Effect
+from .correlation import current
+from .redact import Redactor
+
+GENESIS_HASH = "0" * 64
+
+
+class AuditKind(str, Enum):
+    """What sort of thing an audit record describes."""
+
+    EXEC = "exec"
+    PUT = "put"
+    GET = "get"
+    PLAN = "plan"
+    CONFIG = "config"
+    DECISION = "decision"
+    AUTH = "auth"
+
+
+class Outcome(str, Enum):
+    """How an audited action ended."""
+
+    OK = "ok"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    DENIED = "denied"
+
+
+@dataclass(frozen=True, slots=True)
+class AuditEvent:
+    """One recorded effect. Never updated after it is written.
+
+    **PARAMETERS:**
+        `kind` (AuditKind): What sort of action this was.  <br>
+        `action` (str): What was done, e.g. a command or ``artifact.put``.  <br>
+        `effect` (Effect): How much it changed on the target.  <br>
+        `outcome` (Outcome): How it ended.  <br>
+        `target` (str): Device address or id, when there was one.  <br>
+        `detail` (Mapping[str, Any]): Extra structured context. Redacted before writing.  <br>
+        `error` (str | None): Failure summary, when `outcome` is not `Outcome.OK`.  <br>
+        `duration_ms` (int): Wall-clock duration.  <br>
+        `ts` (str): ISO-8601 UTC timestamp.  <br>
+        `run_id` (str): Correlation — one workflow invocation.  <br>
+        `step_id` (str): Correlation — one step.  <br>
+        `op_id` (str): Correlation — one (step, device) pair.  <br>
+        `actor` (str): Who initiated the run.  <br>
+        `seq` (int): Position within the destination file.  <br>
+        `prev_hash` (str): Hash of the preceding record in the same file.  <br>
+        `hash` (str): This record's hash, covering `prev_hash`.  <br>
+    """
+
+    kind: AuditKind
+    action: str
+    effect: Effect = Effect.MUTATING
+    outcome: Outcome = Outcome.OK
+    target: str = ""
+    detail: Mapping[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    duration_ms: int = 0
+    ts: str = ""
+    run_id: str = ""
+    step_id: str = ""
+    op_id: str = ""
+    actor: str = ""
+    seq: int = 0
+    prev_hash: str = ""
+    hash: str = ""
+
+    @classmethod
+    def build(cls, kind: AuditKind, action: str, **overrides: Any) -> AuditEvent:
+        """Create an event stamped with the current time and correlation.
+
+        **PARAMETERS:**
+            `kind` (AuditKind): What sort of action this was.  <br>
+            `action` (str): What was done.  <br>
+            `**overrides` (Any): Any other `AuditEvent` field.  <br>
+
+        **RETURNS:**
+            `AuditEvent`: An unchained event, ready to hand to a sink.  <br>
+        """
+        active = current()
+        stamped: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "run_id": active.run_id,
+            "step_id": active.step_id,
+            "op_id": active.op_id,
+            "actor": active.actor,
+        }
+        stamped.update(overrides)
+        return cls(kind=kind, action=action, **stamped)
+
+    def to_dict(self) -> dict[str, Any]:
+        """RETURNS: dict[str, Any]: JSON-serializable form, with enums as their values."""
+        raw = asdict(self)
+        raw["kind"] = self.kind.value
+        raw["effect"] = self.effect.value
+        raw["outcome"] = self.outcome.value
+        raw["detail"] = dict(self.detail)
+        return raw
+
+    def digest(self) -> str:
+        """Compute this record's hash over its content and `prev_hash`.
+
+        **RETURNS:**
+            `str`: Hex SHA-256 covering every field except `hash` itself.  <br>
+        """
+        payload = self.to_dict()
+        payload.pop("hash", None)
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+class AuditSink(Protocol):
+    """Where audit records are persisted."""
+
+    def write(self, event: AuditEvent) -> None:
+        """Append one record. Must not raise into the caller's control flow."""
+
+    def read_all(self) -> list[AuditEvent]:
+        """RETURNS: list[AuditEvent]: Every record this sink holds, in write order."""
+
+
+class InMemoryAuditSink:
+    """Audit sink that keeps records in a list. For tests and dry runs."""
+
+    def __init__(self) -> None:
+        self._events: list[AuditEvent] = []
+        self._lock = threading.Lock()
+
+    def write(self, event: AuditEvent) -> None:
+        """Append `event` to the in-memory list."""
+        with self._lock:
+            self._events.append(event)
+
+    def read_all(self) -> list[AuditEvent]:
+        """RETURNS: list[AuditEvent]: A copy of the recorded events."""
+        with self._lock:
+            return list(self._events)
+
+
+class JsonlAuditSink:
+    """Audit sink writing one JSON object per line, one file per UTC day.
+
+    **PARAMETERS:**
+        `directory` (Path): Where daily ``YYYY-MM-DD.jsonl`` files are written.  <br>
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._lock = threading.Lock()
+
+    def path_for(self, ts: str) -> Path:
+        """RETURNS: Path: The daily file an event with timestamp `ts` belongs in."""
+        day = ts[:10] if len(ts) >= 10 else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return self._directory / f"{day}.jsonl"
+
+    def write(self, event: AuditEvent) -> None:
+        """Append `event` as one JSON line to its day's file."""
+        path = self.path_for(event.ts)
+        with self._lock:
+            self._directory.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event.to_dict(), default=str) + "\n")
+
+    def read_all(self) -> list[AuditEvent]:
+        """Read every record across every daily file, oldest file first.
+
+        **RETURNS:**
+            `list[AuditEvent]`: Parsed records. Malformed lines are skipped rather than aborting the read, so one corrupt line cannot hide the rest of the trail.  <br>
+        """
+        events: list[AuditEvent] = []
+        if not self._directory.is_dir():
+            return events
+        for path in sorted(self._directory.glob("*.jsonl")):
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    parsed = _parse_line(line)
+                    if parsed is not None:
+                        events.append(parsed)
+        return events
+
+
+def _parse_line(line: str) -> AuditEvent | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+    try:
+        raw = json.loads(stripped)
+        raw["kind"] = AuditKind(raw["kind"])
+        raw["effect"] = Effect(raw["effect"])
+        raw["outcome"] = Outcome(raw["outcome"])
+        return AuditEvent(**raw)
+    except (ValueError, TypeError, KeyError):
+        return None
+
+
+class ChainedAuditWriter:
+    """Serializes writes and links each record to the one before it.
+
+    Chaining lives here rather than in a sink so every adapter gets identical
+    semantics — otherwise the in-memory sink used by tests would exercise a
+    different code path from the one production runs.
+
+    A hash chain needs a total order over a single writer. Steps run
+    concurrently, so this holds the lock across sequencing *and* writing;
+    without that, interleaved appends would produce a chain that verification
+    reports as tampered, which is worse than having no verification.
+
+    **PARAMETERS:**
+        `sink` (AuditSink): Where chained records are handed off to.  <br>
+        `redactor` (Redactor): Applied before hashing, so what is verified is what was written.  <br>
+    """
+
+    def __init__(self, sink: AuditSink, redactor: Redactor | None = None) -> None:
+        self._sink = sink
+        self._redactor = redactor or Redactor()
+        self._lock = threading.Lock()
+        self._seq = 0
+        self._prev_hash = GENESIS_HASH
+
+    def write(self, event: AuditEvent) -> AuditEvent:
+        """Redact, chain, and persist `event`.
+
+        **PARAMETERS:**
+            `event` (AuditEvent): An unchained event, typically from `AuditEvent.build`.  <br>
+
+        **RETURNS:**
+            `AuditEvent`: The record as written, with `seq`, `prev_hash` and `hash` set.  <br>
+        """
+        with self._lock:
+            chained = replace(
+                event,
+                action=self._redactor.text(event.action),
+                detail=self._redactor.mapping(event.detail),
+                error=self._redactor.text(event.error) if event.error else None,
+                seq=self._seq,
+                prev_hash=self._prev_hash,
+            )
+            chained = replace(chained, hash=chained.digest())
+            self._sink.write(chained)
+            self._seq += 1
+            self._prev_hash = chained.hash
+            return chained
+
+
+def verify_chain(events: Iterable[AuditEvent]) -> tuple[bool, int | None]:
+    """Check that a sequence of records forms an unbroken chain.
+
+    **PARAMETERS:**
+        `events` (Iterable[AuditEvent]): Records in write order, from one destination file.  <br>
+
+    **RETURNS:**
+        `tuple[bool, int | None]`: ``(True, None)`` when intact, otherwise ``(False, seq)`` naming the first record that failed.  <br>
+    """
+    expected_prev = GENESIS_HASH
+    for event in events:
+        if event.prev_hash != expected_prev or event.hash != event.digest():
+            return False, event.seq
+        expected_prev = event.hash
+    return True, None
