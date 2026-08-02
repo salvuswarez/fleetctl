@@ -15,6 +15,7 @@
 | [`safety.md`](safety.md) | Anyone who will eventually point this at real hardware | Effect classes, protected devices, per-actor policy, plan-then-run, blast-radius caps — cross-referenced against [`../SECURITY.md`](../SECURITY.md) |
 | [`observability.md`](observability.md) | Anyone debugging a run or auditing what happened | The three separate streams (diagnostics, timeline, audit), why they're separate, and how correlation ids tie them together |
 | [`roadmap.md`](roadmap.md) | Anyone deciding what to build next | Stages S0–S8, exit criteria, current status, and the sequencing rules that are hard to walk back |
+| [`ha-parity.md`](ha-parity.md) | Anyone working on the Home Assistant cutover | All 21 panel commands mapped to their fleetctl equivalent, plus the behavioural differences the integration has to account for |
 
 ## What works today vs. what's planned
 
