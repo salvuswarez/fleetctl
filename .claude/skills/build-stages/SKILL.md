@@ -21,16 +21,20 @@ description: The S0–S8 build stages, what each contains, its exit criterion, a
 | **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ⬜ |
 | **S8** | Later | `linux_host` + SSH; HTTP API if a consumer appears; `fleet.lock` | ⬜ |
 
-## Six decisions open before S1
+## Six decisions that were open before S1 — five now settled
 
-An architecture review of the S0 scaffold found six contract-level decisions that are unmade or wrong. Full detail in `docs/architecture.md` §14 ("Open before S1"). Settle these before writing `core/`:
+Full detail in `docs/architecture.md` §14 ("Open before S1").
 
-1. **`Transport.exec()` needs an effect-class parameter** — otherwise `AuditingTransport` must pattern-match command strings, putting device vocabulary in `core/`.
-2. **Split `StepContext` by step kind** — fleet steps have no device; and as written, `build` receives a transport, so the "transforms can't live in deploy" guarantee is currently false.
-3. **Decide the app↔pack contract** — deep `state` verb, or typed pack-default config. The Kodi deploy case needs device-layout knowledge that neither ring currently owns.
-4. **Move config layering earlier than S3** — S2's own rules require `data/*.yml` that S3's loader doesn't exist for yet.
-5. **Enforce the ring rule in CI** (`import-linter` or an AST test), not just via `/ring-check`.
-6. **`Step` returns `StepResult`, not `str`** — a summary string can't carry the artifact handoff.
+| # | Decision | Outcome |
+|---|---|---|
+| 1 | `Transport.exec()` effect parameter | ✅ every mutating entry point takes `effect`, defaulting to `MUTATING` (fail-safe) |
+| 2 | Split `StepContext` by step kind | ✅ `FleetStepContext` / `DeviceStepContext` / `TransformStepContext` |
+| 3 | The app↔pack contract | ⬜ **still open** — settle before S2 writes `apps/kodi` |
+| 4 | Config layering earlier than S3 | ✅ landed in S1 (`core/config/layering.py`) |
+| 5 | Enforce the ring rule in CI | ✅ `tests/test_architecture.py`, part of the gate |
+| 6 | `Step` returns `StepResult` | ✅ carries `summary`, `artifacts`, `facts` |
+
+**Decision 3 is the one still to make**, and it blocks S2: the Kodi deploy case needs on-device path and archive knowledge that neither ring currently owns. Either make `state` the deep verb (the pack owns tar/gzip/staging/free-space, and `apps/kodi` never issues a transfer command), or let quirks flow as typed pack-default config now that layering exists.
 
 ## Ordering rules
 
