@@ -16,6 +16,7 @@ from . import base_image, device_config, steps
 from .spec import APP_ID
 from .transforms.addons import PruneAddons
 from .transforms.advanced import RemoveThumbnailSubstitution
+from .transforms.hub_layout import DEFAULT_LAYOUT, ApplyHubLayout
 from .transforms.settings import ApplySettings
 from .transforms.view_types import ApplyViewTypes
 
@@ -61,6 +62,7 @@ class KodiApp:
         settings = self.recipe.get("apply_settings", {})
         views = self.recipe.get("apply_view_types", {})
         thumbnails = self.recipe.get("remove_thumbnail_substitution")
+        hubs = self.recipe.get("apply_hub_layout")
         chain: list[ProfileTransform] = [
             PruneAddons(allow=tuple(prune.get("allow", ())), allow_prefixes=tuple(prune.get("allow_prefixes", ()))),
             ApplySettings(overrides=settings.get("settings", {})),
@@ -69,6 +71,8 @@ class KodiApp:
             chain.append(RemoveThumbnailSubstitution())
         if views:
             chain.append(ApplyViewTypes(includes_path=str(views.get("includes_path", "")), expressions=views.get("expressions", {})))
+        if hubs is not None:
+            chain.append(ApplyHubLayout(layout=str(hubs.get("layout", DEFAULT_LAYOUT))))
         return tuple(chain)
 
     def workflows(self) -> list[Workflow]:

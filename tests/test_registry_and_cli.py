@@ -140,6 +140,7 @@ def test_the_kodi_app_builds_its_transform_chain_from_the_shipped_recipe() -> No
         "apply_settings",
         "remove_thumbnail_substitution",
         "apply_view_types",
+        "apply_hub_layout",
     ]
 
 

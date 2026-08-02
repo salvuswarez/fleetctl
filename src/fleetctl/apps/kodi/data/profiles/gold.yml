@@ -112,3 +112,8 @@ apply_view_types:
       [Container.Content() + String.IsEqual(Container.Property(param.info),watch_providers) +  [!String.IsEmpty(Container.PluginName)]]
     Exp_View_524: >-
       [[Container.Content(sets) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [Container.Content(seasons)] |  [Container.Content(videoversions) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [!Window.IsVisible(MyMusicNav.xml) + Container.Content(genres) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [Container.Content(studios) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [Container.Content(playlists) + [String.IsEmpty(Container.PluginName)]] |  [Container.Content() + String.IsEqual(Container.Property(param.info),watch_providers) + [String.IsEmpty(Container.PluginName)]]]
+
+# Home-screen hubs, generated from data/hubs/<layout>.yml so the widget rows
+# and the TMDbHelper nodes behind them cannot disagree.
+apply_hub_layout:
+  layout: arctic-fuse-3

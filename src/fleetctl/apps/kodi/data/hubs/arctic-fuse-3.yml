@@ -1,0 +1,290 @@
+# Arctic Fuse 3 home-screen layout.
+#
+# Three config layers drive this skin's home screen and they drift apart by
+# hand: HomeSwitcher slots (skin settings), skinvariables widget/submenu JSON,
+# and TMDbHelper node JSON. Generating the latter two from this one file is
+# the point — a captured gold config had Movies showing seven rows as a node
+# and four as widgets, so browsing into a hub showed different content than
+# its home rows advertised.
+#
+# `row_groups` exists so a group used by two hubs is defined once: YAML
+# anchors below give the same no-drift property the predecessor got from
+# calling one function twice.
+#
+# Slot 1104 was a flat wall of ten live TMDb queries with no submenu and no
+# local content, and reproducibly preceded an OOM kill on a 1.7GB stick. It
+# is rebuilt here as a pure index over the other hubs' submenus.
+#
+# Slots deliberately absent: 1103 (hand-curated), 1107 (Live TV), 1108
+# (Addons, disabled in the profile settings).
+
+icons:
+  tmdb: special://home/addons/plugin.video.themoviedb.helper/resources/icons/themoviedb
+  white: special://home/addons/plugin.video.themoviedb.helper/resources/icons/white
+  skin: special://skin/extras/icons
+
+# Kodi library smartlists: local, instant, no network round-trip. Every hub
+# leads with these so something renders before any TMDb call resolves.
+library:
+  tv_progress: &lib_tv_progress library://video/tvshows/inprogressshows.xml/
+  tv_recent: &lib_tv_recent library://video/tvshows/recentlyaddedepisodes.xml/
+  movie_progress: &lib_movie_progress library://video/movies/inprogressmovies.xml/
+  movie_recent: &lib_movie_recent library://video/movies/recentlyaddedmovies.xml/
+
+# Genre, network and company ids are TMDb's own. %7C is a URL-encoded pipe (OR).
+row_groups:
+  movie_genres: &movie_genres
+    - label: Action & Adventure
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: "28%7C12", sort_by: popularity.desc, vote_count.gte: 500}
+    - label: Comedy
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: 35, sort_by: popularity.desc, vote_count.gte: 300}
+    - label: Sci-Fi
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: 878, sort_by: popularity.desc, vote_count.gte: 200}
+    - label: Thriller
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: 53, sort_by: popularity.desc, vote_count.gte: 200}
+    - label: Horror
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: 27, sort_by: popularity.desc, vote_count.gte: 100}
+    - label: Family
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: 10751, sort_by: popularity.desc, vote_count.gte: 100}
+    - label: Drama
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: 18, sort_by: popularity.desc, vote_count.gte: 300}
+
+  tv_genres: &tv_genres
+    - label: Drama
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, with_genres: 18, sort_by: popularity.desc, vote_count.gte: 100}
+    - label: Comedy
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, with_genres: 35, sort_by: popularity.desc, vote_count.gte: 100}
+    - label: Sci-Fi & Fantasy
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, with_genres: 10765, sort_by: popularity.desc, vote_count.gte: 100}
+    - label: Animation
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, with_genres: 16, sort_by: popularity.desc, vote_count.gte: 50}
+    - label: Reality
+      icon: "{tmdb}/genre.png"
+      discover: {tmdb_type: tv, with_genres: 10764, sort_by: popularity.desc, vote_count.gte: 20}
+    - label: Documentary
+      icon: "{tmdb}/genre.png"
+      discover: {tmdb_type: tv, with_genres: 99, sort_by: popularity.desc, vote_count.gte: 20}
+
+  # The captured config had this group's icon pointing at a repository .zip
+  # URL — a paste error that can never resolve as an image.
+  networks: &networks
+    - label: Netflix
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 213, sort_by: popularity.desc}
+    - label: HBO / Max
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: "49%7C3186", sort_by: popularity.desc}
+    - label: Apple TV+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 2552, sort_by: popularity.desc}
+    - label: Disney+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 2739, sort_by: popularity.desc}
+    - label: Paramount+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 4330, sort_by: popularity.desc}
+    - label: Hulu
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 453, sort_by: popularity.desc}
+
+  # K-Dramas and Anime go by origin country plus genre: TMDb has no network
+  # id for either as a category.
+  international: &international
+    - label: ABS-CBN
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 156, sort_by: first_air_date.desc}
+    - label: GMA
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 210, sort_by: popularity.desc}
+    - label: Viu
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 1510, sort_by: popularity.desc}
+    - label: K-Dramas
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, sort_by: popularity.desc, with_origin_country: KR, vote_count.gte: 50}
+    - label: Anime
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, with_genres: 16, sort_by: popularity.desc, with_origin_country: JP, vote_count.gte: 50}
+
+  movie_decades: &movie_decades
+    - label: 2020s
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "2020-01-01", primary_release_date.lte: "2029-12-31"}
+    - label: 2010s
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "2010-01-01", primary_release_date.lte: "2019-12-31"}
+    - label: 2000s
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "2000-01-01", primary_release_date.lte: "2009-12-31"}
+    - label: 90s
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "1990-01-01", primary_release_date.lte: "1999-12-31"}
+    - label: Classics (pre-1990)
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "1900-01-01", primary_release_date.lte: "1989-12-31"}
+
+  tv_decades: &tv_decades
+    - label: 2020s
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "2020-01-01", first_air_date.lte: "2029-12-31"}
+    - label: 2010s
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "2010-01-01", first_air_date.lte: "2019-12-31"}
+    - label: 2000s
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "2000-01-01", first_air_date.lte: "2009-12-31"}
+    - label: Classic TV (pre-2000)
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "1900-01-01", first_air_date.lte: "1999-12-31"}
+
+  movie_collections: &movie_collections
+    - label: Top Rated (90%+)
+      icon: "{tmdb}/popular.png"
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_average.gte: 8.0, vote_count.gte: 2000}
+    - label: Crime & Thriller
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_genres: "80%7C53", sort_by: popularity.desc, vote_count.gte: 100}
+    # T-0 / T-30 are TMDbHelper's relative-date tokens, resolved on the device.
+    - label: New This Month
+      icon: "{tmdb}/intheatres.png"
+      discover:
+        tmdb_type: movie
+        sort_by: primary_release_date.desc
+        with_original_language: en
+        vote_count.gte: 10
+        primary_release_date.lte: T-0
+        primary_release_date.gte: T-30
+    - label: Hidden Gems
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, sort_by: vote_average.desc, vote_count.gte: 50, vote_count.lte: 400}
+
+  studios: &studios
+    - label: Marvel
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_companies: 420, sort_by: primary_release_date.desc}
+    - label: Pixar
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_companies: 3, sort_by: primary_release_date.desc}
+    - label: A24
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_companies: 41077, sort_by: primary_release_date.desc}
+    - label: Studio Ghibli
+      icon: "{tmdb}/movies.png"
+      discover: {tmdb_type: movie, with_companies: 10342, sort_by: primary_release_date.desc}
+
+  tv_acclaimed: &tv_acclaimed
+    - label: Top Rated (90%+)
+      icon: "{tmdb}/popular.png"
+      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_average.gte: 8.0, vote_count.gte: 500}
+    - label: Hidden Gems
+      icon: "{tmdb}/tv.png"
+      discover: {tmdb_type: tv, sort_by: vote_average.desc, vote_count.gte: 20, vote_count.lte: 200}
+
+hubs:
+  home:
+    node: home_hub.json
+    node_name: HOME
+    widgets:
+      - {label: Continue Watching, icon: "{white}/recent.png", path: *lib_tv_progress}
+      - {label: Recently Added, icon: "{white}/calendar.png", path: *lib_movie_recent}
+      - label: New Releases This Week
+        icon: "{tmdb}/intheatres.png"
+        discover:
+          tmdb_type: movie
+          sort_by: primary_release_date.desc
+          with_original_language: en
+          vote_count.gte: 10
+          primary_release_date.lte: T-0
+          primary_release_date.gte: T-7
+      - label: Trending Now
+        icon: "{tmdb}/trending.png"
+        discover: {tmdb_type: tv, sort_by: popularity.desc}
+      # Same genre math as Series > Crime, Docs & Mystery, surfaced on home.
+      - label: Picked for Maddy
+        icon: "{tmdb}/discover.png"
+        discover: {tmdb_type: tv, with_genres: "80%7C9648", sort_by: popularity.desc, vote_count.gte: 50}
+    submenu: []
+
+  "1101":
+    node: movies_hub_main.json
+    node_name: MOVIES
+    widgets:
+      - {label: Continue Watching, icon: "{white}/recent.png", path: *lib_movie_progress}
+      - {label: Recently Added, icon: "{white}/calendar.png", path: *lib_movie_recent}
+      - label: New Releases
+        icon: "{tmdb}/intheatres.png"
+        discover: {tmdb_type: movie, sort_by: primary_release_date.desc, with_original_language: en, vote_count.gte: 25, primary_release_date.lte: T-0}
+      - label: Comedy
+        icon: "{tmdb}/movies.png"
+        discover: {tmdb_type: movie, with_genres: 35, sort_by: popularity.desc, vote_count.gte: 300}
+      - label: Sci-Fi
+        icon: "{tmdb}/movies.png"
+        discover: {tmdb_type: movie, with_genres: 878, sort_by: popularity.desc, vote_count.gte: 200}
+      - label: Crime, Docs & Mystery
+        icon: "{tmdb}/movies.png"
+        discover: {tmdb_type: movie, with_genres: "80%7C9648%7C99", sort_by: popularity.desc, vote_count.gte: 100}
+    submenu:
+      - {label: Genres, icon: "{skin}/genre.png", rows: *movie_genres}
+      - {label: Collections, icon: "{skin}/genre.png", rows: *movie_collections}
+      - {label: By Decade, icon: "{skin}/calendar.png", rows: *movie_decades}
+      - {label: By Studio, icon: "{skin}/genre.png", rows: *studios}
+
+  "1102":
+    node: tv_hub_main.json
+    node_name: SERIES
+    widgets:
+      - {label: Continue Watching, icon: "{white}/recent.png", path: *lib_tv_progress}
+      - {label: Recently Added Episodes, icon: "{white}/calendar.png", path: *lib_tv_recent}
+      - label: New Premieres
+        icon: "{tmdb}/trending.png"
+        discover:
+          tmdb_type: tv
+          sort_by: first_air_date.desc
+          with_original_language: en
+          vote_count.gte: 5
+          first_air_date.lte: T-0
+          first_air_date.gte: T-90
+      - label: Drama
+        icon: "{tmdb}/tv.png"
+        discover: {tmdb_type: tv, with_genres: 18, sort_by: popularity.desc, vote_count.gte: 100}
+      - label: Crime, Docs & Mystery
+        icon: "{tmdb}/tv.png"
+        discover: {tmdb_type: tv, with_genres: "80%7C9648%7C99", sort_by: popularity.desc, vote_count.gte: 100}
+      - label: Sci-Fi
+        icon: "{tmdb}/tv.png"
+        discover: {tmdb_type: tv, with_genres: 10765, sort_by: popularity.desc, vote_count.gte: 100}
+    submenu:
+      - {label: Genres, icon: "{skin}/genre.png", rows: *tv_genres}
+      - {label: By Network, icon: "{skin}/rocket.png", rows: *networks}
+      - {label: International, icon: "{skin}/genre.png", rows: *international}
+      - {label: By Decade, icon: "{skin}/calendar.png", rows: *tv_decades}
+      - {label: Critically Acclaimed, icon: "{skin}/genre.png", rows: *tv_acclaimed}
+
+  # A pure index over the Movies and Series submenus. Deliberately light on
+  # widgets: this hub's OOM history means no wide fan-out of live rows.
+  "1104":
+    node: genres_hub.json
+    node_name: BROWSE
+    widgets:
+      - label: Popular Movies
+        icon: "{tmdb}/popular.png"
+        discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 300}
+      - label: New This Week
+        icon: "{tmdb}/trending.png"
+        discover: {tmdb_type: tv, sort_by: first_air_date.desc, vote_count.gte: 5, first_air_date.lte: T-0, first_air_date.gte: T-7}
+    submenu:
+      - {label: Movie Genres, icon: "{skin}/genre.png", rows: *movie_genres}
+      - {label: TV Genres, icon: "{skin}/genre.png", rows: *tv_genres}
+      - {label: By Network, icon: "{skin}/rocket.png", rows: *networks}
+      - {label: International, icon: "{skin}/genre.png", rows: *international}
