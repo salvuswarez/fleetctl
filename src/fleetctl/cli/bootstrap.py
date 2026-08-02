@@ -8,6 +8,7 @@ without changing a line of it.
 
 from __future__ import annotations
 
+import getpass
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ from ..core.inventory.device import Device
 from ..core.inventory.store import DeviceStore
 from ..core.observability.audit import ChainedAuditWriter, JsonlAuditSink
 from ..core.operations.registry import OperationRegistry
+from ..core.policy import Policy, load_policy
 from ..core.registry import Registry, discover
 from ..core.state import StateManager
 from ..core.transport.auditing import AuditingTransport
@@ -67,6 +69,11 @@ class Container:
     def failures_root(self) -> Path:
         """RETURNS: Path: Where a failed operation's workspace is preserved."""
         return self.home / "forensics"
+
+    @property
+    def policy(self) -> Policy:
+        """RETURNS: Policy: The configured policy, or a permissive one when `fleet.yml` has no `policy:` block."""
+        return load_policy(self.config)
 
     def workflows(self) -> dict[str, Workflow]:
         """Every available workflow, shipped ones first.
@@ -117,11 +124,48 @@ class Container:
         return manager
 
 
+def cli_actor() -> str:
+    """Identify who is running the CLI.
+
+    Recorded on every audit event and matched against policy patterns like
+    ``cli:*``. A trail that says only "cli" cannot answer who ran something,
+    which is half the point of keeping one.
+
+    **RETURNS:**
+        `str`: ``cli:<username>``, falling back to ``cli:unknown`` where the OS will not say.  <br>
+    """
+    try:
+        return f"cli:{getpass.getuser()}"
+    except Exception:  # noqa: BLE001 - no user name is not a reason to refuse to run
+        return "cli:unknown"
+
+
+def _under_home(configured: Any, home: Path, default_name: str) -> Path:
+    """Resolve a configured directory, treating a relative path as under `home`.
+
+    Resolving against the working directory instead would make where state
+    lands depend on where the command was run from, which is how a test — or
+    a user — ends up scattering audit files across a filesystem.
+
+    **PARAMETERS:**
+        `configured` (Any): The configured path, or None.  <br>
+        `home` (Path): Runtime state directory.  <br>
+        `default_name` (str): Subdirectory to use when nothing is configured.  <br>
+
+    **RETURNS:**
+        `Path`: An absolute-or-home-relative directory.  <br>
+    """
+    if configured is None:
+        return home / default_name
+    path = Path(str(configured))
+    return path if path.is_absolute() else home / path
+
+
 def build_container(
     *,
     config_dir: Path | None = None,
     home: Path | None = None,
-    actor: str = "cli",
+    actor: str | None = None,
     registry: Registry | None = None,
 ) -> Container:
     """Resolve everything this invocation needs.
@@ -129,7 +173,7 @@ def build_container(
     **PARAMETERS:**
         `config_dir` (Path | None): Directory holding `fleet.yml` and `inventory/devices.yml`. Defaults to ``config/`` under the working directory.  <br>
         `home` (Path | None): Runtime state directory. Defaults to ``~/.fleetctl``.  <br>
-        `actor` (str): Who is running this. Recorded on every audit event.  <br>
+        `actor` (str | None): Who is running this, recorded on every audit event. Defaults to `cli_actor()`.  <br>
         `registry` (Registry | None): Pre-populated registry. Defaults to discovering installed packs.  <br>
 
     **RETURNS:**
@@ -142,10 +186,10 @@ def build_container(
     config = SecretResolver(EnvSecretProvider()).resolve_all(raw)
 
     observability = config.get("observability", {}) if isinstance(config.get("observability"), dict) else {}
-    audit_dir = Path(str(observability.get("audit_dir", home / "audit")))
+    audit_dir = _under_home(observability.get("audit_dir"), home, "audit")
 
     artifacts_config = config.get("artifacts", {}) if isinstance(config.get("artifacts"), dict) else {}
-    artifact_root = Path(str(artifacts_config.get("local_root", home / "artifacts")))
+    artifact_root = _under_home(artifacts_config.get("local_root"), home, "artifacts")
 
     return Container(
         registry=registry if registry is not None else discover(),
@@ -155,6 +199,6 @@ def build_container(
         audit=ChainedAuditWriter(JsonlAuditSink(audit_dir)),
         config=config,
         home=home,
-        actor=actor,
+        actor=actor or cli_actor(),
         config_dir=config_dir,
     )

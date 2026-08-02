@@ -347,3 +347,92 @@ def test_a_user_workflow_shadows_a_shipped_one(workspace: Path) -> None:
     # Assert
     assert result.exit_code == 0
     assert "maintain" not in result.output
+
+
+def _with_policy(workspace: Path, policy_yaml: str) -> None:
+    (workspace / "config" / "fleet.yml").write_text(f"observability:\n  audit_dir: audit\npolicy:\n{policy_yaml}", encoding="utf-8")
+
+
+def test_a_protected_device_is_refused_and_the_denial_is_audited(workspace: Path) -> None:
+    # Arrange
+    _with_policy(
+        workspace,
+        "  protected:\n    - match: {tags: [kodi]}\n      deny: ['kodi.deploy']\n      reason: held back for now\n  actors:\n    'cli:*': {allow: ['*']}\n",
+    )
+
+    # Act
+    result = _invoke(workspace, "run", "kodi.deploy", "--device", "stick-1")
+    tailed = _invoke(workspace, "audit", "tail")
+
+    # Assert
+    assert result.exit_code != 0
+    assert "held back for now" in result.output
+    assert "policy.deny" in tailed.output
+
+
+def test_an_unknown_actor_is_denied_when_a_policy_exists(workspace: Path) -> None:
+    # Arrange
+    _with_policy(workspace, "  actors:\n    'mcp:*': {allow: ['*']}\n")
+
+    # Act
+    result = _invoke(workspace, "run", "kodi.build")
+
+    # Assert
+    assert result.exit_code != 0
+    assert "No policy rule covers actor" in result.output
+
+
+def test_a_workflow_needing_approval_refuses_without_the_flag(workspace: Path) -> None:
+    # Arrange
+    _with_policy(workspace, "  actors:\n    'cli:*': {allow: ['*'], confirm: ['destructive']}\n")
+
+    # Act
+    result = _invoke(workspace, "workflow", "run", "kodi-refresh")
+
+    # Assert
+    assert result.exit_code != 0
+    assert "Approval required" in result.output
+
+
+def test_the_plan_shows_what_needs_approval(workspace: Path) -> None:
+    # Arrange
+    _with_policy(workspace, "  actors:\n    'cli:*': {allow: ['*'], confirm: ['destructive']}\n")
+
+    # Act
+    result = _invoke(workspace, "workflow", "plan", "kodi-refresh")
+
+    # Assert
+    assert "NEEDS APPROVAL" in result.output
+
+
+def test_a_blast_radius_cap_refuses_an_oversized_run(workspace: Path) -> None:
+    # Arrange
+    (workspace / "config" / "inventory" / "devices.yml").write_text(
+        "devices:\n" + "".join(f"  - id: stick-{n}\n    type: firetv\n    address: 192.168.1.5{n}\n    tags: [kodi]\n" for n in range(4)),
+        encoding="utf-8",
+    )
+    _with_policy(workspace, "  actors:\n    'cli:*': {allow: ['*'], max_devices: 2}\n")
+
+    # Act
+    result = _invoke(workspace, "workflow", "run", "kodi-refresh")
+
+    # Assert
+    assert result.exit_code != 0
+    assert "at most 2" in result.output
+
+
+def test_a_denial_records_who_was_refused(workspace: Path) -> None:
+    """A record that cannot say who was refused is half a record."""
+    # Arrange
+    _with_policy(workspace, "  actors:\n    'cli:*': {allow: ['*'], deny: ['kodi.deploy']}\n")
+
+    # Act
+    _invoke(workspace, "run", "kodi.deploy", "--device", "stick-1")
+    from fleetctl.core.observability.audit import JsonlAuditSink
+
+    events = JsonlAuditSink(workspace / "home" / "audit").read_all()
+
+    # Assert
+    assert events
+    assert events[-1].actor.startswith("cli:")
+    assert events[-1].target == "stick-1"

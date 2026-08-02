@@ -337,3 +337,57 @@ def test_the_run_report_summarises_the_outcome(registry: Registry, fleet: list[D
     # Assert
     assert "2/3" in summary
     assert "with failures" in summary
+
+
+def test_policy_denial_blocks_a_task_at_plan_time(registry: Registry, fleet: list[Device]) -> None:
+    """A denial should be visible in --dry-run, not discovered mid-run."""
+    # Arrange
+    from fleetctl.core.policy import Policy
+
+    policy = Policy.from_mapping(
+        {"protected": [{"match": {"tags": ["managed"]}, "deny": ["demo.touch"], "reason": "held back"}], "actors": {"*": {"allow": ["*"]}}}
+    )
+
+    # Act
+    plan = build_plan(Workflow.from_yaml(WORKFLOW_YAML), registry, fleet, policy=policy, actor="cli:test")
+
+    # Assert
+    assert [task.target_id for task in plan.blocked] == ["a", "b", "d"]
+    assert "held back" in plan.blocked[0].blocked
+
+
+def test_policy_confirmation_marks_a_task_without_blocking_it(registry: Registry, fleet: list[Device]) -> None:
+    # Arrange
+    from fleetctl.core.policy import Policy
+
+    policy = Policy.from_mapping({"actors": {"mcp:*": {"allow": ["*"], "confirm": ["destructive"]}}})
+
+    # Act
+    plan = build_plan(Workflow.from_yaml(WORKFLOW_YAML), registry, fleet, policy=policy, actor="mcp:claude")
+
+    # Assert
+    pending = plan.needs_approval
+    assert [task.target_id for task in pending] == ["a", "b"]
+    assert all(task.runnable for task in pending)
+
+
+def test_device_count_ignores_blocked_and_fleet_level_tasks(registry: Registry, fleet: list[Device]) -> None:
+    # Act
+    plan = build_plan(Workflow.from_yaml(WORKFLOW_YAML), registry, fleet)
+
+    # Assert
+    assert plan.device_count == 2
+
+
+def test_the_plan_description_marks_approval_separately_from_blocking(registry: Registry, fleet: list[Device]) -> None:
+    # Arrange
+    from fleetctl.core.policy import Policy
+
+    policy = Policy.from_mapping({"actors": {"mcp:*": {"allow": ["*"], "confirm": ["destructive"]}}})
+
+    # Act
+    described = "\n".join(build_plan(Workflow.from_yaml(WORKFLOW_YAML), registry, fleet, policy=policy, actor="mcp:claude").describe())
+
+    # Assert
+    assert "NEEDS APPROVAL" in described
+    assert "BLOCKED" in described

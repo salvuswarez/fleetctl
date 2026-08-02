@@ -19,8 +19,8 @@ import click
 from .._version import get_version
 from ..core.config.layering import for_device
 from ..core.errors import FleetError
-from ..core.observability.audit import verify_chain
-from ..core.observability.correlation import CorrelationFilter
+from ..core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
+from ..core.observability.correlation import CorrelationFilter, correlate
 from ..core.operations.registry import OperationStatus
 from ..core.registry import RegisteredStep
 from ..core.transport.base import Transport
@@ -66,7 +66,7 @@ def main(ctx: click.Context, verbose: int, config_dir: Path | None, home: Path |
 
 def _container(ctx: click.Context) -> Container:
     options = ctx.obj or {}
-    return build_container(config_dir=options.get("config_dir"), home=options.get("home"), actor="cli")
+    return build_container(config_dir=options.get("config_dir"), home=options.get("home"))
 
 
 @main.command(name="packs")
@@ -139,6 +139,12 @@ def run(ctx: click.Context, step_id: str, device_id: str | None, overrides: tupl
 
     flags = _parse_overrides(overrides)
     op_id = f"{step_id.replace('.', '-')}-{int(time.time())}"
+
+    device = container.inventory.get(device_id) if device_id else None
+    decision = container.policy.check(actor=container.actor, step_id=step_id, effect=step.spec.effect, device=device)
+    if decision.denied:
+        _record_denial(container, step_id, device_id or "fleet", decision.reason)
+        raise click.ClickException(decision.reason)
 
     if step.spec.scope == "device":
         status = _run_device_step(container, step, device_id, flags, op_id)
@@ -341,7 +347,7 @@ def _plan_for(container: Container, name: str) -> Any:
         known = ", ".join(sorted(available)) or "none"
         raise click.ClickException(f"No workflow {name!r} (known: {known})")
     try:
-        return build_plan(available[name], container.registry, container.inventory.list())
+        return build_plan(available[name], container.registry, container.inventory.list(), policy=container.policy, actor=container.actor)
     except FleetError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -361,14 +367,18 @@ def workflow_plan(ctx: click.Context, name: str) -> None:
     blocked = plan.blocked
     if blocked:
         click.echo(f"{len(blocked)} task(s) blocked and will be skipped.")
+    pending = plan.needs_approval
+    if pending:
+        click.echo(f"{len(pending)} task(s) need approval; re-run with --approve.")
 
 
 @workflow.command(name="run")
 @click.argument("name")
 @click.option("--dry-run", is_flag=True, help="Show the plan and stop.")
 @click.option("--confirm", "expected_digest", default=None, help="Refuse to run unless the plan still matches this digest.")
+@click.option("--approve", is_flag=True, help="Approve tasks the policy flagged as needing it.")
 @click.pass_context
-def workflow_run(ctx: click.Context, name: str, dry_run: bool, expected_digest: str | None) -> None:
+def workflow_run(ctx: click.Context, name: str, dry_run: bool, expected_digest: str | None, approve: bool) -> None:
     """Run a workflow."""
     container = _container(ctx)
     plan = _plan_for(container, name)
@@ -387,6 +397,16 @@ def workflow_run(ctx: click.Context, name: str, dry_run: bool, expected_digest: 
         click.echo("Nothing to do: no target matched any device.")
         return
 
+    radius = container.policy.check_blast_radius(actor=container.actor, device_count=plan.device_count)
+    if radius.denied:
+        raise click.ClickException(radius.reason)
+
+    pending = plan.needs_approval
+    if pending and not approve:
+        for task in pending:
+            click.echo(f"[?] {task.step_id} {task.target_id}: {task.needs_approval}")
+        raise click.ClickException("Approval required; re-run with --approve once you have reviewed the plan.")
+
     engine = WorkflowEngine(_task_runner(container), container.audit, actor=container.actor)
     report = engine.run(plan)
 
@@ -398,6 +418,18 @@ def workflow_run(ctx: click.Context, name: str, dry_run: bool, expected_digest: 
     click.echo(report.summary())
     if not report.succeeded:
         raise click.ClickException("Workflow did not complete cleanly")
+
+
+def _record_denial(container: Container, step_id: str, target: str, reason: str) -> None:
+    """Audit a refusal.
+
+    A policy that silently refuses is undebuggable, and a denial is exactly
+    the kind of event worth being able to review later.
+    """
+    # Bound here because a denial happens before any step envelope runs, and a
+    # record that cannot say who was refused is half a record.
+    with correlate(actor=container.actor, step_id=step_id):
+        container.audit.write(AuditEvent.build(AuditKind.DECISION, f"policy.deny {step_id}", target=target, outcome=Outcome.DENIED, detail={"reason": reason}))
 
 
 def _task_runner(container: Container) -> Any:

@@ -15,8 +15,8 @@ description: The S0–S8 build stages, what each contains, its exit criterion, a
 | **S1** | Core kernel | `FakeTransport` + `LocalArtifactStore` run a trivial step end-to-end in tests, with audit records asserted | ✅ done |
 | **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ next |
 | **S3** | Config-as-code + workflows | `fleetctl workflow run kodi-refresh --dry-run` prints a correct plan; `config <device>` explains every key | ✅ done |
-| **S4** | Policy + audit hardening | The gold device is structurally undeployable-to without a config edit | ⬜ next |
-| **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ⬜ |
+| **S4** | Policy + audit hardening | A device marked protected cannot be reached by any actor without a config edit | ✅ done |
+| **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ⬜ next |
 | **S6** | MCP adapter | An agent completes `kodi-refresh` with per-step approval, fully audited | ⬜ |
 | **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ⬜ |
 | **S8** | Later | `linux_host` + SSH; HTTP API if a consumer appears; `fleet.lock` | ⬜ |
@@ -67,4 +67,4 @@ Hard-won behaviour that must survive the port intact (S2/S5). Each has a memory 
 | Size-scaled timeouts for transfer and unpack | `AdbTransport` |
 | Working cancellation, debounced flush, restart handling | `core/operations` |
 | MAC → serial → IP reconciliation; only overwrite on a real value | `core/inventory` |
-| Gold device protection | `core/policy` (S4), as config — not a convention |
+| Device protection (situational, not a standing rule) | `core/policy`, as opt-in config |
