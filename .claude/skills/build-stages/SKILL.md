@@ -1,0 +1,67 @@
+---
+name: build-stages
+description: The S0–S8 build stages, what each contains, its exit criterion, and what is done so far. Use when starting work, deciding whether something is in scope yet, or checking whether a prerequisite stage has landed.
+---
+
+# Build Stages
+
+`fleetctl` is built in stages, each with an exit criterion. Full detail: `docs/architecture.md` §14.
+
+## Status
+
+| # | Stage | Exit criterion | Status |
+|---|-------|----------------|--------|
+| **S0** | Repo bootstrap | CI green on an empty package | ✅ done |
+| **S1** | Core kernel | `FakeTransport` + `LocalArtifactStore` run a trivial step end-to-end in tests, with audit records asserted | ⬜ next |
+| **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ |
+| **S3** | Config-as-code + workflows | `fleetctl run kodi-refresh --dry-run` prints a correct plan; `config show <device>` explains every key | ⬜ |
+| **S4** | Policy + audit hardening | The gold device is structurally undeployable-to without a config edit | ⬜ |
+| **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ⬜ |
+| **S6** | MCP adapter | An agent completes `kodi-refresh` with per-step approval, fully audited | ⬜ |
+| **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ⬜ |
+| **S8** | Later | `linux_host` + SSH; HTTP API if a consumer appears; `fleet.lock` | ⬜ |
+
+## Six decisions open before S1
+
+An architecture review of the S0 scaffold found six contract-level decisions that are unmade or wrong. Full detail in `docs/architecture.md` §14 ("Open before S1"). Settle these before writing `core/`:
+
+1. **`Transport.exec()` needs an effect-class parameter** — otherwise `AuditingTransport` must pattern-match command strings, putting device vocabulary in `core/`.
+2. **Split `StepContext` by step kind** — fleet steps have no device; and as written, `build` receives a transport, so the "transforms can't live in deploy" guarantee is currently false.
+3. **Decide the app↔pack contract** — deep `state` verb, or typed pack-default config. The Kodi deploy case needs device-layout knowledge that neither ring currently owns.
+4. **Move config layering earlier than S3** — S2's own rules require `data/*.yml` that S3's loader doesn't exist for yet.
+5. **Enforce the ring rule in CI** (`import-linter` or an AST test), not just via `/ring-check`.
+6. **`Step` returns `StepResult`, not `str`** — a summary string can't carry the artifact handoff.
+
+## Ordering rules
+
+1. **S1 before everything.** Both `ArtifactStore` adapters land in S1 — the local one is what makes S2 testable at all.
+2. **S4 before S6.** Policy and audit precede MCP. This is the only ordering in the plan that is hard to walk back: agent-facing tools over a fleet with no policy layer and no audit record.
+3. **S2 is the honesty gate.** Parity against real hardware before any of the interesting work.
+4. **S5 validates the design.** If adding the Shield requires touching `core/` or `apps/kodi/`, the seams are wrong — stop and fix rather than working around.
+5. **S7 is a two-repo coordinated release** with its own deploy quirks (manual manifest bump, `scp`, restart, on a feature branch not `main`).
+
+## Scope discipline
+
+Do not build ahead of the current stage. Concretely:
+
+- No empty `core/` subpackages with stub `__init__.py` files "ready for later."
+- No config loader before S3 — and therefore no `config/*.example` promising one.
+- No abstraction whose second adapter does not exist yet in the same stage.
+- No policy hooks before S4; no MCP surface before S6.
+
+The architecture doc describes the destination. The stage table describes what is allowed to exist right now.
+
+## Carried forward from `firestick_manager`
+
+Hard-won behaviour that must survive the port intact (S2/S5). Each has a memory entry:
+
+| Behaviour | Lands in |
+|-----------|----------|
+| Netcat upload; listener cannot be backgrounded; md5 tail check | `AdbTransport.put()` |
+| `tar cf` + separate `gzip`, never `tar czf` | `packs/firetv` quirk |
+| Flat build archives (no `.kodi/` wrapper) | `apps/kodi` build |
+| Single-archive transfer, never per-file sync | `apps/kodi` deploy |
+| Size-scaled timeouts for transfer and unpack | `AdbTransport` |
+| Working cancellation, debounced flush, restart handling | `core/operations` |
+| MAC → serial → IP reconciliation; only overwrite on a real value | `core/inventory` |
+| Gold device protection | `core/policy` (S4), as config — not a convention |

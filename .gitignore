@@ -1,0 +1,50 @@
+# --- Secrets and real device data -------------------------------------------
+# fleetctl config holds `!ref` pointers, never values — but a user's own
+# resolved config, inventory, and credentials must never be committed.
+.env
+*.secret
+config/
+!config/*.example
+!config/**/*.example
+
+# ADB key material — a standing authorization token for every paired device.
+.adb_keys/
+*adbkey*
+
+# --- Runtime state ----------------------------------------------------------
+staging/
+logs/
+audit/
+forensics/
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Claude Code ------------------------------------------------------------
+# Local-only settings, scratch output, and working notes that may reference
+# real device details pulled during a session. Tracked .claude/ content
+# (skills, agents, commands, rules) is whitelisted below.
+.claude/*
+!.claude/agents/
+!.claude/commands/
+!.claude/rules/
+!.claude/skills/
+!.claude/settings.json
+
+# --- OS / editor ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.bak
