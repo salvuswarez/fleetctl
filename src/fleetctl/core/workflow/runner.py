@@ -64,7 +64,16 @@ def run_step(
 
     **RETURNS:**
         `OperationStatus`: The terminal status recorded for this operation.  <br>
+
+    **RAISES:**
+        `FleetError`: If another operation is already running against `target`.  <br>
     """
+    # Two jobs on one device interleave their extracts and leave a profile
+    # that is neither. Fleet-scoped work has no target and does not contend.
+    busy = registry.running_for(target) if target else None
+    if busy is not None and busy != op_id:
+        raise FleetError(f"{target} is busy with {busy}; wait for it or cancel it before starting {spec.id}")
+
     handle = registry.start(op_id, spec.id, target, params)
     with correlate(run_id=run_id, step_id=spec.id, op_id=op_id, actor=actor):
         try:

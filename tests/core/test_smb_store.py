@@ -290,3 +290,30 @@ def test_a_stale_session_is_retried_once(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_listing_an_absent_kind_is_empty_not_an_error(smb: _FakeSmb) -> None:
     assert _configured().list("captures") == []
+
+
+def test_a_secret_username_reaches_the_server_unmasked(smb: _FakeSmb) -> None:
+    """`str()` on a Secret yields its mask. Coercing the username that way
+    authenticated as the literal mask, and the server silently downgraded the
+    session to guest -- every listing came back empty against a full share."""
+    # Arrange
+    settings = SmbSettings.from_mapping(
+        {"host": "h", "share": "s", "root": "r", "user": Secret("real-user", origin="env:SMB_USER"), "password": Secret("pw", origin="env:SMB_PASS")}
+    )
+
+    # Act
+    SmbArtifactStore(settings)._connect()
+
+    # Assert
+    assert settings.reveal_user() == "real-user"
+    assert "real-user" not in str(settings.user)
+    assert settings.configured is True
+
+
+def test_a_secret_username_that_resolves_to_nothing_is_not_configured(smb: _FakeSmb) -> None:
+    """A masked non-empty string would otherwise look like a valid username."""
+    # Act
+    settings = SmbSettings.from_mapping({"host": "h", "share": "s", "user": Secret("", origin="env:SMB_USER")})
+
+    # Assert
+    assert settings.configured is False

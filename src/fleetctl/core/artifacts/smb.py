@@ -30,24 +30,28 @@ class SmbSettings:
         `host` (str): SMB server hostname or address.  <br>
         `share` (str): Share name.  <br>
         `root` (str): Directory within the share holding artifact kinds.  <br>
-        `user` (str): Username; empty means SMB is not configured.  <br>
+        `user` (Secret | str): Username, which may be a resolved `!ref`; empty means SMB is not configured.  <br>
         `password` (Secret | str): Password, normally a resolved `!ref`.  <br>
     """
 
     host: str = ""
     share: str = ""
     root: str = "fleetctl"
-    user: str = ""
+    user: Secret | str = ""
     password: Secret | str = ""
 
     @property
     def configured(self) -> bool:
         """RETURNS: bool: Whether enough is set to attempt a connection."""
-        return bool(self.host and self.share and self.user)
+        return bool(self.host and self.share and self.reveal_user())
+
+    def reveal_user(self) -> str:
+        """RETURNS: str: The username, unwrapped only here at the edge."""
+        return _reveal(self.user)
 
     def reveal_password(self) -> str:
         """RETURNS: str: The password value, unwrapped only here at the edge."""
-        return self.password.reveal() if isinstance(self.password, Secret) else str(self.password)
+        return _reveal(self.password)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> SmbSettings:
@@ -56,7 +60,7 @@ class SmbSettings:
             host=str(data.get("host", "")),
             share=str(data.get("share", "")),
             root=str(data.get("root", "fleetctl")),
-            user=str(data.get("user", "")),
+            user=data.get("user", ""),
             password=data.get("password", ""),
         )
 
@@ -83,7 +87,7 @@ class SmbArtifactStore:
             raise ArtifactError("SMB is not configured; set artifacts.smb host/share/user in fleet.yml")
         import smbclient
 
-        smbclient.ClientConfig(username=self._settings.user, password=self._settings.reveal_password())
+        smbclient.ClientConfig(username=self._settings.reveal_user(), password=self._settings.reveal_password())
         self._configured = True
 
     def _retry(self, call: Callable[[], _T]) -> _T:
@@ -225,6 +229,11 @@ class SmbArtifactStore:
             LOGGER.debug("No readable sidecar for %s: %s", ref.wire, exc)
             return {}
         return loaded if isinstance(loaded, dict) else {}
+
+
+def _reveal(value: Secret | str) -> str:
+    """RETURNS: str: The underlying value. `str()` on a Secret yields its mask, never its content."""
+    return value.reveal() if isinstance(value, Secret) else str(value)
 
 
 def _is_transient(exc: BaseException) -> bool:

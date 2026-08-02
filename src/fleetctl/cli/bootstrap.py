@@ -11,6 +11,7 @@ from typing import Any, Callable, Mapping
 from ..core.appmgr import AppManager
 from ..core.artifacts.smb import SmbArtifactStore, SmbSettings
 from ..core.artifacts.store import ArtifactStore, LocalArtifactStore
+from ..core.config.dotenv import load_dotenv
 from ..core.config.loader import load_yaml_file
 from ..core.config.secrets import EnvSecretProvider, SecretResolver
 from ..core.discovery.step import SCAN
@@ -227,6 +228,9 @@ def build_container(
     """
     config_dir = config_dir or DEFAULT_CONFIG_DIR
     home = home or DEFAULT_HOME
+
+    # Before resolving, so `!ref env:` sees what the file defines.
+    load_dotenv(config_dir.parent / ".env")
 
     raw = load_yaml_file(config_dir / "fleet.yml")
     config = SecretResolver(EnvSecretProvider()).resolve_all(raw)

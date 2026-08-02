@@ -156,3 +156,60 @@ def test_the_scan_workflow_ships_by_default() -> None:
     assert "fleet-scan" in shipped
     assert [step.use for step in shipped["fleet-scan"].steps] == ["fleet.scan"]
     assert shipped["fleet-scan"].steps[0].params["subnet"]
+
+
+# -- One operation per device -----------------------------------------------
+
+
+def test_a_second_operation_on_a_busy_device_is_refused(tmp_path: Path) -> None:
+    """Two jobs on one device interleave their extracts and leave a profile
+    that is neither."""
+    # Arrange
+    from fleetctl.core.workflow.runner import run_step
+    from fleetctl.core.workflow.step import StepResult, StepSpec
+
+    registry = OperationRegistry()
+    registry.start("first", "kodi.deploy", "stick-1")
+    spec = StepSpec(id="kodi.deploy", summary="Deploy.", effect=Effect.DESTRUCTIVE)
+
+    # Act / Assert
+    with pytest.raises(FleetError) as caught:
+        run_step(registry, spec, lambda handle, space: StepResult(summary="ok"), op_id="second", target="stick-1", staging_root=tmp_path)
+    assert "busy with first" in str(caught.value)
+
+
+def test_a_device_is_free_again_once_its_operation_finishes(tmp_path: Path) -> None:
+    # Arrange
+    from fleetctl.core.operations.registry import OperationStatus
+    from fleetctl.core.workflow.runner import run_step
+    from fleetctl.core.workflow.step import StepResult, StepSpec
+
+    registry = OperationRegistry()
+    registry.start("first", "kodi.deploy", "stick-1")
+    registry.finish("first", OperationStatus.COMPLETED, "done")
+    spec = StepSpec(id="kodi.deploy", summary="Deploy.", effect=Effect.DESTRUCTIVE)
+
+    # Act
+    status = run_step(registry, spec, lambda handle, space: StepResult(summary="ok"), op_id="second", target="stick-1", staging_root=tmp_path)
+
+    # Assert
+    assert status is OperationStatus.COMPLETED
+
+
+def test_fleet_scoped_work_does_not_contend(tmp_path: Path) -> None:
+    """Two fleet steps share an empty target; blocking on that would serialise
+    everything that touches no device."""
+    # Arrange
+    from fleetctl.core.operations.registry import OperationStatus
+    from fleetctl.core.workflow.runner import run_step
+    from fleetctl.core.workflow.step import StepResult, StepSpec
+
+    registry = OperationRegistry()
+    registry.start("first", "kodi.build")
+    spec = StepSpec(id="kodi.check_update", summary="Check.", effect=Effect.READ, scope="fleet")
+
+    # Act
+    status = run_step(registry, spec, lambda handle, space: StepResult(summary="ok"), op_id="second", staging_root=tmp_path)
+
+    # Assert
+    assert status is OperationStatus.COMPLETED
