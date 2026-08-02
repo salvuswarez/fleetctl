@@ -91,6 +91,18 @@ class Registry:
         self._app_packs[pack.id] = pack
         self._add_steps(pack.steps())
 
+    def register_steps(self, steps: Iterable[RegisteredStep]) -> None:
+        """Register steps that belong to no pack, such as discovery.
+
+        **RAISES:**
+            `FleetError`: If a step id is already taken.  <br>
+        """
+        self._add_steps(steps)
+
+    def has_step(self, step_id: str) -> bool:
+        """RETURNS: bool: Whether `step_id` is registered."""
+        return step_id in self._steps
+
     def _add_steps(self, steps: Iterable[RegisteredStep]) -> None:
         for step in steps:
             existing = self._steps.get(step.spec.id)

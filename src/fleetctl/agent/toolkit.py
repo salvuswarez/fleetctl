@@ -99,6 +99,27 @@ class Toolkit:
         operation = self.container.operations.get(op_id)
         return operation.snapshot() if operation else None
 
+    def list_artifacts(self, kind: str) -> list[dict[str, Any]]:
+        """List stored artifacts of one kind, newest first.
+
+        **PARAMETERS:**
+            `kind` (str): Artifact kind, e.g. ``builds`` or ``captures``.  <br>
+
+        **RETURNS:**
+            `list[dict[str, Any]]`: Each artifact's reference, size, age, and recorded metadata. Empty when the store holds none of that kind.  <br>
+        """
+        return [
+            {
+                "ref": info.ref.wire,
+                "kind": info.ref.kind,
+                "name": info.ref.name,
+                "size": info.size,
+                "created_at": info.created_at,
+                "meta": dict(info.meta),
+            }
+            for info in self.container.artifacts.list(kind)
+        ]
+
     def audit_tail(self, count: int = 20) -> list[dict[str, Any]]:
         """RETURNS: list[dict[str, Any]]: The most recent audit records, already redacted."""
         return [event.to_dict() for event in self.container.audit.records()[-count:]]
@@ -206,6 +227,7 @@ class Toolkit:
             "target": device_id or "fleet",
             "status": status.value,
             "result": operation.result if operation else None,
+            "facts": dict(operation.facts) if operation else {},
             "logs": [entry["message"] for entry in operation.logs] if operation else [],
         }
 

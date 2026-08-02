@@ -70,7 +70,7 @@ def run_step(
         try:
             with workspace(staging_root, op_id, failures_root=failures_root) as staging:
                 result = body(handle, staging)
-            handle.complete(result.summary)
+            handle.complete(result.summary, result.facts)
             return OperationStatus.COMPLETED
         except OperationCancelled:
             handle.cancelled()

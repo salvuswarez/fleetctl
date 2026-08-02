@@ -11,8 +11,7 @@ import click
 
 from .._version import get_version
 from ..core.config.layering import for_device
-from ..core.discovery.claim import claim_hosts
-from ..core.discovery.sweep import Sweeper
+from ..core.discovery.scan import Scanner, ScanOutcome
 from ..core.errors import FleetError
 from ..core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
 from ..core.observability.correlation import CorrelationFilter, correlate
@@ -22,7 +21,7 @@ from ..core.transport.base import Transport
 from ..core.workflow.engine import WorkflowEngine
 from ..core.workflow.plan import build_plan
 from ..core.workflow.runner import check_capabilities, run_step
-from ..core.workflow.step import DeviceStepContext, FleetStepContext, StepResult, TransformStepContext
+from ..core.workflow.step import DeviceStepContext, DiscoveryStepContext, FleetStepContext, StepResult, TransformStepContext
 from .bootstrap import Container, build_container
 
 LOGGER = logging.getLogger(__name__)
@@ -220,6 +219,8 @@ def _run_fleet_step(container: Container, step: RegisteredStep, flags: dict[str,
                     workspace=workspace,
                 )
             )
+        if step.spec.scope == "discovery":
+            return step.run(DiscoveryStepContext(scanner=_scanner(container), config=resolved.values, handle=handle, workspace=workspace))
         return step.run(
             FleetStepContext(
                 artifacts=container.artifacts,
@@ -441,6 +442,11 @@ def _task_runner(container: Container) -> Any:
     return _run
 
 
+def _scanner(container: Container) -> Scanner:
+    """RETURNS: Scanner: A scanner wired to this container's packs and inventory."""
+    return Scanner(packs=container.registry.device_packs(), connect=container.connector(), inventory=container.inventory)
+
+
 @main.command(name="scan")
 @click.argument("subnet")
 @click.option("--dry-run", is_flag=True, help="Report what was found without writing the inventory.")
@@ -449,50 +455,40 @@ def scan(ctx: click.Context, subnet: str, dry_run: bool) -> None:
     """Discover devices on a subnet and merge them into the inventory."""
     container = _container(ctx)
     try:
-        hosts = Sweeper().sweep(subnet)
+        outcome = _scanner(container).run(subnet, dry_run=dry_run)
     except FleetError as exc:
         raise click.ClickException(str(exc)) from exc
+    _report_scan(container, outcome)
 
-    click.echo(f"{len(hosts)} host(s) responded on {subnet}")
-    packs = container.registry.device_packs()
-    if not packs:
-        raise click.ClickException("No device packs are installed, so nothing can be identified.")
 
-    claims = claim_hosts(hosts, packs, container.connector())
-    found = [claim for claim in claims if claim.claimed]
-    recordable = [claim for claim in claims if claim.recordable]
-    for claim in found:
+def _report_scan(container: Container, outcome: ScanOutcome) -> None:
+    """Print a scan, in the detail a terminal wants and the facts do not carry."""
+    click.echo(f"{outcome.responded} host(s) responded on {outcome.subnet}")
+    for claim in outcome.identified:
         if claim.device is not None:
             click.echo(f"  {claim.device.id:<20} {claim.pack_id:<10} {claim.host.address:<16} {claim.device.model}")
 
     # Unrecognized hosts are summarised, not listed. On a real /24 they are
     # the overwhelming majority, and 250 lines of noise buries the few that
     # matter. `-v` lists them for when a device you expected is missing.
-    refused = [claim.host.address for claim in claims if not claim.claimed and claim.unauthorized]
-    unclaimed = [claim.host.address for claim in claims if not claim.claimed and not claim.unauthorized]
-    if unclaimed:
-        click.echo(f"  ({len(unclaimed)} host(s) not recognized by any installed pack; -v lists them)")
-        for address in unclaimed:
+    if outcome.unrecognized:
+        click.echo(f"  ({len(outcome.unrecognized)} host(s) not recognized by any installed pack; -v lists them)")
+        for address in outcome.unrecognized:
             LOGGER.info("Unrecognized host: %s", address)
-    if refused:
+    if outcome.unauthorized:
         click.echo("")
-        click.echo(f"  {len(refused)} host(s) are reachable but refused this key: {', '.join(refused)}")
+        click.echo(f"  {len(outcome.unauthorized)} host(s) are reachable but refused this key: {', '.join(outcome.unauthorized)}")
         click.echo("  Approve the debugging prompt on those devices, or copy an already-trusted key into")
         click.echo(f"  {container.home / 'keys'}, then scan again.")
 
-    if not recordable:
+    if not outcome.recordable:
         click.echo("No devices found. Devices need network debugging enabled to be discovered.")
         return
-
-    if dry_run:
-        click.echo(f"\nDry run: {len(recordable)} device(s) found, inventory not written.")
+    if not outcome.written:
+        click.echo(f"\nDry run: {len(outcome.recordable)} device(s) found, inventory not written.")
         return
 
-    # Unauthorized devices are recorded too, flagged rather than dropped: you
-    # can see that something is there and what to do about it.
-    devices = [claim.device for claim in recordable if claim.device is not None]
-    result = container.inventory.reconcile(devices)
-    click.echo(f"\nAdded {result.added}, updated {result.updated}, {len(result.devices)} device(s) total.")
+    click.echo(f"\nAdded {outcome.added}, updated {outcome.updated}, {outcome.total} device(s) total.")
     click.echo(f"Inventory: {container.inventory_path}")
     click.echo("Edit that file directly to set tags, names, or per-app vars — a scan never overwrites them.")
 

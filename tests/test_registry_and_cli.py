@@ -459,8 +459,8 @@ def test_a_denial_records_who_was_refused(workspace: Path) -> None:
 
 def _fake_scan(monkeypatch: pytest.MonkeyPatch, hosts: list[Any], claims: list[Any]) -> None:
     """Replace the network parts of `scan`, leaving its wiring under test."""
-    monkeypatch.setattr("fleetctl.cli.main.Sweeper", lambda *a, **k: type("S", (), {"sweep": lambda self, subnet: hosts})())
-    monkeypatch.setattr("fleetctl.cli.main.claim_hosts", lambda hosts, packs, connect: claims)
+    monkeypatch.setattr("fleetctl.core.discovery.scan.Sweeper", lambda *a, **k: type("S", (), {"sweep": lambda self, subnet: hosts})())
+    monkeypatch.setattr("fleetctl.core.discovery.scan.claim_hosts", lambda hosts, packs, connect: claims)
 
 
 def test_scan_writes_discovered_devices_to_the_inventory(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:

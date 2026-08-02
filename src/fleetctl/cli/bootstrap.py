@@ -13,6 +13,8 @@ from ..core.artifacts.smb import SmbArtifactStore, SmbSettings
 from ..core.artifacts.store import ArtifactStore, LocalArtifactStore
 from ..core.config.loader import load_yaml_file
 from ..core.config.secrets import EnvSecretProvider, SecretResolver
+from ..core.discovery.step import SCAN
+from ..core.discovery.step import steps as discovery_steps
 from ..core.errors import FleetError, TransportError
 from ..core.inventory.device import Device
 from ..core.inventory.store import DeviceStore
@@ -234,8 +236,14 @@ def build_container(
 
     artifacts_config = config.get("artifacts", {}) if isinstance(config.get("artifacts"), dict) else {}
 
+    packs = registry if registry is not None else discover()
+    # Discovery belongs to no pack: a fleet with none installed still needs to
+    # be able to look for devices.
+    if not packs.has_step(SCAN.id):
+        packs.register_steps(discovery_steps())
+
     return Container(
-        registry=registry if registry is not None else discover(),
+        registry=packs,
         inventory=DeviceStore(config_dir / "inventory" / "devices.yml"),
         artifacts=_artifact_store(artifacts_config, home),
         operations=OperationRegistry(),

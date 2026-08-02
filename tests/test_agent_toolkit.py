@@ -14,6 +14,7 @@ import pytest
 
 from fleetctl.agent.toolkit import ApprovalRequired, PolicyDenied, Toolkit
 from fleetctl.cli.bootstrap import build_container
+from fleetctl.core.artifacts.ref import ArtifactRef
 from fleetctl.core.effects import Capability, Effect
 from fleetctl.core.errors import FleetError
 from fleetctl.core.inventory.device import Device, DeviceStatus
@@ -31,6 +32,7 @@ TOUCH = StepSpec(
     scope="device",
 )
 LOOK = StepSpec(id="stub.look", summary="Read something.", effect=Effect.READ, requires=frozenset({Capability.EXEC}), scope="device")
+REPORT = StepSpec(id="stub.report", summary="Report versions.", effect=Effect.READ, requires=frozenset({Capability.EXEC}), scope="device")
 
 WORKFLOW = "name: tidy\nsteps:\n  - id: touch\n    use: stub.touch\n    targets: {tags: [managed]}\n    on_error: continue\n"
 
@@ -86,7 +88,11 @@ class _StubPack:
         return [
             RegisteredStep(spec=TOUCH, run=self._touch, provider=self.id),
             RegisteredStep(spec=LOOK, run=self._touch, provider=self.id),
+            RegisteredStep(spec=REPORT, run=self._report, provider=self.id),
         ]
+
+    def _report(self, context: DeviceStepContext) -> StepResult:
+        return StepResult(summary="21.2 -> 21.3", facts={"current": "21.2", "latest": "21.3", "update_available": True})
 
     def _touch(self, context: DeviceStepContext) -> StepResult:
         context.transport.exec("touch", effect=Effect.DESTRUCTIVE)
@@ -124,7 +130,7 @@ def test_reads_need_no_approval(tmp_path: Path) -> None:
 
     # Act / Assert
     assert [device["id"] for device in toolkit.list_devices()] == ["stub-1"]
-    assert {step["id"] for step in toolkit.list_steps()} == {"stub.touch", "stub.look"}
+    assert {step["id"] for step in toolkit.list_steps()} == {"stub.touch", "stub.look", "stub.report", "fleet.scan"}
     assert [workflow["name"] for workflow in toolkit.list_workflows()] == ["tidy"]
 
 
@@ -461,3 +467,35 @@ def test_an_operation_records_the_step_it_ran(tmp_path: Path) -> None:
     assert snapshot["step_id"] == "stub.look"
     assert snapshot["target"] == "stub-1"
     assert toolkit.get_operation("nope") is None
+
+
+def test_the_agent_can_list_stored_artifacts(tmp_path: Path) -> None:
+    """The panel's backup list; without it a caller cannot name a build to deploy."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"x" * 32)
+    toolkit.container.artifacts.put(payload, ArtifactRef(kind="builds", name="build.tar.gz"), meta={"profile": "gold"})
+
+    # Act
+    listed = toolkit.list_artifacts("builds")
+
+    # Assert
+    assert [item["name"] for item in listed] == ["build.tar.gz"]
+    assert listed[0]["size"] == 32
+    assert listed[0]["meta"]["profile"] == "gold"
+    assert toolkit.list_artifacts("captures") == []
+
+
+def test_a_steps_structured_results_reach_the_caller(tmp_path: Path) -> None:
+    """A summary string is for a human; the panel needs the values behind it."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    outcome = toolkit.run_step("stub.report", device_id="stub-1")
+
+    # Assert
+    assert outcome["facts"] == {"current": "21.2", "latest": "21.3", "update_available": True}
+    snapshot = toolkit.get_operation(outcome["op_id"])
+    assert snapshot is not None and snapshot["facts"]["latest"] == "21.3"

@@ -42,6 +42,7 @@ class Operation:
         `completed_at` (str | None): ISO-8601 completion timestamp, when finished.  <br>
         `result` (str | None): Human-readable summary or error.  <br>
         `params` (dict[str, Any]): The flags it ran with, so a rerun repeats it rather than approximating it.  <br>
+        `facts` (dict[str, Any]): Structured values the step reported, e.g. a discovered version.  <br>
     """
 
     id: str
@@ -49,6 +50,7 @@ class Operation:
     target: str = ""
     status: OperationStatus = OperationStatus.RUNNING
     params: dict[str, Any] = field(default_factory=dict)
+    facts: dict[str, Any] = field(default_factory=dict)
     logs: list[dict[str, str]] = field(default_factory=list)
     started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     completed_at: str | None = None
@@ -62,6 +64,7 @@ class Operation:
             "target": self.target,
             "status": self.status.value,
             "params": dict(self.params),
+            "facts": dict(self.facts),
             "logs": list(self.logs),
             "started_at": self.started_at,
             "completed_at": self.completed_at,
@@ -94,9 +97,9 @@ class OperationHandle:
         if self._registry.is_cancel_requested(self.op_id):
             raise OperationCancelled(self.op_id)
 
-    def complete(self, result: str | None) -> None:
-        """Mark this operation completed."""
-        self._registry.finish(self.op_id, OperationStatus.COMPLETED, result)
+    def complete(self, result: str | None, facts: Mapping[str, Any] | None = None) -> None:
+        """Mark this operation completed, keeping any structured values it reported."""
+        self._registry.finish(self.op_id, OperationStatus.COMPLETED, result, facts)
 
     def fail(self, result: str) -> None:
         """Mark this operation failed."""
@@ -193,12 +196,13 @@ class OperationRegistry:
             if operation is not None:
                 operation.logs.append({"time": datetime.now(timezone.utc).isoformat(), "message": message})
 
-    def finish(self, op_id: str, status: OperationStatus, result: str | None) -> None:
+    def finish(self, op_id: str, status: OperationStatus, result: str | None, facts: Mapping[str, Any] | None = None) -> None:
         """Record a terminal state for `op_id`, ignoring unknown ids."""
         with self._lock:
             operation = self._operations.get(op_id)
             if operation is None:
                 return
+            operation.facts = dict(facts or {})
             operation.status = status
             operation.result = result
             operation.completed_at = datetime.now(timezone.utc).isoformat()

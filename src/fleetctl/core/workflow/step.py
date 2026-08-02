@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import TYPE_CHECKING, Any, Mapping, Protocol
 
 from ..appmgr import AppManager
 from ..artifacts.ref import ArtifactRef
@@ -15,6 +15,10 @@ from ..inventory.store import DeviceStore
 from ..operations.registry import OperationHandle
 from ..state import StateManager
 from ..transport.base import Transport
+
+if TYPE_CHECKING:
+    # Runtime import would close the loop step -> scan -> claim -> registry -> step.
+    from ..discovery.scan import Scanner
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +77,26 @@ class DeviceStepContext:
     apps: AppManager
     artifacts: ArtifactStore
     inventory: DeviceStore
+    config: Mapping[str, Any]
+    handle: OperationHandle
+    workspace: Path
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryStepContext:
+    """What a step that looks for devices receives.
+
+    Carries no transport: discovery decides what to open a transport to, so
+    it cannot be handed one.
+
+    **PARAMETERS:**
+        `scanner` (Scanner): Sweeps, identifies, and records what it finds.  <br>
+        `config` (Mapping[str, Any]): Config resolved for this step.  <br>
+        `handle` (OperationHandle): Timeline logging and cancellation.  <br>
+        `workspace` (Path): Staging directory for this operation.  <br>
+    """
+
+    scanner: Scanner
     config: Mapping[str, Any]
     handle: OperationHandle
     workspace: Path
