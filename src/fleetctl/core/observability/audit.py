@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import threading
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
@@ -25,6 +26,8 @@ from typing import Any, Iterable, Mapping, Protocol
 from ..effects import Effect
 from .correlation import current
 from .redact import Redactor
+
+LOGGER = logging.getLogger(__name__)
 
 GENESIS_HASH = "0" * 64
 
@@ -235,12 +238,35 @@ class ChainedAuditWriter:
         `redactor` (Redactor): Applied before hashing, so what is verified is what was written.  <br>
     """
 
-    def __init__(self, sink: AuditSink, redactor: Redactor | None = None) -> None:
+    def __init__(self, sink: AuditSink, redactor: Redactor | None = None, *, resume: bool = True) -> None:
         self._sink = sink
         self._redactor = redactor or Redactor()
         self._lock = threading.Lock()
         self._seq = 0
         self._prev_hash = GENESIS_HASH
+        self._resumed = not resume
+
+    def _resume_locked(self) -> None:
+        """Continue an existing chain rather than starting a new one.
+
+        Every CLI invocation is a fresh process. Without this, each one would
+        re-anchor at genesis and `audit verify` would report the trail as
+        broken from the second run onward — a verifier that cries wolf is
+        worse than no verifier.
+
+        A sink that cannot be read is not fatal: this starts a new segment and
+        logs, because failing to write the audit trail at all would be worse
+        than a discontinuity in it.
+        """
+        self._resumed = True
+        try:
+            existing = self._sink.read_all()
+        except Exception as exc:  # noqa: BLE001 - a new segment beats no trail
+            LOGGER.warning("Could not read the existing audit trail, starting a new segment: %s", exc)
+            return
+        if existing:
+            self._seq = existing[-1].seq + 1
+            self._prev_hash = existing[-1].hash
 
     def records(self) -> list[AuditEvent]:
         """RETURNS: list[AuditEvent]: Everything the underlying sink holds, in write order."""
@@ -256,6 +282,8 @@ class ChainedAuditWriter:
             `AuditEvent`: The record as written, with `seq`, `prev_hash` and `hash` set.  <br>
         """
         with self._lock:
+            if not self._resumed:
+                self._resume_locked()
             chained = replace(
                 event,
                 action=self._redactor.text(event.action),
@@ -282,6 +310,11 @@ def verify_chain(events: Iterable[AuditEvent]) -> tuple[bool, int | None]:
     """
     expected_prev = GENESIS_HASH
     for event in events:
+        # A record anchored at genesis legally starts a new segment: daily
+        # rotation and retention both produce one. Tampering *within* a
+        # segment is still caught, which is what the chain is for.
+        if event.prev_hash == GENESIS_HASH and event.seq == 0:
+            expected_prev = GENESIS_HASH
         if event.prev_hash != expected_prev or event.hash != event.digest():
             return False, event.seq
         expected_prev = event.hash

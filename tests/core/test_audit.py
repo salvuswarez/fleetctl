@@ -176,3 +176,64 @@ def test_reading_a_missing_audit_directory_returns_nothing(tmp_path: Path) -> No
 
     # Assert
     assert recovered == []
+
+
+def test_a_new_writer_resumes_an_existing_chain(tmp_path: Path) -> None:
+    """Every CLI invocation is a fresh process. Without resuming, each one
+    would re-anchor at genesis and `audit verify` would report the trail as
+    broken from the second run onward."""
+    # Arrange
+    sink = JsonlAuditSink(tmp_path)
+
+    # Act
+    for index in range(3):
+        ChainedAuditWriter(JsonlAuditSink(tmp_path)).write(AuditEvent.build(AuditKind.EXEC, f"cmd-{index}"))
+    recovered = sink.read_all()
+
+    # Assert
+    assert [event.seq for event in recovered] == [0, 1, 2]
+    assert verify_chain(recovered) == (True, None)
+
+
+def test_resuming_can_be_disabled_for_an_isolated_writer(tmp_path: Path) -> None:
+    # Arrange
+    ChainedAuditWriter(JsonlAuditSink(tmp_path)).write(AuditEvent.build(AuditKind.EXEC, "first"))
+
+    # Act
+    ChainedAuditWriter(JsonlAuditSink(tmp_path), resume=False).write(AuditEvent.build(AuditKind.EXEC, "second"))
+
+    # Assert
+    assert [event.seq for event in JsonlAuditSink(tmp_path).read_all()] == [0, 0]
+
+
+def test_a_genesis_anchored_record_legally_starts_a_new_segment() -> None:
+    """Daily rotation and retention both produce one. Tampering *within* a
+    segment is still caught."""
+    # Arrange
+    first = InMemoryAuditSink()
+    ChainedAuditWriter(first, resume=False).write(AuditEvent.build(AuditKind.EXEC, "a"))
+    second = InMemoryAuditSink()
+    ChainedAuditWriter(second, resume=False).write(AuditEvent.build(AuditKind.EXEC, "b"))
+
+    # Act
+    intact, first_bad = verify_chain(first.read_all() + second.read_all())
+
+    # Assert
+    assert (intact, first_bad) == (True, None)
+
+
+def test_tampering_inside_a_later_segment_is_still_caught() -> None:
+    # Arrange
+    sink = InMemoryAuditSink()
+    writer = ChainedAuditWriter(sink, resume=False)
+    for index in range(3):
+        writer.write(AuditEvent.build(AuditKind.EXEC, f"cmd-{index}"))
+    records = sink.read_all()
+
+    # Act
+    records[2] = replace(records[2], action="rewritten")
+    intact, first_bad = verify_chain(records)
+
+    # Assert
+    assert intact is False
+    assert first_bad == 2
