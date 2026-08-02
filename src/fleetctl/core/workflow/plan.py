@@ -219,6 +219,8 @@ def _plan_task(
 
 def _blocked_reason(registry: Registry, device: Device, required: frozenset[Any]) -> str:
     """RETURNS: str: Why this device cannot run the step, or ``""`` if it can."""
+    if not device.is_actionable:
+        return f"device is {device.status.value}; approve the debugging prompt on it, then rescan"
     if not device.type:
         return "device has no type; run discovery first"
     try:

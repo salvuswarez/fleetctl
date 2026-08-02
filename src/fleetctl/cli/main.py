@@ -109,7 +109,8 @@ def devices_list(ctx: click.Context) -> None:
         return
     for device in known:
         tags = ",".join(device.tags) or "-"
-        click.echo(f"{device.id:<16} {device.type or '?':<10} {device.address or '?':<16} tags={tags}")
+        marker = "" if device.is_actionable else f"  [{device.status.value}]"
+        click.echo(f"{device.id:<16} {device.type or '?':<10} {device.address or '?':<16} tags={tags}{marker}")
 
 
 @main.command(name="config")
@@ -474,21 +475,37 @@ def scan(ctx: click.Context, subnet: str, dry_run: bool) -> None:
 
     claims = claim_hosts(hosts, packs, container.connector())
     found = [claim for claim in claims if claim.claimed]
-    for claim in claims:
-        if claim.claimed and claim.device is not None:
+    recordable = [claim for claim in claims if claim.recordable]
+    for claim in found:
+        if claim.device is not None:
             click.echo(f"  {claim.device.id:<20} {claim.pack_id:<10} {claim.host.address:<16} {claim.device.model}")
-        else:
-            click.echo(f"  {'(unrecognized)':<20} {'-':<10} {claim.host.address}")
 
-    if not found:
-        click.echo("No devices recognized. Devices must have network debugging enabled and be paired already.")
+    # Unrecognized hosts are summarised, not listed. On a real /24 they are
+    # the overwhelming majority, and 250 lines of noise buries the few that
+    # matter. `-v` lists them for when a device you expected is missing.
+    refused = [claim.host.address for claim in claims if not claim.claimed and claim.unauthorized]
+    unclaimed = [claim.host.address for claim in claims if not claim.claimed and not claim.unauthorized]
+    if unclaimed:
+        click.echo(f"  ({len(unclaimed)} host(s) not recognized by any installed pack; -v lists them)")
+        for address in unclaimed:
+            LOGGER.info("Unrecognized host: %s", address)
+    if refused:
+        click.echo("")
+        click.echo(f"  {len(refused)} host(s) are reachable but refused this key: {', '.join(refused)}")
+        click.echo("  Approve the debugging prompt on those devices, or copy an already-trusted key into")
+        click.echo(f"  {container.home / 'keys'}, then scan again.")
+
+    if not recordable:
+        click.echo("No devices found. Devices need network debugging enabled to be discovered.")
         return
 
     if dry_run:
-        click.echo(f"\nDry run: {len(found)} device(s) found, inventory not written.")
+        click.echo(f"\nDry run: {len(recordable)} device(s) found, inventory not written.")
         return
 
-    devices = [claim.device for claim in found if claim.device is not None]
+    # Unauthorized devices are recorded too, flagged rather than dropped: you
+    # can see that something is there and what to do about it.
+    devices = [claim.device for claim in recordable if claim.device is not None]
     result = container.inventory.reconcile(devices)
     click.echo(f"\nAdded {result.added}, updated {result.updated}, {len(result.devices)} device(s) total.")
     click.echo(f"Inventory: {container.inventory_path}")

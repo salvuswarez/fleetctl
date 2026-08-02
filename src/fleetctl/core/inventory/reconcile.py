@@ -53,8 +53,8 @@ def merge_device(existing: Device, found: Device) -> Device:
     **RETURNS:**
         `Device`: The merged record. Fields the probe left empty keep their stored value, and `tags`/`vars` are never touched by discovery.  <br>
     """
-    merged = existing.model_dump()
-    for key, value in found.model_dump().items():
+    merged = existing.model_dump(mode="json")
+    for key, value in found.model_dump(mode="json").items():
         if key in _PRESERVED_FIELDS or key == "id":
             continue
         if value not in ("", None, [], {}):

@@ -391,3 +391,20 @@ def test_the_plan_description_marks_approval_separately_from_blocking(registry: 
     # Assert
     assert "NEEDS APPROVAL" in described
     assert "BLOCKED" in described
+
+
+def test_an_unauthorized_device_is_blocked_with_an_actionable_reason(registry: Registry) -> None:
+    """It is in the inventory so you can see it; it is blocked so a run does
+    not waste time on it; and the reason says what to do."""
+    # Arrange
+    from fleetctl.core.inventory.device import DeviceStatus
+
+    device = Device(id="refused", type="demo", tags=["managed"], status=DeviceStatus.UNAUTHORIZED)
+    workflow = Workflow.from_yaml("name: p\nsteps:\n  - use: demo.touch\n    targets: {tags: [managed]}\n")
+
+    # Act
+    plan = build_plan(workflow, registry, [device])
+
+    # Assert
+    assert "unauthorized" in plan.blocked[0].blocked
+    assert "approve" in plan.blocked[0].blocked.lower()

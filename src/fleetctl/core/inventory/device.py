@@ -13,7 +13,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from enum import Enum
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class DeviceStatus(str, Enum):
+    """Whether a device can currently be acted on.
+
+    A device that exists but cannot be reached is still worth recording. The
+    alternative is dropping it from the inventory, which makes "I know it is
+    there and something is wrong" indistinguishable from "I have never seen
+    it" — and leaves the user with nothing to act on.
+    """
+
+    OK = "ok"
+    UNAUTHORIZED = "unauthorized"
+
+    @property
+    def is_actionable(self) -> bool:
+        """RETURNS: bool: Whether steps may be scheduled against this device."""
+        return self is DeviceStatus.OK
 
 
 class Device(BaseModel):
@@ -28,6 +48,7 @@ class Device(BaseModel):
         `model` (str): Vendor model string.  <br>
         `serial` (str): Vendor serial number.  <br>
         `os_version` (str): Operating system release string.  <br>
+        `status` (DeviceStatus): Whether the device can currently be acted on. Discovery sets `unauthorized` for a host that answered but refused this key.  <br>
         `tags` (list[str]): Free-form labels used for workflow targeting and policy matching.  <br>
         `vars` (dict[str, Any]): Per-app and per-device state, namespaced by app id. The kernel never interprets these.  <br>
     """
@@ -42,8 +63,14 @@ class Device(BaseModel):
     model: str = ""
     serial: str = ""
     os_version: str = ""
+    status: DeviceStatus = DeviceStatus.OK
     tags: list[str] = Field(default_factory=list)
     vars: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def is_actionable(self) -> bool:
+        """RETURNS: bool: Whether steps may be scheduled against this device."""
+        return self.status.is_actionable
 
     def has_tag(self, tag: str) -> bool:
         """RETURNS: bool: Whether this device carries `tag`."""

@@ -19,7 +19,11 @@ from ..errors import ConfigError
 
 LOGGER = logging.getLogger(__name__)
 
-_PING_WORKERS = 50
+# Each ping is a subprocess with a captured pipe, and Windows' subprocess
+# reader threads fall over well before 50 of those run at once — the failure
+# is a crashed reader thread and a `None` stdout, not a clean error. Sixteen
+# sweeps a /24 in well under a minute and is stable.
+_PING_WORKERS = 16
 _PING_TIMEOUT_S = 3
 # Two packets, not one. A single dropped ICMP reply on a weak radio — older
 # streaming sticks in particular — otherwise removes a live host from the
@@ -75,21 +79,53 @@ class Sweeper:
         return [Host(address=address, mac=arp.get(address, "")) for address in responded]
 
     def _ping(self, address: str) -> str | None:
-        command = (
-            ["ping", "-n", str(self.count), "-w", "1000", address] if platform.system() == "Windows" else ["ping", "-c", str(self.count), "-W", "1", address]
-        )
+        is_windows = platform.system() == "Windows"
+        command = ["ping", "-n", str(self.count), "-w", "1000", address] if is_windows else ["ping", "-c", str(self.count), "-W", "1", address]
         try:
             finished = subprocess.run(
                 command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                errors="replace",
                 timeout=_PING_TIMEOUT_S * self.count,
                 check=False,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             LOGGER.debug("Ping failed for %s: %s", address, exc)
             return None
-        return address if finished.returncode == 0 else None
+        # stdout can come back None if the reader thread died under load;
+        # treat that as "no evidence it replied" rather than crashing a sweep.
+        return address if replied(finished.stdout or "", returncode=finished.returncode, is_windows=is_windows) else None
+
+
+def replied(output: str, *, returncode: int, is_windows: bool) -> bool:
+    """Decide whether a host actually answered a ping.
+
+    Windows `ping` exits **0 even when nothing replied**: the local router
+    answers "Destination host unreachable" on behalf of dead addresses, and
+    that counts as the command succeeding. Trusting the exit code reported
+    252 of 254 addresses on a real /24 as live — every empty address in the
+    range. The reply text is the only reliable signal, so a real echo reply
+    (`TTL=`) is required, and an unreachable/timeout reply is rejected even
+    when the exit code says otherwise.
+
+    POSIX `ping` reports total loss through its exit code, so there the code
+    is authoritative.
+
+    **PARAMETERS:**
+        `output` (str): The command's stdout.  <br>
+        `returncode` (int): Its exit status.  <br>
+        `is_windows` (bool): Which convention to apply.  <br>
+
+    **RETURNS:**
+        `bool`: Whether the host genuinely answered.  <br>
+    """
+    if not is_windows:
+        return returncode == 0
+    lowered = output.lower()
+    if "unreachable" in lowered or "timed out" in lowered or "100% loss" in lowered:
+        return False
+    return "ttl=" in lowered
 
 
 def expand_subnet(subnet: str) -> list[str]:

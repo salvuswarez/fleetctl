@@ -16,8 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
-from ..errors import TransportError
-from ..inventory.device import Device
+from ..errors import DeviceUnauthorizedError, TransportError
+from ..inventory.device import Device, DeviceStatus
 from ..registry import DevicePack
 from ..transport.base import Transport
 from .sweep import Host
@@ -38,15 +38,27 @@ class Claim:
         `host` (Host): The address that answered.  <br>
         `device` (Device | None): The device it turned out to be, or None if nothing claimed it.  <br>
         `pack_id` (str): Which pack claimed it, empty when unclaimed.  <br>
+        `unauthorized` (bool): Whether a transport reached the host but was refused. Actionable — the device needs to approve this key.  <br>
     """
 
     host: Host
     device: Device | None = None
     pack_id: str = ""
+    unauthorized: bool = False
 
     @property
     def claimed(self) -> bool:
         """RETURNS: bool: Whether a pack recognized this host."""
+        return self.device is not None and self.device.is_actionable
+
+    @property
+    def recordable(self) -> bool:
+        """RETURNS: bool: Whether this belongs in the inventory at all.
+
+        An identified device does; so does one that refused the key, because
+        knowing it is there and needs approval is actionable. A host nothing
+        recognized does not — that is somebody's printer.
+        """
         return self.device is not None
 
 
@@ -87,10 +99,15 @@ def claim_host(host: Host, packs: Sequence[DevicePack], connect: Connector) -> C
     **RETURNS:**
         `Claim`: The device if something claimed it, otherwise an unclaimed result. Never raises: a host that cannot be reached is a normal outcome of sweeping a network.  <br>
     """
+    unauthorized = False
     for pack_platform, platform_packs in _by_platform(packs).items():
         transport: Transport | None = None
         try:
             transport = connect(host.address, pack_platform)
+        except DeviceUnauthorizedError as exc:
+            LOGGER.info("%s refused this key: %s", host.address, exc)
+            unauthorized = True
+            continue
         except TransportError as exc:
             LOGGER.debug("No %s transport to %s: %s", pack_platform, host.address, exc)
             continue
@@ -101,6 +118,10 @@ def claim_host(host: Host, packs: Sequence[DevicePack], connect: Connector) -> C
                     return Claim(host=host, device=_device_from(facts, host), pack_id=pack.id)
         finally:
             transport.close()
+    if unauthorized:
+        # Recorded rather than dropped: the user needs to see that something
+        # is there and what to do about it.
+        return Claim(host=host, device=_unauthorized_device(host), unauthorized=True)
     return Claim(host=host)
 
 
@@ -127,6 +148,20 @@ def _device_from(facts: dict[str, str], host: Host) -> Device:
         model=facts.get("model", ""),
         serial=facts.get("serial", ""),
         os_version=facts.get("os_version", ""),
+    )
+
+
+def _unauthorized_device(host: Host) -> Device:
+    """Build the inventory record for a host that refused our credentials.
+
+    Its type is unknown — it would not talk to us — so nothing is invented
+    beyond what the network itself revealed.
+    """
+    return Device(
+        id=device_id_for({}, host),
+        address=host.address,
+        mac=host.mac,
+        status=DeviceStatus.UNAUTHORIZED,
     )
 
 

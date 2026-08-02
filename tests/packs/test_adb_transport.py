@@ -251,3 +251,30 @@ def test_the_private_key_is_never_written_to_an_audit_record(tmp_path: Path) -> 
     # Assert
     assert "PRIVATE KEY" not in serialized
     assert private.strip().splitlines()[1] not in serialized
+
+
+def test_a_listening_device_that_rejects_the_handshake_is_reported_as_unauthorized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ "Nothing there" and "it refused my key" need different actions, and
+    only the second is fixable by the user."""
+    # Arrange
+    from fleetctl.core.errors import DeviceUnauthorizedError
+
+    transport = AdbTransport("192.168.1.79", AdbKeyStore(tmp_path / "keys"))
+    monkeypatch.setattr(transport, "is_online", lambda timeout_s=3.0: True)
+
+    # Act / Assert
+    with pytest.raises(DeviceUnauthorizedError):
+        transport.connect()
+
+
+def test_an_address_with_nothing_listening_is_a_plain_transport_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    from fleetctl.core.errors import DeviceUnauthorizedError
+
+    transport = AdbTransport("192.168.1.7", AdbKeyStore(tmp_path / "keys"))
+    monkeypatch.setattr(transport, "is_online", lambda timeout_s=3.0: False)
+
+    # Act / Assert
+    with pytest.raises(TransportError) as caught:
+        transport.connect()
+    assert not isinstance(caught.value, DeviceUnauthorizedError)

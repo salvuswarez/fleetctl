@@ -105,7 +105,9 @@ class DeviceStore:
         return json.loads(text)
 
     def _save(self, devices: builtins.list[Device]) -> None:
-        payload = {"devices": [device.model_dump() for device in devices]}
+        # `mode="json"` so enums serialize as their values; a plain dump hands
+        # YAML the enum object itself, which it cannot represent.
+        payload = {"devices": [device.model_dump(mode="json") for device in devices]}
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self._path.with_name(f"{self._path.name}.{uuid.uuid4().hex}.tmp")
         with open(temp_path, "w", encoding="utf-8") as handle:

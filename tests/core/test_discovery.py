@@ -7,9 +7,10 @@ from typing import Callable, Iterable, Mapping
 import pytest
 
 from fleetctl.core.discovery.claim import Claim, claim_host, claim_hosts, device_id_for
-from fleetctl.core.discovery.sweep import Host, Sweeper, arp_table, expand_subnet
+from fleetctl.core.discovery.sweep import Host, Sweeper, arp_table, expand_subnet, replied
 from fleetctl.core.effects import Capability
-from fleetctl.core.errors import ConfigError, TransportError
+from fleetctl.core.errors import ConfigError, DeviceUnauthorizedError, TransportError
+from fleetctl.core.inventory.device import DeviceStatus
 from fleetctl.core.registry import RegisteredStep
 from fleetctl.core.transport.base import CommandRunner, Transport
 from fleetctl.core.transport.fake import FakeTransport
@@ -227,6 +228,10 @@ def test_a_claim_carries_the_host_even_when_unclaimed() -> None:
     assert claim.host.address == "192.168.1.9"
 
 
+ALIVE_REPLY = "Reply from x: bytes=32 time=1ms TTL=64"
+DEAD_REPLY = "Reply from y: Destination host unreachable."
+
+
 class _Finished:
     """Stands in for a completed subprocess."""
 
@@ -242,7 +247,8 @@ def test_a_sweep_returns_only_hosts_that_answered(monkeypatch: pytest.MonkeyPatc
     def _run(command: list[str], **kwargs: object) -> _Finished:
         if command[0] == "arp":
             return _Finished(stdout="  10.0.0.1  aa-bb-cc-dd-ee-ff  dynamic")
-        return _Finished(returncode=0 if command[-1] in alive else 1)
+        up = command[-1] in alive
+        return _Finished(returncode=0 if up else 1, stdout=ALIVE_REPLY if up else DEAD_REPLY)
 
     monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
 
@@ -260,7 +266,8 @@ def test_a_sweep_attaches_macs_from_the_arp_table(monkeypatch: pytest.MonkeyPatc
     def _run(command: list[str], **kwargs: object) -> _Finished:
         if command[0] == "arp":
             return _Finished(stdout="  10.0.0.1  aa-bb-cc-dd-ee-ff  dynamic\n  10.0.0.2  incomplete")
-        return _Finished(returncode=0 if command[-1] == "10.0.0.1" else 1)
+        up = command[-1] == "10.0.0.1"
+        return _Finished(returncode=0 if up else 1, stdout=ALIVE_REPLY if up else DEAD_REPLY)
 
     monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
 
@@ -268,6 +275,7 @@ def test_a_sweep_attaches_macs_from_the_arp_table(monkeypatch: pytest.MonkeyPatc
     hosts = Sweeper(workers=2).sweep("10.0.0.0/29")
 
     # Assert
+    assert [host.address for host in hosts] == ["10.0.0.1"]
     assert hosts[0].mac == "aa:bb:cc:dd:ee:ff"
 
 
@@ -282,3 +290,134 @@ def test_a_ping_that_cannot_run_drops_the_host_rather_than_the_sweep(monkeypatch
 
     # Act / Assert
     assert Sweeper(workers=2).sweep("10.0.0.0/30") == []
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ("Reply from 192.168.50.12: bytes=32 time=1ms TTL=64", True),
+        ("Reply from 192.168.50.12: Destination host unreachable.", False),
+        ("Request timed out.", False),
+        ("Packets: Sent = 1, Received = 0, Lost = 1 (100% loss),", False),
+    ],
+)
+def test_windows_ping_is_judged_by_its_reply_not_its_exit_code(output: str, expected: bool) -> None:
+    """Windows `ping` exits 0 even when nothing replied: the router answers
+    "Destination host unreachable" for dead addresses. Trusting the exit code
+    reported 252 of 254 addresses on a real /24 as live."""
+    # Act / Assert
+    assert replied(output, returncode=0, is_windows=True) is expected
+
+
+@pytest.mark.parametrize(("returncode", "expected"), [(0, True), (1, False), (2, False)])
+def test_posix_ping_is_judged_by_its_exit_code(returncode: int, expected: bool) -> None:
+    """POSIX ping reports total loss through its exit status, so there the
+    code is authoritative."""
+    # Act / Assert
+    assert replied("", returncode=returncode, is_windows=False) is expected
+
+
+def test_a_sweep_ignores_unreachable_replies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The end-to-end form of the bug: a whole subnet of dead addresses must
+    not come back as live hosts."""
+    # Arrange
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.platform.system", lambda: "Windows")
+
+    def _run(command: list[str], **kwargs: object) -> _Finished:
+        if command[0] == "arp":
+            return _Finished(stdout="")
+        alive = command[-1] == "10.0.0.1"
+        body = "Reply from x: bytes=32 TTL=64" if alive else "Reply from y: Destination host unreachable."
+        return _Finished(returncode=0, stdout=body)
+
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
+
+    # Act
+    hosts = Sweeper(workers=4).sweep("10.0.0.0/29")
+
+    # Assert
+    assert [host.address for host in hosts] == ["10.0.0.1"]
+
+
+def test_a_ping_with_no_captured_output_is_not_treated_as_alive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Under concurrency a subprocess reader thread can die and leave stdout
+    as None. That is no evidence the host replied — and it must not crash the
+    sweep, which is how it first surfaced against a real network."""
+    # Arrange
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.platform.system", lambda: "Windows")
+
+    def _run(command: list[str], **kwargs: object) -> _Finished:
+        if command[0] == "arp":
+            return _Finished(stdout="")
+        return _Finished(returncode=0, stdout=None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
+
+    # Act / Assert
+    assert Sweeper(workers=2).sweep("10.0.0.0/30") == []
+
+
+def test_a_host_that_refuses_the_key_is_distinguished_from_an_empty_address() -> None:
+    """Both look identical in a scan, but only one is actionable: approve the
+    prompt. Found on a real network, where an ADB-open host sat in the
+    "unrecognized" pile next to eleven printers."""
+
+    # Arrange
+    def _connect(address: str, platform: str) -> Transport:
+        raise DeviceUnauthorizedError(address, "connection aborted")
+
+    # Act
+    claim = claim_host(Host(address="192.168.1.79"), [_Pack("firetv", "Amazon")], _connect)
+
+    # Assert
+    assert claim.claimed is False
+    assert claim.unauthorized is True
+
+
+def test_an_empty_address_is_not_reported_as_unauthorized() -> None:
+    # Act
+    claim = claim_host(Host(address="192.168.1.7"), [_Pack("firetv", "Amazon")], _connector({}))
+
+    # Assert
+    assert claim.unauthorized is False
+
+
+def test_a_claimed_device_is_never_flagged_unauthorized() -> None:
+    # Act
+    claim = claim_host(Host(address="192.168.1.50"), [_Pack("firetv", "Amazon")], _connector({"192.168.1.50": FakeTransport(responses=FIRE_FACTS)}))
+
+    # Assert
+    assert claim.claimed is True
+    assert claim.unauthorized is False
+
+
+def test_a_refused_host_is_recorded_rather_than_dropped() -> None:
+    """Knowing a device is there and needs approval is actionable; dropping
+    it makes that indistinguishable from never having seen it."""
+
+    # Arrange
+    def _connect(address: str, platform: str) -> Transport:
+        raise DeviceUnauthorizedError(address, "connection aborted")
+
+    # Act
+    claim = claim_host(Host(address="192.168.1.79", mac="aa:bb:cc:00:00:79"), [_Pack("firetv", "Amazon")], _connect)
+
+    # Assert
+    assert claim.recordable is True
+    assert claim.claimed is False
+    assert claim.device is not None
+    assert claim.device.status is DeviceStatus.UNAUTHORIZED
+    assert claim.device.is_actionable is False
+    assert claim.device.type == ""  # it would not say, so nothing is invented
+
+
+def test_a_host_nobody_recognized_is_not_recorded() -> None:
+    """That is somebody's printer, and the inventory is not an asset register."""
+    # Arrange
+    printer = FakeTransport(responses={"getprop ro.product.manufacturer": ""})
+
+    # Act
+    claim = claim_host(Host(address="192.168.1.99"), [_Pack("firetv", "Amazon")], _connector({"192.168.1.99": printer}))
+
+    # Assert
+    assert claim.recordable is False

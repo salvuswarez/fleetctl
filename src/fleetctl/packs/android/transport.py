@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from ...core.effects import Capability, Effect
-from ...core.errors import CommandFailedError, TransportError
+from ...core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
 from .keys import AdbKeyStore
 
 LOGGER = logging.getLogger(__name__)
@@ -123,10 +123,19 @@ class AdbTransport:
         """
         from adb_shell.adb_device import AdbDeviceTcp
 
+        # Checked *before* the handshake, not after. A failed handshake can
+        # leave the port briefly unusable, so probing afterwards would report
+        # a device that refused the key as simply absent, at random.
+        was_listening = self.is_online(timeout_s=2.0)
         try:
             device = AdbDeviceTcp(self._address, self._port, default_transport_timeout_s=self._shell_timeout_s)
             device.connect(rsa_keys=[self._keys.signer(target=self._address)], auth_timeout_s=10.0)
         except Exception as exc:
+            # The port answering while the handshake fails means the device is
+            # there and said no — a different problem from an empty address,
+            # and the only one the user can act on.
+            if was_listening:
+                raise DeviceUnauthorizedError(self._address, str(exc)) from exc
             raise TransportError(f"ADB connect failed for {self._address}: {exc}", target=self._address) from exc
         self._device = device
 

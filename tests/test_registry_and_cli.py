@@ -464,7 +464,9 @@ def test_scan_writes_discovered_devices_to_the_inventory(workspace: Path, monkey
     assert "den-shield" in listed.output
 
 
-def test_scan_reports_unrecognized_hosts_rather_than_hiding_them(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scan_summarises_unrecognized_hosts_rather_than_listing_them(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real /24 is mostly hosts no pack knows. Listing them all buried the
+    few that mattered under 250 lines."""
     # Arrange
     from fleetctl.core.discovery.claim import Claim
     from fleetctl.core.discovery.sweep import Host
@@ -476,8 +478,8 @@ def test_scan_reports_unrecognized_hosts_rather_than_hiding_them(workspace: Path
 
     # Assert
     assert result.exit_code == 0
-    assert "unrecognized" in result.output
-    assert "192.168.1.90" in result.output
+    assert "1 host(s) not recognized" in result.output
+    assert "192.168.1.90" not in result.output
 
 
 def test_a_scan_dry_run_writes_nothing(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -565,3 +567,23 @@ def test_scan_tells_you_where_the_inventory_lives(workspace: Path, monkeypatch: 
     # Assert
     assert "devices.yml" in result.output
     assert "Edit that file directly" in result.output
+
+
+def test_scan_tells_you_which_hosts_refused_the_key(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ "Nothing there" and "it said no" need different actions from the user."""
+    # Arrange
+    from fleetctl.core.discovery.claim import Claim
+    from fleetctl.core.discovery.sweep import Host
+
+    refused = Host(address="192.168.1.79")
+    stranger = Host(address="192.168.1.91")
+    _fake_scan(monkeypatch, [refused, stranger], [Claim(host=refused, unauthorized=True), Claim(host=stranger)])
+
+    # Act
+    result = _invoke(workspace, "scan", "192.168.1.0/24")
+
+    # Assert
+    assert "192.168.1.79" in result.output
+    assert "refused this key" in result.output
+    assert "Approve the debugging prompt" in result.output
+    assert "1 host(s) not recognized" in result.output

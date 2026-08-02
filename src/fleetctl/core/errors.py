@@ -45,6 +45,24 @@ class CommandFailedError(TransportError):
         self.exit_code = exit_code
 
 
+class DeviceUnauthorizedError(TransportError):
+    """The device is reachable but rejected our credentials.
+
+    Deliberately distinct from a plain `TransportError`: an address with
+    nothing listening and an address that refused the key look identical in a
+    scan's output, but the first means "not a device I manage" and the second
+    means "approve the prompt on the screen". Only one of those is actionable.
+
+    **PARAMETERS:**
+        `target` (str): Address or id of the device involved.  <br>
+        `detail` (str): What the underlying transport reported.  <br>
+    """
+
+    def __init__(self, target: str, detail: str = "") -> None:
+        super().__init__(f"{target} is reachable but did not authorize this key" + (f": {detail}" if detail else ""), target=target)
+        self.detail = detail
+
+
 class UnsupportedCapabilityError(TransportError):
     """A transport was asked for something it does not implement.
 
