@@ -42,6 +42,11 @@ shield = "fleetctl.packs.shield.pack:ShieldPack"
 [project.entry-points."fleetctl.apps"]
 kodi = "fleetctl.apps.kodi.pack:KodiApp"
 
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.2",
+]
+
 [dependency-groups]
 dev = [
     "black>=24.0",
@@ -78,6 +83,13 @@ files = ["src", "tests"]
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
+# FastMCP's decorators are untyped, which is the library's shape rather than
+# ours. Relaxed for this binding alone so the rest of the project keeps the
+# full strict setting.
+[[tool.mypy.overrides]]
+module = "fleetctl.mcp.*"
+disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

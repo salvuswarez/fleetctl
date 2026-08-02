@@ -11,9 +11,8 @@ reads `device.vars["kodi"]`; the kernel never looks inside.
 
 from __future__ import annotations
 
-from typing import Any
-
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 

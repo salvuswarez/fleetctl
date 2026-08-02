@@ -1,0 +1,301 @@
+"""What an agent may ask fleetctl to do, and on what terms.
+
+Every mutating call passes through the policy layer, and the toolkit has no
+path around it: it holds a `Container`, not a transport, and the only way to
+reach a device is through a step the registry knows about.
+
+Three properties matter more here than anywhere else in the codebase, because
+the caller cannot read a convention:
+
+**Reads are free, changes are not.** Listing devices, plans and audit records
+needs no approval. Anything that touches a device is gated on its declared
+effect class.
+
+**A plan must be confirmed before it runs.** `run_workflow` requires the
+digest of a plan the caller has already seen. If the fleet changed underneath
+— a device came online, a tag moved — the digest differs and the run is
+refused rather than silently doing something larger than was reviewed.
+
+**Refusals are recorded.** A denial is written to the audit trail with the
+actor that was refused, because a policy that silently says no is
+indistinguishable from a tool that is broken.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass
+from typing import Any, Mapping
+
+from ..cli.bootstrap import Container
+from ..core.errors import FleetError
+from ..core.observability.audit import AuditEvent, AuditKind, Outcome
+from ..core.observability.correlation import correlate
+from ..core.operations.registry import OperationStatus
+from ..core.policy import Verdict
+from ..core.workflow.engine import WorkflowEngine
+from ..core.workflow.plan import Plan, PlannedTask, build_plan
+
+LOGGER = logging.getLogger(__name__)
+
+
+class ApprovalRequired(FleetError):
+    """A step needs explicit approval before it may run.
+
+    Distinct from a denial: this is a question, and the caller can answer it.
+
+    **PARAMETERS:**
+        `message` (str): What needs approving and why.  <br>
+        `tasks` (tuple[str, ...]): Human-readable descriptions of what would run.  <br>
+    """
+
+    def __init__(self, message: str, tasks: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.tasks = tasks
+
+
+class PolicyDenied(FleetError):
+    """The policy layer refused outright. Not answerable by approving."""
+
+
+@dataclass(frozen=True, slots=True)
+class Toolkit:
+    """The operations an agent can perform, with policy applied to each.
+
+    **PARAMETERS:**
+        `container` (Container): Resolved dependencies, including the policy.  <br>
+        `actor` (str): Who is calling, e.g. ``mcp:claude``. Matched against policy rules and recorded on every audit event.  <br>
+    """
+
+    container: Container
+    actor: str = "mcp:agent"
+
+    # -- Reads -------------------------------------------------------------
+
+    def list_devices(self) -> list[dict[str, Any]]:
+        """RETURNS: list[dict[str, Any]]: Every known device, including ones flagged unusable."""
+        return [
+            {
+                "id": device.id,
+                "type": device.type or None,
+                "address": device.address or None,
+                "name": device.name or None,
+                "model": device.model or None,
+                "tags": list(device.tags),
+                "status": device.status.value,
+                "actionable": device.is_actionable,
+            }
+            for device in self.container.inventory.list()
+        ]
+
+    def list_steps(self) -> list[dict[str, Any]]:
+        """RETURNS: list[dict[str, Any]]: Registered steps, with the effect class that decides how they are gated."""
+        return [
+            {
+                "id": step.spec.id,
+                "summary": step.spec.summary,
+                "effect": step.spec.effect.value,
+                "scope": step.spec.scope,
+                "provider": step.provider,
+                "requires": sorted(capability.value for capability in step.spec.requires),
+            }
+            for step in self.container.registry.steps()
+        ]
+
+    def list_workflows(self) -> list[dict[str, Any]]:
+        """RETURNS: list[dict[str, Any]]: Available workflows and their steps."""
+        return [
+            {
+                "name": workflow.name,
+                "description": workflow.description.strip(),
+                "steps": [{"id": step.id, "use": step.use} for step in workflow.steps],
+            }
+            for workflow in sorted(self.container.workflows().values(), key=lambda item: item.name)
+        ]
+
+    def list_operations(self) -> list[dict[str, Any]]:
+        """RETURNS: list[dict[str, Any]]: Snapshots of every tracked operation in this process."""
+        return list(self.container.operations.all_snapshots().values())
+
+    def audit_tail(self, count: int = 20) -> list[dict[str, Any]]:
+        """RETURNS: list[dict[str, Any]]: The most recent audit records, already redacted."""
+        return [event.to_dict() for event in self.container.audit.records()[-count:]]
+
+    # -- Planning ----------------------------------------------------------
+
+    def plan_workflow(self, name: str) -> dict[str, Any]:
+        """Show everything a workflow would do, without doing any of it.
+
+        Producing a plan touches no device, so this is always permitted: an
+        agent that cannot look before it acts will act without looking.
+
+        **PARAMETERS:**
+            `name` (str): Workflow name.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The plan, its digest, and what is blocked or needs approval.  <br>
+
+        **RAISES:**
+            `FleetError`: If no such workflow exists.  <br>
+        """
+        return _describe(self._plan(name))
+
+    # -- Changes -----------------------------------------------------------
+
+    def run_workflow(self, name: str, *, confirm: str, approve: bool = False) -> dict[str, Any]:
+        """Run a workflow whose plan the caller has already reviewed.
+
+        **PARAMETERS:**
+            `name` (str): Workflow name.  <br>
+            `confirm` (str): Digest from `plan_workflow`. Required — a run that did not confirm a plan is a run nobody reviewed.  <br>
+            `approve` (bool): Whether the caller approves the tasks the policy flagged.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: What ran and how it went.  <br>
+
+        **RAISES:**
+            `FleetError`: If the plan changed since it was shown, or nothing would run.  <br>
+            `ApprovalRequired`: If tasks need approval and `approve` is false.  <br>
+            `PolicyDenied`: If the blast-radius cap would be exceeded.  <br>
+        """
+        plan = self._plan(name)
+
+        if confirm != plan.digest():
+            raise FleetError(f"The fleet changed since that plan was made. Call plan_workflow again and confirm {plan.digest()!r}.")
+        if plan.is_empty:
+            raise FleetError(f"Workflow {name!r} matched no devices; nothing to run.")
+
+        radius = self.container.policy.check_blast_radius(actor=self.actor, device_count=plan.device_count)
+        if radius.denied:
+            self._record_denial(name, "fleet", radius.reason)
+            raise PolicyDenied(radius.reason)
+
+        pending = plan.needs_approval
+        if pending and not approve:
+            raise ApprovalRequired(
+                f"{len(pending)} task(s) need approval before {name!r} can run.",
+                tuple(f"{task.step_id} on {task.target_id}: {task.needs_approval}" for task in pending),
+            )
+
+        return self._execute(plan)
+
+    def run_step(self, step_id: str, *, device_id: str | None = None, params: Mapping[str, Any] | None = None, approve: bool = False) -> dict[str, Any]:
+        """Run a single registered step.
+
+        **PARAMETERS:**
+            `step_id` (str): Which step, from `list_steps`.  <br>
+            `device_id` (str | None): Target device for a device-scoped step.  <br>
+            `params` (Mapping[str, Any] | None): Step parameters.  <br>
+            `approve` (bool): Whether the caller approves, when the policy asks.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The operation's outcome.  <br>
+
+        **RAISES:**
+            `FleetError`: If the step or device is unknown.  <br>
+            `ApprovalRequired`: If the policy asks and `approve` is false.  <br>
+            `PolicyDenied`: If the policy refuses outright.  <br>
+        """
+        step = self.container.registry.step(step_id)
+        device = self.container.inventory.get(device_id) if device_id else None
+        if device_id and device is None:
+            raise FleetError(f"Unknown device: {device_id}")
+        if device is not None and not device.is_actionable:
+            raise FleetError(f"{device.id} is {device.status.value}; it cannot be acted on until that is resolved.")
+
+        decision = self.container.policy.check(actor=self.actor, step_id=step_id, effect=step.spec.effect, device=device)
+        if decision.verdict is Verdict.DENY:
+            self._record_denial(step_id, device_id or "fleet", decision.reason)
+            raise PolicyDenied(decision.reason)
+        if decision.verdict is Verdict.CONFIRM and not approve:
+            raise ApprovalRequired(decision.reason, (f"{step_id} on {device_id or 'fleet'}",))
+
+        from ..cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
+
+        op_id = f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}-{int(time.time())}"
+        flags = dict(params or {})
+        with correlate(actor=self.actor):
+            status = (
+                _run_device_step(self.container, step, device_id, flags, op_id)
+                if step.spec.scope == "device"
+                else _run_fleet_step(self.container, step, flags, op_id)
+            )
+        operation = self.container.operations.get(op_id)
+        return {
+            "step": step_id,
+            "target": device_id or "fleet",
+            "status": status.value,
+            "result": operation.result if operation else None,
+            "logs": [entry["message"] for entry in operation.logs] if operation else [],
+        }
+
+    # -- Internal ----------------------------------------------------------
+
+    def _plan(self, name: str) -> Plan:
+        workflows = self.container.workflows()
+        if name not in workflows:
+            known = ", ".join(sorted(workflows)) or "none"
+            raise FleetError(f"No workflow {name!r} (known: {known})")
+        return build_plan(
+            workflows[name],
+            self.container.registry,
+            self.container.inventory.list(),
+            policy=self.container.policy,
+            actor=self.actor,
+        )
+
+    def _execute(self, plan: Plan) -> dict[str, Any]:
+        from ..cli.main import _task_runner  # noqa: PLC0415 - avoids a cycle at import time
+
+        engine = WorkflowEngine(_task_runner(self.container), self.container.audit, actor=self.actor)
+        report = engine.run(plan)
+        return {
+            "workflow": report.workflow,
+            "run_id": report.run_id,
+            "summary": report.summary(),
+            "succeeded": report.succeeded,
+            "stopped_early": report.stopped_early,
+            "tasks": [{"step": outcome.task.step_id, "target": outcome.task.target_id, "status": outcome.status.value} for outcome in report.outcomes],
+            "failed": [outcome.task.target_id for outcome in report.failed],
+        }
+
+    def _record_denial(self, step_id: str, target: str, reason: str) -> None:
+        with correlate(actor=self.actor, step_id=step_id):
+            self.container.audit.write(
+                AuditEvent.build(
+                    AuditKind.DECISION,
+                    f"policy.deny {step_id}",
+                    target=target,
+                    outcome=Outcome.DENIED,
+                    detail={"reason": reason, "surface": "agent"},
+                )
+            )
+
+
+def _describe(plan: Plan) -> dict[str, Any]:
+    return {
+        "workflow": plan.workflow,
+        "digest": plan.digest(),
+        "device_count": plan.device_count,
+        "empty": plan.is_empty,
+        "tasks": [_task(task) for step in plan.steps for task in step.tasks],
+        "blocked": [_task(task) for task in plan.blocked],
+        "needs_approval": [_task(task) for task in plan.needs_approval],
+        "confirm_with": plan.digest(),
+    }
+
+
+def _task(task: PlannedTask) -> dict[str, Any]:
+    return {
+        "step": task.step_id,
+        "use": task.use,
+        "target": task.target_id,
+        "effect": task.effect.value,
+        "runnable": task.runnable,
+        "blocked": task.blocked or None,
+        "needs_approval": task.needs_approval or None,
+    }
+
+
+__all__ = ["ApprovalRequired", "PolicyDenied", "Toolkit", "OperationStatus"]

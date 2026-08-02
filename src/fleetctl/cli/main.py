@@ -510,3 +510,23 @@ def scan(ctx: click.Context, subnet: str, dry_run: bool) -> None:
     click.echo(f"\nAdded {result.added}, updated {result.updated}, {len(result.devices)} device(s) total.")
     click.echo(f"Inventory: {container.inventory_path}")
     click.echo("Edit that file directly to set tags, names, or per-app vars — a scan never overwrites them.")
+
+
+@main.command(name="mcp")
+@click.option("--actor", default="mcp:agent", help="Identity recorded on every audit record and matched against policy.")
+@click.pass_context
+def mcp_serve(ctx: click.Context, actor: str) -> None:
+    """Serve the agent toolkit over MCP on stdio.
+
+    Policy applies exactly as it does here: an agent can only reach a device
+    through a registered step, and every refusal is audited.
+    """
+    options = ctx.obj or {}
+    try:
+        from ..mcp.server import serve
+    except ImportError as exc:  # pragma: no cover - depends on an optional extra
+        raise click.ClickException("MCP support is optional: pip install 'fleetctl[mcp]'") from exc
+    try:
+        serve(config_dir=options.get("config_dir"), home=options.get("home"), actor=actor)
+    except FleetError as exc:
+        raise click.ClickException(str(exc)) from exc
