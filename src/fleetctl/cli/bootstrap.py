@@ -12,12 +12,12 @@ import getpass
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ..core.artifacts.store import ArtifactStore, LocalArtifactStore
 from ..core.config.loader import load_yaml_file
 from ..core.config.secrets import EnvSecretProvider, SecretResolver
-from ..core.errors import FleetError
+from ..core.errors import FleetError, TransportError
 from ..core.inventory.device import Device
 from ..core.inventory.store import DeviceStore
 from ..core.observability.audit import ChainedAuditWriter, JsonlAuditSink
@@ -87,6 +87,34 @@ class Container:
                 available[workflow.name] = workflow
         available.update(load_workflows(self.config_dir / "workflows"))
         return available
+
+    @property
+    def inventory_path(self) -> Path:
+        """RETURNS: Path: The inventory file, so a user can be told where to edit it."""
+        return self.config_dir / "inventory" / "devices.yml"
+
+    def connector(self) -> Callable[[str, str], Transport]:
+        """Build the callback discovery uses to reach a candidate host.
+
+        Discovery does not know what a host is yet, so it cannot ask a
+        device's pack for a transport. Instead it asks by *platform*, and the
+        first installed pack for that platform supplies one.
+
+        **RETURNS:**
+            `Callable[[str, str], Transport]`: Takes an address and a platform; raises `TransportError` if no transport can be opened.  <br>
+        """
+        settings = {"key_dir": self.home / "keys", "audit": self.audit}
+
+        def _connect(address: str, pack_platform: str) -> Transport:
+            for pack in self.registry.device_packs():
+                factory = getattr(pack, "transport_for", None)
+                if pack.platform != pack_platform or factory is None:
+                    continue
+                candidate = Device(id="probe", type=pack.id, address=address)
+                return AuditingTransport(factory(candidate, settings), self.audit)
+            raise TransportError(f"No installed pack provides a {pack_platform!r} transport", target=address)
+
+        return _connect
 
     def transport_for(self, device: Device) -> Transport:
         """Open an audited transport to a device.

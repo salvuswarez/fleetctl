@@ -18,6 +18,8 @@ import click
 
 from .._version import get_version
 from ..core.config.layering import for_device
+from ..core.discovery.claim import claim_hosts
+from ..core.discovery.sweep import Sweeper
 from ..core.errors import FleetError
 from ..core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
 from ..core.observability.correlation import CorrelationFilter, correlate
@@ -447,3 +449,47 @@ def _task_runner(container: Container) -> Any:
         return _run_device_step(container, step, task.device.id, flags, op_id)
 
     return _run
+
+
+@main.command(name="scan")
+@click.argument("subnet")
+@click.option("--dry-run", is_flag=True, help="Report what was found without writing the inventory.")
+@click.pass_context
+def scan(ctx: click.Context, subnet: str, dry_run: bool) -> None:
+    """Discover devices on a subnet and merge them into the inventory.
+
+    SUBNET is a CIDR block (192.168.1.0/24) or a three-octet prefix
+    (192.168.1).
+    """
+    container = _container(ctx)
+    try:
+        hosts = Sweeper().sweep(subnet)
+    except FleetError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"{len(hosts)} host(s) responded on {subnet}")
+    packs = container.registry.device_packs()
+    if not packs:
+        raise click.ClickException("No device packs are installed, so nothing can be identified.")
+
+    claims = claim_hosts(hosts, packs, container.connector())
+    found = [claim for claim in claims if claim.claimed]
+    for claim in claims:
+        if claim.claimed and claim.device is not None:
+            click.echo(f"  {claim.device.id:<20} {claim.pack_id:<10} {claim.host.address:<16} {claim.device.model}")
+        else:
+            click.echo(f"  {'(unrecognized)':<20} {'-':<10} {claim.host.address}")
+
+    if not found:
+        click.echo("No devices recognized. Devices must have network debugging enabled and be paired already.")
+        return
+
+    if dry_run:
+        click.echo(f"\nDry run: {len(found)} device(s) found, inventory not written.")
+        return
+
+    devices = [claim.device for claim in found if claim.device is not None]
+    result = container.inventory.reconcile(devices)
+    click.echo(f"\nAdded {result.added}, updated {result.updated}, {len(result.devices)} device(s) total.")
+    click.echo(f"Inventory: {container.inventory_path}")
+    click.echo("Edit that file directly to set tags, names, or per-app vars — a scan never overwrites them.")
