@@ -1,0 +1,19 @@
+# Non-package maintenance applied by firetv.maintain.
+
+# UI responsiveness. Fire OS animations are slow on this hardware and cost
+# perceptible time on every navigation.
+settings:
+  global:
+    window_animation_scale: "0.0"
+    transition_animation_scale: "0.0"
+    animator_duration_scale: "0.0"
+    marketing_allowed: "0"
+    data_monitoring_enabled: "0"
+  secure:
+    limit_ad_tracking: "1"
+
+# Paths cleared during maintenance, relative to external storage.
+prune_paths:
+  - /sdcard/Android/data/com.amazon.bueller.photos/cache
+
+cache_reserve: 16G

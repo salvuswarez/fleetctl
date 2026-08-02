@@ -1,0 +1,29 @@
+# Fire OS deviations from stock Android. Every entry here was verified against
+# real hardware in the predecessor project; do not add one on suspicion.
+
+# toybox's `tar -z` on Fire OS silently produces a truncated gzip stream. tar
+# reports exit code 0, and the archive is byte-identical whether pulled once or
+# re-pulled, so the corruption happens at creation, not in transit. Plain
+# `tar cf` plus a separate `gzip` pass verified clean on the same device.
+split_gzip: true
+
+# adb_shell's push() moves zero bytes and hangs for anything beyond a few MB —
+# the destination file is never created. Netcat sustains 5-12 MB/s to the same
+# device. shell() and pull() are unaffected.
+push_via_netcat: true
+
+# `pm disable-user` is blocked for many system packages from a non-root shell
+# on Fire OS 5.x and fails without a usable error. Verify against the device's
+# own list rather than trusting the command.
+verify_disable_user: true
+
+external_storage: /sdcard
+app_data_root: /sdcard/Android/data
+
+# At peak the device holds the pushed archive, its decompressed form, and the
+# extracted tree at once.
+disk_headroom: 3.0
+
+# A Fire Stick writing thousands of small files to /sdcard is far slower than a
+# flat timeout assumes.
+min_unpack_bytes_per_s: 1000000.0

@@ -1,0 +1,100 @@
+# Amazon/Fire OS packages disabled during maintenance.
+#
+# VERIFICATION: every entry below was confirmed present on a real Fire TV
+# device via `pm list packages` in the predecessor project. A borrowed list
+# from another codebase was found to mix fabricated package names with real
+# ones, so nothing here is included on the strength of appearing in someone
+# else's tool. If you add an entry, verify it on hardware and say so.
+#
+# DELIBERATELY NOT LISTED — these are the apps meant to survive, plus core
+# UI, input and connectivity: the media player itself, the launcher,
+# settings, systemui, the input method, bluetooth and wifi stacks.
+#
+# ALEXA: nothing `com.amazon.alexa*` / `.ale` / `.aca` is listed. The physical
+# remote's microphone button depends on it, so disabling those is a
+# functionality trade rather than pure bloat — ask before adding one.
+
+shopping:
+  - com.amazon.shoptv.client
+  - com.amazon.shoptv.firetv.client
+  - com.amazon.alexashopping
+  - com.amazon.venezia
+
+telemetry:
+  - com.amazon.client.metrics
+  - com.amazon.device.logmanager
+  - com.amazon.tv.fw.metrics
+  - com.amazon.kso.blackbird
+  - com.amazon.minerva.client.api
+  - com.amazon.perfc
+  - com.amazon.perfcollection
+  - com.amazon.csm.htmlruntime
+  - com.amazon.wirelessmetrics.service
+  - com.amazon.device.crashmanager
+  - com.amazon.device.metrics
+  - com.amazon.dp.logger
+  - com.amazon.recess
+  - com.amazon.tahoe
+  - com.amazon.ags.app
+  - com.amazon.logan
+  - com.amazon.firebat
+
+advertising:
+  - com.amazon.tv.acr
+  - com.amazon.ftvads.deeplinking
+  - com.amazon.hybridadidservice
+  - com.amazon.d3
+
+# Phone-home / comms backbone. Confirmed via live logcat: the timezone service
+# retry-loops against a DNS-blocked endpoint, and the smart-home map viewer was
+# caught in a repeated broadcast-triggered respawn/crash cycle. Some of these
+# run under the system UID and may refuse to disable — see verify_disable_user.
+comms:
+  - com.amazon.kindleautomatictimezone
+  - com.amazon.smarthomemapviewapp
+  - com.amazon.dcp
+  - com.amazon.dcp.contracts.library
+  - com.amazon.dcp.contracts.framework.library
+  - com.amazon.tcomm
+  - com.amazon.tcomm.client
+  - com.amazon.tcomm.jackson
+  - com.amazon.diode
+  - com.amazon.communication.discovery
+  - com.amazon.sync.provider.ipc
+  - com.amazon.whisperplay.contracts
+  - com.amazon.whisperplay.service.install
+
+onboarding:
+  - com.amazon.firehomestarter
+  - com.amazon.storm.lightning.tutorial
+  - com.amazon.tmm.tutorial
+  - com.amazon.tv.releasenotes
+  - com.amazon.systemnotices
+  - com.amazon.uxnotification
+  - com.amazon.tv.notificationcenter
+  - com.amazon.whisperjoin.middleware.np
+
+unused_apps:
+  - com.amazon.awvflingreceiver
+  - com.amazon.stillwatching.activity
+  - com.amazon.ods.kindleconnect
+  - com.amazon.bueller.photos
+  - com.amazon.minitv.android.app
+  - com.amazon.avod
+  - com.amazon.tv.nimble
+
+# Non-functional launcher tiles for content types Fire OS does not offer.
+# Verified present on real hardware; zero functional risk.
+placeholders:
+  - com.amazon.dummy.alarmclock
+  - com.amazon.dummy.calendar
+  - com.amazon.dummy.contacts
+  - com.amazon.dummy.gallery
+  - com.amazon.dummy.music
+  - com.amazon.dummy.settings
+
+# OTA updates, deliberately disabled to keep a known-good Fire OS build.
+ota:
+  - com.amazon.device.software.ota
+  - com.amazon.device.software.ota.override
+  - com.amazon.kindle.otter.oobe.corp.ad

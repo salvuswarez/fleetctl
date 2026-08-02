@@ -29,12 +29,12 @@ Full detail in `docs/architecture.md` §14 ("Open before S1").
 |---|---|---|
 | 1 | `Transport.exec()` effect parameter | ✅ every mutating entry point takes `effect`, defaulting to `MUTATING` (fail-safe) |
 | 2 | Split `StepContext` by step kind | ✅ `FleetStepContext` / `DeviceStepContext` / `TransformStepContext` |
-| 3 | The app↔pack contract | ⬜ **still open** — settle before S2 writes `apps/kodi` |
+| 3 | The app↔pack contract | ✅ `state` is the deep verb — the pack owns paths, archives, staging and free space; an app pack issues no transfer command |
 | 4 | Config layering earlier than S3 | ✅ landed in S1 (`core/config/layering.py`) |
 | 5 | Enforce the ring rule in CI | ✅ `tests/test_architecture.py`, part of the gate |
 | 6 | `Step` returns `StepResult` | ✅ carries `summary`, `artifacts`, `facts` |
 
-**Decision 3 is the one still to make**, and it blocks S2: the Kodi deploy case needs on-device path and archive knowledge that neither ring currently owns. Either make `state` the deep verb (the pack owns tar/gzip/staging/free-space, and `apps/kodi` never issues a transfer command), or let quirks flow as typed pack-default config now that layering exists.
+All six are settled. Decision 3 resolved in favour of the deep `state` verb: an app declares an `AppStateSpec` (its platform identifiers, state subdirectory, members, exclusions) and the device pack resolves the path, builds the archive with whatever tooling actually works on that hardware, checks headroom, and verifies the result. This is what keeps `apps/kodi` from encoding the toybox `tar -z` quirk that a Shield must not inherit.
 
 ## Ordering rules
 
