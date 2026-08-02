@@ -655,3 +655,19 @@ def test_a_dotted_override_layers_over_a_devices_own_vars(workspace: Path) -> No
     # Assert
     assert resolved.values["kodi"]["display"]["overscan"] == {"left": 0, "right": 1900}
     assert resolved.values["kodi"]["display"]["resolution_index"] == 18
+
+
+def test_a_confirm_verdict_stops_a_single_step_run(workspace: Path) -> None:
+    """`workflow run` has always honoured approval; a single step ignoring it
+    made `confirm:` decorative on the shortest path to a destructive change."""
+    # Arrange
+    (workspace / "config" / "fleet.yml").write_text(
+        "observability:\n  audit_dir: audit\npolicy:\n  actors:\n    '*':\n      allow: ['*']\n      confirm: [destructive]\n", encoding="utf-8"
+    )
+
+    # Act
+    refused = _invoke(workspace, "run", "firetv.maintain", "--device", "stick-1")
+
+    # Assert
+    assert refused.exit_code != 0
+    assert "--approve" in refused.output

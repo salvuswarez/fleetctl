@@ -17,6 +17,7 @@ from ..core.errors import FleetError
 from ..core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
 from ..core.observability.correlation import CorrelationFilter, correlate
 from ..core.operations.registry import OperationStatus
+from ..core.policy import Verdict
 from ..core.registry import RegisteredStep
 from ..core.transport.base import Transport
 from ..core.workflow.engine import WorkflowEngine
@@ -124,8 +125,9 @@ def show_config(ctx: click.Context, device_id: str) -> None:
 @click.argument("step_id")
 @click.option("--device", "device_id", default=None, help="Target device id. Required for device-scoped steps.")
 @click.option("--set", "overrides", multiple=True, metavar="KEY=VALUE", help="Config override for this run; repeatable.")
+@click.option("--approve", is_flag=True, help="Approve a step the policy flagged as needing it.")
 @click.pass_context
-def run(ctx: click.Context, step_id: str, device_id: str | None, overrides: tuple[str, ...]) -> None:
+def run(ctx: click.Context, step_id: str, device_id: str | None, overrides: tuple[str, ...], approve: bool) -> None:
     """Run a registered step. Use `fleetctl steps` to see what is available."""
     container = _container(ctx)
     try:
@@ -141,6 +143,10 @@ def run(ctx: click.Context, step_id: str, device_id: str | None, overrides: tupl
     if decision.denied:
         _record_denial(container, step_id, device_id or "fleet", decision.reason)
         raise click.ClickException(decision.reason)
+    # `workflow run` has always honoured this; a single step ignoring it made
+    # `confirm:` decorative on the shortest path to a destructive change.
+    if decision.verdict is Verdict.CONFIRM and not approve:
+        raise click.ClickException(f"{decision.reason}. Re-run with --approve once you have reviewed what it will change.")
 
     if step.spec.scope == "device":
         status = _run_device_step(container, step, device_id, flags, op_id)
