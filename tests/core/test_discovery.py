@@ -7,7 +7,7 @@ from typing import Callable, Iterable, Mapping
 import pytest
 
 from fleetctl.core.discovery.claim import Claim, claim_host, claim_hosts, device_id_for
-from fleetctl.core.discovery.sweep import Host, arp_table, expand_subnet
+from fleetctl.core.discovery.sweep import Host, Sweeper, arp_table, expand_subnet
 from fleetctl.core.effects import Capability
 from fleetctl.core.errors import ConfigError, TransportError
 from fleetctl.core.registry import RegisteredStep
@@ -225,3 +225,60 @@ def test_a_claim_carries_the_host_even_when_unclaimed() -> None:
     # Assert
     assert claim.claimed is False
     assert claim.host.address == "192.168.1.9"
+
+
+class _Finished:
+    """Stands in for a completed subprocess."""
+
+    def __init__(self, returncode: int = 0, stdout: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+
+
+def test_a_sweep_returns_only_hosts_that_answered(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    alive = {"10.0.0.1", "10.0.0.3"}
+
+    def _run(command: list[str], **kwargs: object) -> _Finished:
+        if command[0] == "arp":
+            return _Finished(stdout="  10.0.0.1  aa-bb-cc-dd-ee-ff  dynamic")
+        return _Finished(returncode=0 if command[-1] in alive else 1)
+
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
+
+    # Act
+    hosts = Sweeper(workers=4).sweep("10.0.0.0/29")
+
+    # Assert
+    assert sorted(host.address for host in hosts) == ["10.0.0.1", "10.0.0.3"]
+
+
+def test_a_sweep_attaches_macs_from_the_arp_table(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A MAC is what survives a DHCP lease change."""
+
+    # Arrange
+    def _run(command: list[str], **kwargs: object) -> _Finished:
+        if command[0] == "arp":
+            return _Finished(stdout="  10.0.0.1  aa-bb-cc-dd-ee-ff  dynamic\n  10.0.0.2  incomplete")
+        return _Finished(returncode=0 if command[-1] == "10.0.0.1" else 1)
+
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
+
+    # Act
+    hosts = Sweeper(workers=2).sweep("10.0.0.0/29")
+
+    # Assert
+    assert hosts[0].mac == "aa:bb:cc:dd:ee:ff"
+
+
+def test_a_ping_that_cannot_run_drops_the_host_rather_than_the_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    def _run(command: list[str], **kwargs: object) -> _Finished:
+        if command[0] == "arp":
+            return _Finished(stdout="")
+        raise OSError("ping is not installed")
+
+    monkeypatch.setattr("fleetctl.core.discovery.sweep.subprocess.run", _run)
+
+    # Act / Assert
+    assert Sweeper(workers=2).sweep("10.0.0.0/30") == []

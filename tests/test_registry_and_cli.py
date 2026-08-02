@@ -436,3 +436,132 @@ def test_a_denial_records_who_was_refused(workspace: Path) -> None:
     assert events
     assert events[-1].actor.startswith("cli:")
     assert events[-1].target == "stick-1"
+
+
+def _fake_scan(monkeypatch: pytest.MonkeyPatch, hosts: list[Any], claims: list[Any]) -> None:
+    """Replace the network parts of `scan`, leaving its wiring under test."""
+    monkeypatch.setattr("fleetctl.cli.main.Sweeper", lambda *a, **k: type("S", (), {"sweep": lambda self, subnet: hosts})())
+    monkeypatch.setattr("fleetctl.cli.main.claim_hosts", lambda hosts, packs, connect: claims)
+
+
+def test_scan_writes_discovered_devices_to_the_inventory(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    from fleetctl.core.discovery.claim import Claim
+    from fleetctl.core.discovery.sweep import Host
+    from fleetctl.core.inventory.device import Device
+
+    host = Host(address="192.168.1.60", mac="aa:bb:cc:00:11:22")
+    found = Device(id="den-shield", type="shield", address="192.168.1.60", mac="aa:bb:cc:00:11:22", model="SHIELD")
+    _fake_scan(monkeypatch, [host], [Claim(host=host, device=found, pack_id="shield")])
+
+    # Act
+    result = _invoke(workspace, "scan", "192.168.1.0/24")
+
+    # Assert
+    assert result.exit_code == 0, result.output
+    assert "den-shield" in result.output
+    listed = _invoke(workspace, "devices", "list")
+    assert "den-shield" in listed.output
+
+
+def test_scan_reports_unrecognized_hosts_rather_than_hiding_them(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    from fleetctl.core.discovery.claim import Claim
+    from fleetctl.core.discovery.sweep import Host
+
+    _fake_scan(monkeypatch, [Host(address="192.168.1.90")], [Claim(host=Host(address="192.168.1.90"))])
+
+    # Act
+    result = _invoke(workspace, "scan", "192.168.1.0/24")
+
+    # Assert
+    assert result.exit_code == 0
+    assert "unrecognized" in result.output
+    assert "192.168.1.90" in result.output
+
+
+def test_a_scan_dry_run_writes_nothing(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    from fleetctl.core.discovery.claim import Claim
+    from fleetctl.core.discovery.sweep import Host
+    from fleetctl.core.inventory.device import Device
+
+    host = Host(address="192.168.1.60")
+    _fake_scan(monkeypatch, [host], [Claim(host=host, device=Device(id="new-one", type="shield"), pack_id="shield")])
+
+    # Act
+    result = _invoke(workspace, "scan", "192.168.1.0/24", "--dry-run")
+
+    # Assert
+    assert "inventory not written" in result.output
+    assert "new-one" not in _invoke(workspace, "devices", "list").output
+
+
+def test_a_rescan_updates_a_moved_device_without_losing_hand_edits(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The whole point of an editable inventory: tags and per-app vars are
+    yours, and a scan refreshes only what it actually observed."""
+    # Arrange
+    (workspace / "config" / "inventory" / "devices.yml").write_text(
+        "devices:\n"
+        "  - id: stick-1\n"
+        "    type: firetv\n"
+        "    address: 192.168.1.50\n"
+        "    mac: aa:bb:cc:dd:ee:ff\n"
+        "    name: Living Room\n"
+        "    tags: [kodi, lounge]\n"
+        "    vars:\n"
+        "      kodi:\n"
+        "        display: {resolution_index: 18}\n",
+        encoding="utf-8",
+    )
+    from fleetctl.core.discovery.claim import Claim
+    from fleetctl.core.discovery.sweep import Host
+    from fleetctl.core.inventory.device import Device
+
+    moved = Host(address="192.168.1.77", mac="aa:bb:cc:dd:ee:ff")
+    _fake_scan(
+        monkeypatch,
+        [moved],
+        [Claim(host=moved, device=Device(id="rediscovered", type="firetv", address="192.168.1.77", mac="aa:bb:cc:dd:ee:ff"), pack_id="firetv")],
+    )
+
+    # Act
+    result = _invoke(workspace, "scan", "192.168.1.0/24")
+
+    # Assert
+    assert "Added 0, updated 1" in result.output
+    from fleetctl.core.inventory.store import DeviceStore
+
+    device = DeviceStore(workspace / "config" / "inventory" / "devices.yml").get("stick-1")
+    assert device is not None
+    assert device.address == "192.168.1.77"
+    assert device.tags == ["kodi", "lounge"]
+    assert device.app_vars("kodi")["display"] == {"resolution_index": 18}
+    assert device.name == "Living Room"
+
+
+def test_scan_refuses_a_subnet_too_large_to_sweep(workspace: Path) -> None:
+    # Act
+    result = _invoke(workspace, "scan", "10.0.0.0/8")
+
+    # Assert
+    assert result.exit_code != 0
+    assert "Refusing to sweep" in result.output
+
+
+def test_scan_tells_you_where_the_inventory_lives(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """It is a plain YAML file the user owns; say so."""
+    # Arrange
+    from fleetctl.core.discovery.claim import Claim
+    from fleetctl.core.discovery.sweep import Host
+    from fleetctl.core.inventory.device import Device
+
+    host = Host(address="192.168.1.60")
+    _fake_scan(monkeypatch, [host], [Claim(host=host, device=Device(id="x", type="shield"), pack_id="shield")])
+
+    # Act
+    result = _invoke(workspace, "scan", "192.168.1.0/24")
+
+    # Assert
+    assert "devices.yml" in result.output
+    assert "Edit that file directly" in result.output
