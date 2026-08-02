@@ -37,6 +37,7 @@ fleetctl = "fleetctl.cli.main:main"
 
 [project.entry-points."fleetctl.packs"]
 firetv = "fleetctl.packs.firetv.pack:FireTvPack"
+shield = "fleetctl.packs.shield.pack:ShieldPack"
 
 [project.entry-points."fleetctl.apps"]
 kodi = "fleetctl.apps.kodi.pack:KodiApp"

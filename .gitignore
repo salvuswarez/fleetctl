@@ -1,21 +1,27 @@
 # --- Secrets and real device data -------------------------------------------
 # fleetctl config holds `!ref` pointers, never values — but a user's own
 # resolved config, inventory, and credentials must never be committed.
+#
+# Every directory rule below is anchored with a leading slash so it matches
+# only at the repository root. An unanchored `config/` also matches
+# `src/fleetctl/core/config/`, which silently excluded a whole source package.
 .env
 *.secret
-config/
-!config/*.example
-!config/**/*.example
+/config/
+!/config/*.example
+!/config/**/*.example
 
 # ADB key material — a standing authorization token for every paired device.
 .adb_keys/
 *adbkey*
 
 # --- Runtime state ----------------------------------------------------------
-staging/
-logs/
-audit/
-forensics/
+# Anchored for the same reason: `logs/`, `audit/` and `staging/` are all
+# plausible package names.
+/staging/
+/logs/
+/audit/
+/forensics/
 
 # --- Python -----------------------------------------------------------------
 __pycache__/

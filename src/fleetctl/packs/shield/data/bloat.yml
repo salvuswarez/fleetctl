@@ -1,0 +1,21 @@
+# NVIDIA Shield packages disabled during maintenance.
+#
+# VERIFICATION STATUS: **unverified — this list is intentionally near-empty.**
+#
+# The predecessor project inherited a bloat list from another codebase and
+# found it mixed fabricated package names with real ones. Rather than repeat
+# that, nothing is listed here until it has been confirmed against a real
+# Shield's `pm list packages` output.
+#
+# To populate it:
+#   fleetctl run shield.facts --device <id>     # confirm the pack claims it
+#   adb shell pm list packages | sort           # read what is actually there
+# Then add entries with a comment recording that they were seen on hardware.
+#
+# DELIBERATELY NOT CANDIDATES: the NVIDIA Games launcher and GeForce NOW are
+# the reason many people own this device; SHIELD Experience components back
+# the remote and HDMI-CEC. None of that is bloat by default.
+
+telemetry: []
+
+unused_apps: []

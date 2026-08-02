@@ -1,0 +1,22 @@
+# NVIDIA Shield deviations from stock Android.
+#
+# VERIFICATION STATUS: not yet confirmed on hardware. Every value below is
+# stock-Android default, chosen deliberately — the Fire OS workarounds are
+# Amazon's bugs and must not be inherited on suspicion. If the Shield turns
+# out to share one, verify it on the device and set it here with a note
+# saying so.
+#
+# Notably NOT set:
+#   split_gzip        — Fire OS toybox truncates `tar -z`; assume the Shield
+#                       does not until measured. The two-step dance costs
+#                       real time on a large profile.
+#   push_via_netcat   — the ADB push protocol is assumed to work here.
+#   verify_disable_user — assumed to report failures honestly.
+
+external_storage: /sdcard
+app_data_root: /sdcard/Android/data
+disk_headroom: 3.0
+
+# The Shield has considerably faster storage than a stick, but this is a floor
+# used only to scale timeouts, so a conservative value costs nothing.
+min_unpack_bytes_per_s: 2000000.0

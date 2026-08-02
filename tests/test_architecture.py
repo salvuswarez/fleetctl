@@ -12,6 +12,7 @@ file and line rather than a resolution error.
 from __future__ import annotations
 
 import ast
+import subprocess
 from pathlib import Path
 from typing import Iterator
 
@@ -140,3 +141,37 @@ def test_core_code_is_free_of_device_vocabulary(term: str) -> None:
 
     # Assert
     assert hits == [], f"core/ code must not reference {term!r}:\n" + "\n".join(hits)
+
+
+def test_every_source_package_is_tracked_by_git() -> None:
+    """A `.gitignore` rule caught a whole source package once.
+
+    `config/` was written unanchored, so it matched `src/fleetctl/core/config/`
+    as well as the repository-root directory it was meant for, and four
+    modules were silently never committed — a fresh clone would not import.
+    Directory rules are anchored now; this makes the mistake loud rather than
+    silent if one slips through again.
+
+    Skipped outside a git checkout, since a source tarball is a legitimate
+    way to run the suite.
+    """
+    # Arrange
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--stdin"],
+            cwd=SRC.parents[1],
+            input="\n".join(str(path) for path in sorted(SRC.rglob("*.py"))),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pytest.skip("git is not available here")
+    # 0 means "something matched an ignore rule"; 1 means nothing did.
+    if result.returncode not in (0, 1):
+        pytest.skip("not a git checkout")
+
+    # Assert
+    ignored = [line for line in result.stdout.splitlines() if line.strip()]
+    assert ignored == [], "these source files are excluded by .gitignore:\n" + "\n".join(ignored)

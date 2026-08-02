@@ -16,8 +16,8 @@ description: The S0–S8 build stages, what each contains, its exit criterion, a
 | **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ next |
 | **S3** | Config-as-code + workflows | `fleetctl workflow run kodi-refresh --dry-run` prints a correct plan; `config <device>` explains every key | ✅ done |
 | **S4** | Policy + audit hardening | A device marked protected cannot be reached by any actor without a config edit | ✅ done |
-| **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ⬜ next |
-| **S6** | MCP adapter | An agent completes `kodi-refresh` with per-step approval, fully audited | ⬜ |
+| **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ✅ done (unverified on hardware) |
+| **S6** | MCP adapter | An agent completes `kodi-refresh` with per-step approval, fully audited | ⬜ next |
 | **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ⬜ |
 | **S8** | Later | `linux_host` + SSH; HTTP API if a consumer appears; `fleet.lock` | ⬜ |
 

@@ -1,0 +1,161 @@
+"""The Shield pack: probe, capabilities, and maintenance.
+
+Deliberately thin. Everything it does comes from `packs.android` plus its own
+data files — which is the result the architecture predicted, and the reason
+this stage exists.
+"""
+
+from __future__ import annotations
+
+import logging
+from functools import cached_property
+from importlib import resources
+from pathlib import Path
+from typing import Any, Mapping
+
+import yaml
+
+from ...core.effects import Capability, Effect
+from ...core.inventory.device import Device
+from ...core.registry import RegisteredStep
+from ...core.state import AppStateSpec
+from ...core.transport.base import CommandRunner, Transport
+from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
+from ..android import actions
+from ..android.keys import AdbKeyStore
+from ..android.quirks import AndroidQuirks
+from ..android.state import AndroidStateManager
+from ..android.transport import AdbTransport
+
+LOGGER = logging.getLogger(__name__)
+
+PACK_ID = "shield"
+PLATFORM = "android"
+MANUFACTURER = "NVIDIA"
+
+CAPABILITIES: frozenset[Capability] = frozenset(
+    {
+        Capability.REACH,
+        Capability.FACTS,
+        Capability.EXEC,
+        Capability.FILES,
+        Capability.APPS,
+        Capability.SETTINGS,
+        Capability.POWER,
+        Capability.STATE,
+        Capability.CLEANUP,
+    }
+)
+
+MAINTAIN = StepSpec(
+    id="shield.maintain",
+    summary="Disable configured packages and trim caches on an NVIDIA Shield.",
+    effect=Effect.DESTRUCTIVE,
+    requires=frozenset({Capability.EXEC, Capability.APPS, Capability.CLEANUP}),
+    scope="device",
+)
+
+
+def _load(name: str) -> dict[str, Any]:
+    """RETURNS: dict[str, Any]: A parsed data file shipped with this pack."""
+    text = resources.files(f"fleetctl.packs.{PACK_ID}.data").joinpath(name).read_text(encoding="utf-8")
+    loaded = yaml.safe_load(text)
+    return loaded if isinstance(loaded, dict) else {}
+
+
+class ShieldPack:
+    """NVIDIA Shield support.
+
+    **PARAMETERS:**
+        `data` (Mapping[str, Any] | None): Overrides for the shipped data files, keyed by file stem. Defaults to ``None``.  <br>
+    """
+
+    id = PACK_ID
+    platform = PLATFORM
+    capabilities = CAPABILITIES
+    # Probes ahead of nothing in particular; both vendor packs key off
+    # manufacturer, so neither can claim the other's device.
+    probe_priority = 10
+
+    def __init__(self, data: Mapping[str, Any] | None = None) -> None:
+        self._overrides = dict(data or {})
+
+    @cached_property
+    def quirks(self) -> AndroidQuirks:
+        """RETURNS: AndroidQuirks: Shield deviations. Currently none beyond stock Android."""
+        return AndroidQuirks.from_mapping(self._data("quirks"))
+
+    @cached_property
+    def bloat_packages(self) -> tuple[str, ...]:
+        """RETURNS: tuple[str, ...]: Packages listed in `data/bloat.yml`. Empty until verified on hardware."""
+        grouped = self._data("bloat")
+        return tuple(package for group in grouped.values() if isinstance(group, list) for package in group)
+
+    def _data(self, name: str) -> dict[str, Any]:
+        override = self._overrides.get(name)
+        if isinstance(override, dict):
+            return override
+        return _load(f"{name}.yml")
+
+    def steps(self) -> list[RegisteredStep]:
+        """RETURNS: list[RegisteredStep]: The steps this pack provides."""
+        return [RegisteredStep(spec=MAINTAIN, run=self.maintain, provider=PACK_ID)]
+
+    def probe(self, runner: CommandRunner) -> dict[str, str] | None:
+        """Claim a host if it is an NVIDIA device.
+
+        **RETURNS:**
+            `dict[str, str] | None`: Device facts if claimed, otherwise ``None``.  <br>
+        """
+        facts = actions.read_facts(runner)
+        if not facts.get("model"):
+            return None
+        if MANUFACTURER.lower() not in facts.get("manufacturer", "").lower():
+            return None
+        return {**facts, "type": PACK_ID}
+
+    def transport_for(self, device: Device, settings: Mapping[str, Any]) -> AdbTransport:
+        """RETURNS: AdbTransport: A connected transport, using this pack's own quirks."""
+        keys = AdbKeyStore(Path(str(settings["key_dir"])), settings.get("audit"))
+        transport = AdbTransport(device.address, keys, use_netcat=self.quirks.push_via_netcat)
+        transport.connect()
+        return transport
+
+    def state_manager(self, transport: Transport) -> AndroidStateManager:
+        """RETURNS: AndroidStateManager: A state manager carrying this pack's quirks."""
+        return AndroidStateManager(transport, self.quirks)
+
+    def state_root(self, transport: Transport, spec: AppStateSpec) -> str:
+        """RETURNS: str: Where `spec`'s app keeps its state on this device."""
+        return self.state_manager(transport).state_root(spec)
+
+    def maintain(self, context: DeviceStepContext) -> StepResult:
+        """Disable configured packages and trim caches.
+
+        Reports honestly when there is nothing configured to do: an empty
+        bloat list is the current, deliberate state, and a step claiming
+        success for work it did not do is the failure mode this project keeps
+        running into.
+
+        **RETURNS:**
+            `StepResult`: A summary plus per-package outcomes.  <br>
+        """
+        packages = tuple(context.config.get("bloat_packages") or self.bloat_packages)
+        if not packages:
+            context.handle.log("No packages configured for this pack; nothing to disable.")
+            return StepResult(summary=f"{context.device.id}: nothing configured to disable", facts={"disabled": 0, "blocked": []})
+
+        context.handle.log(f"Disabling {len(packages)} packages...")
+        context.handle.check_cancelled()
+        outcomes = actions.disable_packages(context.transport, packages, self.quirks)
+        blocked = [outcome.package for outcome in outcomes if not outcome.disabled]
+
+        context.handle.check_cancelled()
+        context.handle.log("Trimming caches...")
+        actions.trim_caches(context.transport)
+
+        disabled = len(outcomes) - len(blocked)
+        return StepResult(
+            summary=f"Maintained {context.device.id}: {disabled}/{len(outcomes)} packages disabled",
+            facts={"disabled": disabled, "blocked": blocked, "verified": self.quirks.verify_disable_user},
+        )
