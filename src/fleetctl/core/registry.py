@@ -135,6 +135,10 @@ class Registry:
             raise FleetError(f"No app pack {app_id!r} is registered")
         return pack
 
+    def app_packs(self) -> list[AppPack]:
+        """RETURNS: list[AppPack]: Every app pack, sorted by id."""
+        return [self._app_packs[app_id] for app_id in sorted(self._app_packs)]
+
     def step(self, step_id: str) -> RegisteredStep:
         """RETURNS: RegisteredStep: The step with this id.
 

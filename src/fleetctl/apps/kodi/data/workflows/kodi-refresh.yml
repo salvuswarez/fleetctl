@@ -1,0 +1,31 @@
+name: kodi-refresh
+description: >
+  Rebuild the Kodi profile from the latest capture and roll it out to every
+  device tagged `kodi`. Maintenance runs first so a device is trimmed before
+  it receives a profile.
+
+steps:
+  # Fleet-level: shapes an artifact, touches no device. This step is handed a
+  # transform chain and no transport, so it structurally cannot deploy.
+  - id: build
+    use: kodi.build
+    targets: none
+
+  # Per-device, and allowed to continue past a failure: one unreachable
+  # device must not stop the rest of the fleet being maintained.
+  - id: maintain
+    use: firetv.maintain
+    targets:
+      tags: [kodi]
+      type: firetv
+    concurrency: 4
+    on_error: continue
+
+  # Deploy picks up the newest build by querying the artifact store, which is
+  # why no value has to be threaded from the build step above.
+  - id: deploy
+    use: kodi.deploy
+    targets:
+      tags: [kodi]
+    concurrency: 2
+    on_error: continue

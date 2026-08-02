@@ -14,8 +14,8 @@ description: The S0–S8 build stages, what each contains, its exit criterion, a
 | **S0** | Repo bootstrap | CI green on an empty package | ✅ done |
 | **S1** | Core kernel | `FakeTransport` + `LocalArtifactStore` run a trivial step end-to-end in tests, with audit records asserted | ✅ done |
 | **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ next |
-| **S3** | Config-as-code + workflows | `fleetctl run kodi-refresh --dry-run` prints a correct plan; `config show <device>` explains every key | ⬜ |
-| **S4** | Policy + audit hardening | The gold device is structurally undeployable-to without a config edit | ⬜ |
+| **S3** | Config-as-code + workflows | `fleetctl workflow run kodi-refresh --dry-run` prints a correct plan; `config <device>` explains every key | ✅ done |
+| **S4** | Policy + audit hardening | The gold device is structurally undeployable-to without a config edit | ⬜ next |
 | **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ⬜ |
 | **S6** | MCP adapter | An agent completes `kodi-refresh` with per-step approval, fully audited | ⬜ |
 | **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ⬜ |

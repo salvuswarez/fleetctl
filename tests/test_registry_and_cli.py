@@ -282,3 +282,68 @@ def test_a_build_step_runs_without_any_device(workspace: Path) -> None:
     # Assert
     assert result.exit_code != 0
     assert "captures" in result.output.lower()
+
+
+def test_workflow_list_includes_the_shipped_workflow(workspace: Path) -> None:
+    # Act
+    result = _invoke(workspace, "workflow", "list")
+
+    # Assert
+    assert result.exit_code == 0
+    assert "kodi-refresh" in result.output
+
+
+def test_workflow_plan_shows_targets_and_a_digest(workspace: Path) -> None:
+    # Act
+    result = _invoke(workspace, "workflow", "plan", "kodi-refresh")
+
+    # Assert
+    assert result.exit_code == 0
+    assert "stick-1" in result.output
+    assert "digest:" in result.output
+
+
+def test_a_dry_run_executes_nothing(workspace: Path) -> None:
+    """The S3 exit criterion: a plan you can read before anything happens."""
+    # Act
+    result = _invoke(workspace, "workflow", "run", "kodi-refresh", "--dry-run")
+
+    # Assert
+    assert result.exit_code == 0
+    assert "nothing was executed" in result.output
+    assert (workspace / "home" / "audit").exists() is False
+
+
+def test_an_unknown_workflow_names_what_exists(workspace: Path) -> None:
+    # Act
+    result = _invoke(workspace, "workflow", "plan", "nope")
+
+    # Assert
+    assert result.exit_code != 0
+    assert "kodi-refresh" in result.output
+
+
+def test_a_stale_plan_digest_is_refused(workspace: Path) -> None:
+    """So a run cannot execute against a fleet that changed after planning."""
+    # Act
+    result = _invoke(workspace, "workflow", "run", "kodi-refresh", "--confirm", "0" * 64)
+
+    # Assert
+    assert result.exit_code != 0
+    assert "changed since" in result.output
+
+
+def test_a_user_workflow_shadows_a_shipped_one(workspace: Path) -> None:
+    """Shipping a workflow is a starting point, not a constraint."""
+    # Arrange
+    (workspace / "config" / "workflows").mkdir()
+    (workspace / "config" / "workflows" / "kodi-refresh.yml").write_text(
+        "name: kodi-refresh\ndescription: mine\nsteps:\n  - use: kodi.build\n    targets: none\n", encoding="utf-8"
+    )
+
+    # Act
+    result = _invoke(workspace, "workflow", "plan", "kodi-refresh")
+
+    # Assert
+    assert result.exit_code == 0
+    assert "maintain" not in result.output

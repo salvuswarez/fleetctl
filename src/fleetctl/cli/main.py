@@ -24,6 +24,8 @@ from ..core.observability.correlation import CorrelationFilter
 from ..core.operations.registry import OperationStatus
 from ..core.registry import RegisteredStep
 from ..core.transport.base import Transport
+from ..core.workflow.engine import WorkflowEngine
+from ..core.workflow.plan import build_plan
 from ..core.workflow.runner import check_capabilities, run_step
 from ..core.workflow.step import DeviceStepContext, FleetStepContext, StepResult, TransformStepContext
 from .bootstrap import Container, build_container
@@ -312,3 +314,104 @@ def audit_tail(ctx: click.Context, count: int) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+@main.group()
+def workflow() -> None:
+    """Plan and run workflows."""
+
+
+@workflow.command(name="list")
+@click.pass_context
+def workflow_list(ctx: click.Context) -> None:
+    """List available workflows."""
+    container = _container(ctx)
+    available = container.workflows()
+    if not available:
+        click.echo("No workflows available.")
+        return
+    for name in sorted(available):
+        steps = len(available[name].steps)
+        click.echo(f"{name:<20} {steps} step(s)  {available[name].description.strip().splitlines()[0] if available[name].description else ''}")
+
+
+def _plan_for(container: Container, name: str) -> Any:
+    available = container.workflows()
+    if name not in available:
+        known = ", ".join(sorted(available)) or "none"
+        raise click.ClickException(f"No workflow {name!r} (known: {known})")
+    try:
+        return build_plan(available[name], container.registry, container.inventory.list())
+    except FleetError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@workflow.command(name="plan")
+@click.argument("name")
+@click.pass_context
+def workflow_plan(ctx: click.Context, name: str) -> None:
+    """Show everything a workflow would do, without doing any of it."""
+    container = _container(ctx)
+    plan = _plan_for(container, name)
+    for line in plan.describe():
+        click.echo(line)
+    click.echo(f"\ndigest: {plan.digest()}")
+    if plan.is_empty:
+        click.echo("Nothing to do: no target matched any device.")
+    blocked = plan.blocked
+    if blocked:
+        click.echo(f"{len(blocked)} task(s) blocked and will be skipped.")
+
+
+@workflow.command(name="run")
+@click.argument("name")
+@click.option("--dry-run", is_flag=True, help="Show the plan and stop.")
+@click.option("--confirm", "expected_digest", default=None, help="Refuse to run unless the plan still matches this digest.")
+@click.pass_context
+def workflow_run(ctx: click.Context, name: str, dry_run: bool, expected_digest: str | None) -> None:
+    """Run a workflow."""
+    container = _container(ctx)
+    plan = _plan_for(container, name)
+
+    if dry_run:
+        for line in plan.describe():
+            click.echo(line)
+        click.echo(f"\ndigest: {plan.digest()}")
+        click.echo("Dry run: nothing was executed.")
+        return
+
+    if expected_digest and expected_digest != plan.digest():
+        raise click.ClickException(f"The fleet changed since that plan was made (now {plan.digest()}). Re-plan and try again.")
+
+    if plan.is_empty:
+        click.echo("Nothing to do: no target matched any device.")
+        return
+
+    engine = WorkflowEngine(_task_runner(container), container.audit, actor=container.actor)
+    report = engine.run(plan)
+
+    for outcome in report.outcomes:
+        operation = container.operations.get(outcome.op_id)
+        marker = "+" if outcome.status is OperationStatus.COMPLETED else "!"
+        click.echo(f"[{marker}] {outcome.task.step_id} {outcome.task.target_id}: {(operation.result if operation else outcome.status.value)}")
+
+    click.echo(report.summary())
+    if not report.succeeded:
+        raise click.ClickException("Workflow did not complete cleanly")
+
+
+def _task_runner(container: Container) -> Any:
+    """Build the callback the engine uses to execute one planned task.
+
+    Constructing a transport and a context is composition-root work, which is
+    why the engine takes this rather than doing it itself.
+    """
+
+    def _run(task: Any, op_id: str) -> OperationStatus:
+        step = container.registry.step(task.use)
+        flags = dict(task.params)
+        if task.device is None:
+            return _run_fleet_step(container, step, flags, op_id)
+        return _run_device_step(container, step, task.device.id, flags, op_id)
+
+    return _run

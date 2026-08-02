@@ -11,6 +11,7 @@ import yaml
 
 from ...core.registry import RegisteredStep
 from ...core.workflow.step import ProfileTransform
+from ...core.workflow.workflow import Workflow
 from . import steps
 from .spec import APP_ID
 from .transforms.addons import PruneAddons
@@ -63,6 +64,19 @@ class KodiApp:
             PruneAddons(allow=tuple(prune.get("allow", ())), allow_prefixes=tuple(prune.get("allow_prefixes", ()))),
             ApplySettings(overrides=settings.get("settings", {})),
         )
+
+    def workflows(self) -> list[Workflow]:
+        """RETURNS: list[Workflow]: Workflows shipped with this app.
+
+        A user-defined workflow of the same name takes precedence, so a
+        shipped one is a starting point rather than a constraint.
+        """
+        directory = resources.files(f"fleetctl.apps.{APP_ID}.data.workflows")
+        found: list[Workflow] = []
+        for entry in directory.iterdir():
+            if entry.name.endswith(".yml"):
+                found.append(Workflow.from_yaml(entry.read_text(encoding="utf-8"), source=entry.name))
+        return found
 
     def steps(self) -> list[RegisteredStep]:
         """RETURNS: list[RegisteredStep]: The capture, build, and deploy steps."""

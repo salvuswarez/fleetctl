@@ -25,6 +25,7 @@ from ..core.registry import Registry, discover
 from ..core.state import StateManager
 from ..core.transport.auditing import AuditingTransport
 from ..core.transport.base import Transport
+from ..core.workflow.workflow import Workflow, load_workflows
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class Container:
     config: Mapping[str, Any]
     home: Path
     actor: str
+    config_dir: Path
 
     @property
     def staging_root(self) -> Path:
@@ -65,6 +67,19 @@ class Container:
     def failures_root(self) -> Path:
         """RETURNS: Path: Where a failed operation's workspace is preserved."""
         return self.home / "forensics"
+
+    def workflows(self) -> dict[str, Workflow]:
+        """Every available workflow, shipped ones first.
+
+        **RETURNS:**
+            `dict[str, Workflow]`: By name. A user-defined workflow shadows a shipped one, so shipping a workflow never takes an option away.  <br>
+        """
+        available: dict[str, Workflow] = {}
+        for app in self.registry.app_packs():
+            for workflow in getattr(app, "workflows", list)():
+                available[workflow.name] = workflow
+        available.update(load_workflows(self.config_dir / "workflows"))
+        return available
 
     def transport_for(self, device: Device) -> Transport:
         """Open an audited transport to a device.
@@ -141,4 +156,5 @@ def build_container(
         config=config,
         home=home,
         actor=actor,
+        config_dir=config_dir,
     )
