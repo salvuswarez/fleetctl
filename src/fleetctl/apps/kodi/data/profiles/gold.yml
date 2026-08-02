@@ -1,0 +1,28 @@
+# The gold Kodi profile recipe.
+#
+# This file is the whole reason build is a separate stage: everything that
+# shapes what gets deployed lives here as data, so a second profile is a
+# second YAML file rather than a fork of the code.
+
+prune_addons:
+  # Exact addon ids to keep. Update when the gold profile's addon set
+  # intentionally changes.
+  allow:
+    - plugin.video.youtube
+    - script.globalsearch
+    - script.skinvariables
+
+  # Dependency and engine categories, kept by prefix. These only provide
+  # libraries and services other addons rely on, never a standalone content
+  # source, so allowing them wholesale is safe and avoids enumerating every
+  # transitive dependency by name.
+  allow_prefixes:
+    - script.module.
+    - service.
+    - metadata.
+    - resource.
+    - inputstream.
+    - repository.
+
+apply_settings:
+  settings: {}

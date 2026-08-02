@@ -22,13 +22,13 @@ import logging
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping
 
 from ...core.artifacts.ref import ArtifactRef
 from ...core.artifacts.store import require_kind
 from ...core.effects import Capability, Effect
 from ...core.errors import FleetError
-from ...core.state import AppStateSpec, StateManager
+from ...core.state import AppStateSpec
 from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec, TransformStepContext
 from .spec import APP_ID, PROFILE_MEMBERS, state_spec
 
@@ -62,32 +62,21 @@ DEPLOY = StepSpec(
 )
 
 
-class StateManagerFactory(Protocol):
-    """Supplies the state manager for the device a step is targeting.
-
-    Injected rather than imported: this is how an app pack reaches a device
-    pack's implementation without knowing which pack it is.
-    """
-
-    def __call__(self, context: DeviceStepContext) -> StateManager: ...
-
-
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
-def capture(context: DeviceStepContext, state_for: StateManagerFactory) -> StepResult:
+def capture(context: DeviceStepContext) -> StepResult:
     """Capture a device's Kodi profile and publish it as an artifact.
 
     **PARAMETERS:**
-        `context` (DeviceStepContext): The device, its transport, and resolved config.  <br>
-        `state_for` (StateManagerFactory): Resolves the device pack's state manager.  <br>
+        `context` (DeviceStepContext): The device, its resolved state manager, and config.  <br>
 
     **RETURNS:**
         `StepResult`: Carries the published capture under the ``capture`` artifact role.  <br>
     """
     spec = state_spec(exclude=tuple(context.config.get("capture_exclude", state_spec().exclude)))
-    manager = state_for(context)
+    manager = context.state
 
     context.handle.log(f"Capturing {APP_ID} profile from {context.device.id}...")
     context.handle.check_cancelled()
@@ -151,15 +140,14 @@ def build(context: TransformStepContext) -> StepResult:
     return StepResult(summary=f"Built {build_ref.wire}", artifacts={"build": build_ref}, facts={"source": ref.wire})
 
 
-def deploy(context: DeviceStepContext, state_for: StateManagerFactory) -> StepResult:
+def deploy(context: DeviceStepContext) -> StepResult:
     """Deploy a built profile to a device.
 
     Does no shaping. What remains here is only what genuinely varies per
     device: which build to send, and the device's own overrides.
 
     **PARAMETERS:**
-        `context` (DeviceStepContext): The device, its transport, and resolved config.  <br>
-        `state_for` (StateManagerFactory): Resolves the device pack's state manager.  <br>
+        `context` (DeviceStepContext): The device, its resolved state manager, and config.  <br>
 
     **RETURNS:**
         `StepResult`: Names the build that was deployed.  <br>
@@ -174,7 +162,7 @@ def deploy(context: DeviceStepContext, state_for: StateManagerFactory) -> StepRe
     local = context.artifacts.get(ref, context.workspace / ref.name)
 
     context.handle.check_cancelled()
-    manager = state_for(context)
+    manager = context.state
     manager.restore(state_spec(), local)
 
     context.handle.log("Profile restored")

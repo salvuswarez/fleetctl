@@ -5,17 +5,22 @@ from __future__ import annotations
 import logging
 from functools import cached_property
 from importlib import resources
+from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
 
 from ...core.effects import Capability, Effect
+from ...core.inventory.device import Device
+from ...core.registry import RegisteredStep
 from ...core.state import AppStateSpec
 from ...core.transport.base import CommandRunner, Transport
 from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
 from ..android import actions
+from ..android.keys import AdbKeyStore
 from ..android.quirks import AndroidQuirks
 from ..android.state import AndroidStateManager
+from ..android.transport import AdbTransport
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +94,10 @@ class FireTvPack:
             return override
         return _load(f"{name}.yml")
 
+    def steps(self) -> list[RegisteredStep]:
+        """RETURNS: list[RegisteredStep]: The steps this pack provides."""
+        return [RegisteredStep(spec=MAINTAIN, run=self.maintain, provider=PACK_ID)]
+
     def probe(self, runner: CommandRunner) -> dict[str, str] | None:
         """Claim a host if it is an Amazon device.
 
@@ -104,6 +113,25 @@ class FireTvPack:
         if MANUFACTURER.lower() not in facts.get("manufacturer", "").lower():
             return None
         return {**facts, "type": PACK_ID}
+
+    def transport_for(self, device: Device, settings: Mapping[str, Any]) -> AdbTransport:
+        """Open a connected transport to `device`.
+
+        The pack builds this, not the composition root: which protocol a
+        device speaks is the pack's knowledge, and `use_netcat` comes from its
+        own quirk data.
+
+        **PARAMETERS:**
+            `device` (Device): The target.  <br>
+            `settings` (Mapping[str, Any]): Must carry `key_dir`, the directory holding ADB key material.  <br>
+
+        **RETURNS:**
+            `AdbTransport`: A connected transport. The caller closes it.  <br>
+        """
+        keys = AdbKeyStore(Path(str(settings["key_dir"])), settings.get("audit"))
+        transport = AdbTransport(device.address, keys, use_netcat=self.quirks.push_via_netcat)
+        transport.connect()
+        return transport
 
     def state_manager(self, transport: Transport) -> AndroidStateManager:
         """RETURNS: AndroidStateManager: A state manager carrying this pack's quirks."""

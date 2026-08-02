@@ -47,6 +47,21 @@ def _cleanup_step(context: DeviceStepContext) -> StepResult:
     return StepResult(summary=f"Cleaned {context.device.id}", facts={"free": freed})
 
 
+class _NullState:
+    """A state manager that refuses to be used, for steps that never touch it."""
+
+    platform = "test"
+
+    def state_root(self, spec: object) -> str:
+        raise AssertionError("this step must not touch device state")
+
+    def snapshot(self, spec: object, destination: Path) -> Path:
+        raise AssertionError("this step must not touch device state")
+
+    def restore(self, spec: object, archive: Path) -> None:
+        raise AssertionError("this step must not touch device state")
+
+
 @pytest.fixture
 def sink() -> InMemoryAuditSink:
     return InMemoryAuditSink()
@@ -88,6 +103,7 @@ def _run(
             DeviceStepContext(
                 device=device,
                 transport=transport,
+                state=_NullState(),
                 artifacts=artifacts,
                 inventory=inventory,
                 config={"prune_paths": prune_paths},

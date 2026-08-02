@@ -28,6 +28,7 @@ from ..effects import Capability, Effect
 from ..inventory.device import Device
 from ..inventory.store import DeviceStore
 from ..operations.registry import OperationHandle
+from ..state import StateManager
 from ..transport.base import Transport
 
 
@@ -72,9 +73,16 @@ class FleetStepContext:
 class DeviceStepContext:
     """What a step targeting one device receives.
 
+    `state` is the resolved device pack's implementation of the `state` verb.
+    Handing it to the step here — rather than having the step ask for it —
+    is what lets an app pack snapshot and restore without ever learning which
+    pack it is talking to. It is guaranteed present for any step declaring
+    `Capability.STATE`, because the engine checks capabilities before running.
+
     **PARAMETERS:**
         `device` (Device): The target. Never optional here.  <br>
         `transport` (Transport): Already wrapped for auditing by the composition root.  <br>
+        `state` (StateManager): The device pack's state manager for this device.  <br>
         `artifacts` (ArtifactStore): Where artifacts are read and written.  <br>
         `inventory` (DeviceStore): The known fleet.  <br>
         `config` (Mapping[str, Any]): Config already resolved for this device and step.  <br>
@@ -84,6 +92,7 @@ class DeviceStepContext:
 
     device: Device
     transport: Transport
+    state: StateManager
     artifacts: ArtifactStore
     inventory: DeviceStore
     config: Mapping[str, Any]

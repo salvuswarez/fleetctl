@@ -1,0 +1,314 @@
+"""The `fleetctl` command group.
+
+`run` is deliberately generic. A step registers once and becomes runnable
+here with no command written for it, which is the same property that will let
+the Home Assistant services and the MCP tools be generated rather than
+hand-maintained.
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+import click
+
+from .._version import get_version
+from ..core.config.layering import for_device
+from ..core.errors import FleetError
+from ..core.observability.audit import verify_chain
+from ..core.observability.correlation import CorrelationFilter
+from ..core.operations.registry import OperationStatus
+from ..core.registry import RegisteredStep
+from ..core.transport.base import Transport
+from ..core.workflow.runner import check_capabilities, run_step
+from ..core.workflow.step import DeviceStepContext, FleetStepContext, StepResult, TransformStepContext
+from .bootstrap import Container, build_container
+
+LOGGER = logging.getLogger(__name__)
+
+_LOG_FORMAT = "%(asctime)s %(levelname)-8s [%(op_id)s] %(name)s: %(message)s"
+
+
+def configure_logging(verbose: int) -> None:
+    """Send diagnostic logging to stderr, annotated with correlation ids.
+
+    **PARAMETERS:**
+        `verbose` (int): Count of ``-v`` flags. ``0`` shows warnings and worse, ``1`` adds info, ``2`` or more adds debug.  <br>
+    """
+    level = {0: logging.WARNING, 1: logging.INFO}.get(verbose, logging.DEBUG)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    # On the handler, not a logger, so records from libraries are annotated too.
+    handler.addFilter(CorrelationFilter())
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(level)
+
+
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(get_version(), "-V", "--version", prog_name="fleetctl")
+@click.option("-v", "--verbose", count=True, help="Increase log verbosity; repeat for debug.")
+@click.option("--config-dir", type=click.Path(path_type=Path), default=None, help="Directory holding fleet.yml and inventory/. Defaults to ./config.")
+@click.option("--home", type=click.Path(path_type=Path), default=None, help="Runtime state directory. Defaults to ~/.fleetctl.")
+@click.pass_context
+def main(ctx: click.Context, verbose: int, config_dir: Path | None, home: Path | None) -> None:
+    """Manage a fleet of home devices."""
+    configure_logging(verbose)
+    ctx.obj = {"config_dir": config_dir, "home": home}
+
+
+def _container(ctx: click.Context) -> Container:
+    options = ctx.obj or {}
+    return build_container(config_dir=options.get("config_dir"), home=options.get("home"), actor="cli")
+
+
+@main.command(name="packs")
+@click.pass_context
+def list_packs(ctx: click.Context) -> None:
+    """List installed device packs and app packs."""
+    container = _container(ctx)
+    packs = container.registry.device_packs()
+    if not packs:
+        click.echo("No device packs installed.")
+    for pack in packs:
+        verbs = ", ".join(sorted(capability.value for capability in pack.capabilities))
+        click.echo(f"{pack.id:<12} platform={pack.platform:<10} {verbs}")
+
+
+@main.command(name="steps")
+@click.pass_context
+def list_steps(ctx: click.Context) -> None:
+    """List every registered step."""
+    container = _container(ctx)
+    for step in container.registry.steps():
+        click.echo(f"{step.spec.id:<20} [{step.spec.effect.value:<11}] {step.spec.summary}")
+
+
+@main.group()
+def devices() -> None:
+    """Inspect the known fleet."""
+
+
+@devices.command(name="list")
+@click.pass_context
+def devices_list(ctx: click.Context) -> None:
+    """List known devices."""
+    container = _container(ctx)
+    known = container.inventory.list()
+    if not known:
+        click.echo("No devices in inventory.")
+        return
+    for device in known:
+        tags = ",".join(device.tags) or "-"
+        click.echo(f"{device.id:<16} {device.type or '?':<10} {device.address or '?':<16} tags={tags}")
+
+
+@main.command(name="config")
+@click.argument("device_id")
+@click.pass_context
+def show_config(ctx: click.Context, device_id: str) -> None:
+    """Explain the resolved config for a device, layer by layer."""
+    container = _container(ctx)
+    device = container.inventory.get(device_id)
+    if device is None:
+        raise click.ClickException(f"Unknown device: {device_id}")
+    resolved = for_device(fleet=dict(container.config), device=device.vars)
+    for line in resolved.explain():
+        click.echo(line)
+
+
+@main.command(name="run")
+@click.argument("step_id")
+@click.option("--device", "device_id", default=None, help="Target device id. Required for device-scoped steps.")
+@click.option("--set", "overrides", multiple=True, metavar="KEY=VALUE", help="Config override for this run; repeatable.")
+@click.pass_context
+def run(ctx: click.Context, step_id: str, device_id: str | None, overrides: tuple[str, ...]) -> None:
+    """Run a registered step. Use `fleetctl steps` to see what is available."""
+    container = _container(ctx)
+    try:
+        step = container.registry.step(step_id)
+    except FleetError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    flags = _parse_overrides(overrides)
+    op_id = f"{step_id.replace('.', '-')}-{int(time.time())}"
+
+    if step.spec.scope == "device":
+        status = _run_device_step(container, step, device_id, flags, op_id)
+    else:
+        status = _run_fleet_step(container, step, flags, op_id)
+
+    operation = container.operations.get(op_id)
+    for entry in operation.logs if operation else []:
+        click.echo(f"[*] {entry['message']}")
+
+    if status is not OperationStatus.COMPLETED:
+        raise click.ClickException((operation.result if operation else None) or f"{step_id} did not complete")
+    click.echo(f"[+] {operation.result if operation else step_id}")
+
+
+def _run_device_step(container: Container, step: RegisteredStep, device_id: str | None, flags: dict[str, Any], op_id: str) -> OperationStatus:
+    if not device_id:
+        raise click.UsageError(f"{step.spec.id} targets a device; pass --device")
+    device = container.inventory.get(device_id)
+    if device is None:
+        raise click.ClickException(f"Unknown device: {device_id}")
+
+    resolved = for_device(fleet=dict(container.config), device=device.vars, flags=flags)
+    transport: Transport | None = None
+    try:
+        transport = container.transport_for(device)
+        check_capabilities(step.spec, transport)
+        state = container.state_for(device, transport)
+
+        def body(handle: Any, workspace: Path) -> StepResult:
+            return step.run(
+                DeviceStepContext(
+                    device=device,
+                    transport=transport,
+                    state=state,
+                    artifacts=container.artifacts,
+                    inventory=container.inventory,
+                    config=resolved.values,
+                    handle=handle,
+                    workspace=workspace,
+                )
+            )
+
+        return run_step(
+            container.operations,
+            step.spec,
+            body,
+            op_id=op_id,
+            target=device.id,
+            actor=container.actor,
+            run_id=op_id,
+            staging_root=container.staging_root,
+            failures_root=container.failures_root,
+        )
+    except FleetError as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        if transport is not None:
+            transport.close()
+
+
+def _run_fleet_step(container: Container, step: RegisteredStep, flags: dict[str, Any], op_id: str) -> OperationStatus:
+    resolved = for_device(fleet=dict(container.config), flags=flags)
+    transforms = _transforms_for(container, step.provider)
+
+    def body(handle: Any, workspace: Path) -> StepResult:
+        if step.spec.scope == "transform":
+            return step.run(
+                TransformStepContext(
+                    transforms=transforms,
+                    artifacts=container.artifacts,
+                    config=resolved.values,
+                    handle=handle,
+                    workspace=workspace,
+                )
+            )
+        return step.run(
+            FleetStepContext(
+                artifacts=container.artifacts,
+                inventory=container.inventory,
+                config=resolved.values,
+                handle=handle,
+                workspace=workspace,
+            )
+        )
+
+    return run_step(
+        container.operations,
+        step.spec,
+        body,
+        op_id=op_id,
+        actor=container.actor,
+        run_id=op_id,
+        staging_root=container.staging_root,
+        failures_root=container.failures_root,
+    )
+
+
+def _transforms_for(container: Container, provider: str) -> tuple[Any, ...]:
+    """RETURNS: tuple: The provider app's transform chain, or empty if it has none."""
+    try:
+        app = container.registry.app_pack(provider)
+    except FleetError:
+        return ()
+    return tuple(getattr(app, "transforms", ()))
+
+
+def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, Any]:
+    """RETURNS: dict[str, Any]: `KEY=VALUE` pairs as a mapping.
+
+    **RAISES:**
+        `click.UsageError`: If an entry is not `KEY=VALUE`.  <br>
+    """
+    parsed: dict[str, Any] = {}
+    for entry in overrides:
+        key, separator, value = entry.partition("=")
+        if not separator:
+            raise click.UsageError(f"--set expects KEY=VALUE, got {entry!r}")
+        parsed[key.strip()] = value.strip()
+    return parsed
+
+
+@main.group()
+def artifacts() -> None:
+    """Inspect stored artifacts."""
+
+
+@artifacts.command(name="list")
+@click.argument("kind")
+@click.pass_context
+def artifacts_list(ctx: click.Context, kind: str) -> None:
+    """List artifacts of a kind, newest first (e.g. captures, builds)."""
+    container = _container(ctx)
+    found = container.artifacts.list(kind)
+    if not found:
+        click.echo(f"No artifacts of kind {kind!r}.")
+        return
+    for info in found:
+        click.echo(f"{info.ref.wire:<44} {info.size // 1024:>8}KB  {info.created_at}")
+
+
+@main.group()
+def audit() -> None:
+    """Inspect the audit trail."""
+
+
+@audit.command(name="verify")
+@click.pass_context
+def audit_verify(ctx: click.Context) -> None:
+    """Verify the audit trail's hash chain is unbroken."""
+    container = _container(ctx)
+    events = container.audit.records()
+    if not events:
+        click.echo("No audit records found.")
+        return
+    intact, first_bad = verify_chain(events)
+    if intact:
+        click.echo(f"[+] {len(events)} record(s) verified; chain intact.")
+        return
+    raise click.ClickException(f"Audit chain broken at record {first_bad}")
+
+
+@audit.command(name="tail")
+@click.option("-n", "count", default=20, show_default=True, help="How many records to show.")
+@click.pass_context
+def audit_tail(ctx: click.Context, count: int) -> None:
+    """Show the most recent audit records."""
+    container = _container(ctx)
+    for event in container.audit.records()[-count:]:
+        target = event.target or "-"
+        click.echo(f"{event.ts}  {event.actor:<12} {target:<16} {event.outcome.value:<8} {event.action}")
+
+
+if __name__ == "__main__":
+    main()

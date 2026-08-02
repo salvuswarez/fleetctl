@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
+from ..config.loader import load_yaml_text
 from ..errors import ConfigError
 from .device import Device
 from .reconcile import ReconcileResult, reconcile
@@ -100,9 +101,7 @@ class DeviceStore:
 
     def _parse(self, text: str) -> Any:
         if self._is_yaml:
-            import yaml
-
-            return yaml.safe_load(text)
+            return load_yaml_text(text, source=str(self._path))
         return json.loads(text)
 
     def _save(self, devices: builtins.list[Device]) -> None:

@@ -242,6 +242,10 @@ class ChainedAuditWriter:
         self._seq = 0
         self._prev_hash = GENESIS_HASH
 
+    def records(self) -> list[AuditEvent]:
+        """RETURNS: list[AuditEvent]: Everything the underlying sink holds, in write order."""
+        return self._sink.read_all()
+
     def write(self, event: AuditEvent) -> AuditEvent:
         """Redact, chain, and persist `event`.
 

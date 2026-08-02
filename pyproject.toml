@@ -33,7 +33,13 @@ Repository = "https://github.com/salvuswarez/fleetctl"
 Issues = "https://github.com/salvuswarez/fleetctl/issues"
 
 [project.scripts]
-fleetctl = "fleetctl.cli:main"
+fleetctl = "fleetctl.cli.main:main"
+
+[project.entry-points."fleetctl.packs"]
+firetv = "fleetctl.packs.firetv.pack:FireTvPack"
+
+[project.entry-points."fleetctl.apps"]
+kodi = "fleetctl.apps.kodi.pack:KodiApp"
 
 [dependency-groups]
 dev = [

@@ -15,6 +15,7 @@ from fleetctl.core.operations.registry import OperationRegistry
 from fleetctl.core.transport.auditing import AuditingTransport
 from fleetctl.core.transport.fake import FakeTransport
 from fleetctl.core.workflow.step import DeviceStepContext, StepResult
+from fleetctl.packs.android.state import AndroidStateManager
 from fleetctl.packs.firetv.pack import MAINTAIN, FireTvPack
 
 FACTS = {
@@ -117,6 +118,7 @@ def _run_maintain(transport: FakeTransport, tmp_path: Path, sink: InMemoryAuditS
     context = DeviceStepContext(
         device=device,
         transport=audited,
+        state=AndroidStateManager(audited, _pack().quirks),
         artifacts=LocalArtifactStore(tmp_path / "store"),
         inventory=inventory,
         config={"bloat_packages": ["com.amazon.a", "com.amazon.b", "com.amazon.blocked"]},

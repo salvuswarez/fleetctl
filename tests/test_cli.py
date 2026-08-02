@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from fleetctl._version import get_version
-from fleetctl.cli import configure_logging, main
+from fleetctl.cli.main import configure_logging, main
 
 
 def test_version_flag_reports_the_installed_version() -> None:
@@ -42,7 +42,7 @@ def test_group_callback_configures_logging_from_the_verbose_count(monkeypatch: p
     subcommand on a clone of the real group rather than mutating `main`."""
     # Arrange
     seen: list[int] = []
-    monkeypatch.setattr("fleetctl.cli.configure_logging", seen.append)
+    monkeypatch.setattr("fleetctl.cli.main.configure_logging", seen.append)
     group = click.Group("fleetctl", params=main.params, callback=main.callback)
 
     @group.command("noop")
