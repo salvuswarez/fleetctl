@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -94,6 +93,11 @@ class Toolkit:
     def list_operations(self) -> list[dict[str, Any]]:
         """RETURNS: list[dict[str, Any]]: Snapshots of every tracked operation in this process."""
         return list(self.container.operations.all_snapshots().values())
+
+    def get_operation(self, op_id: str) -> dict[str, Any] | None:
+        """RETURNS: dict[str, Any] | None: One operation's snapshot, or None if it is unknown or has aged out."""
+        operation = self.container.operations.get(op_id)
+        return operation.snapshot() if operation else None
 
     def audit_tail(self, count: int = 20) -> list[dict[str, Any]]:
         """RETURNS: list[dict[str, Any]]: The most recent audit records, already redacted."""
@@ -187,7 +191,7 @@ class Toolkit:
 
         from ..cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
 
-        op_id = f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}-{int(time.time())}"
+        op_id = self.container.operations.new_id(f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}")
         flags = dict(params or {})
         with correlate(actor=self.actor):
             status = (
@@ -197,12 +201,74 @@ class Toolkit:
             )
         operation = self.container.operations.get(op_id)
         return {
+            "op_id": op_id,
             "step": step_id,
             "target": device_id or "fleet",
             "status": status.value,
             "result": operation.result if operation else None,
             "logs": [entry["message"] for entry in operation.logs] if operation else [],
         }
+
+    def cancel_operation(self, op_id: str) -> dict[str, Any]:
+        """Ask a running operation to stop.
+
+        The operation is not marked cancelled here: the work observes the
+        request at its next step boundary and unwinds itself, so a device is
+        never left mid-transfer.
+
+        **PARAMETERS:**
+            `op_id` (str): Which operation, from `list_operations`.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: Whether the request was accepted, and the operation's status.  <br>
+        """
+        requested = self.container.operations.request_cancel(op_id)
+        operation = self.container.operations.get(op_id)
+        with correlate(actor=self.actor, op_id=op_id):
+            self.container.audit.write(
+                AuditEvent.build(
+                    AuditKind.DECISION,
+                    f"operation.cancel {op_id}",
+                    target=operation.target if operation else "unknown",
+                    outcome=Outcome.OK if requested else Outcome.SKIPPED,
+                    detail={"surface": "agent", "step_id": operation.step_id if operation else None},
+                )
+            )
+        return {
+            "op_id": op_id,
+            "requested": requested,
+            "status": operation.status.value if operation else None,
+            "reason": None if requested else ("Unknown operation" if operation is None else f"Already {operation.status.value}"),
+        }
+
+    def rerun_operation(self, op_id: str, *, approve: bool = False) -> dict[str, Any]:
+        """Run a finished operation's step again, with the flags it had.
+
+        A new operation id is minted rather than reusing the old record, so
+        the failed attempt's logs survive for comparison. The rerun is gated
+        by policy afresh — approving an operation once does not license
+        repeating it.
+
+        **PARAMETERS:**
+            `op_id` (str): A finished operation, from `list_operations`.  <br>
+            `approve` (bool): Whether the caller approves, when the policy asks.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The new run's outcome, plus the id it was rerun from.  <br>
+
+        **RAISES:**
+            `FleetError`: If `op_id` is unknown or still running.  <br>
+            `ApprovalRequired`: If the policy asks and `approve` is false.  <br>
+            `PolicyDenied`: If the policy refuses outright.  <br>
+        """
+        operation = self.container.operations.get(op_id)
+        if operation is None:
+            raise FleetError(f"Unknown operation: {op_id}")
+        if operation.status is OperationStatus.RUNNING:
+            raise FleetError(f"{op_id} is still running; cancel it before rerunning.")
+
+        outcome = self.run_step(operation.step_id, device_id=operation.target or None, params=operation.params, approve=approve)
+        return {**outcome, "rerun_of": op_id}
 
     # -- Internal ----------------------------------------------------------
 

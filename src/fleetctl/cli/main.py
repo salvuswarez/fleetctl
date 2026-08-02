@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +134,7 @@ def run(ctx: click.Context, step_id: str, device_id: str | None, overrides: tupl
         raise click.ClickException(str(exc)) from exc
 
     flags = _parse_overrides(overrides)
-    op_id = f"{step_id.replace('.', '-')}-{int(time.time())}"
+    op_id = container.operations.new_id(step_id.replace(".", "-"))
 
     device = container.inventory.get(device_id) if device_id else None
     decision = container.policy.check(actor=container.actor, step_id=step_id, effect=step.spec.effect, device=device)
@@ -195,6 +194,7 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
             target=device.id,
             actor=container.actor,
             run_id=op_id,
+            params=flags,
             staging_root=container.staging_root,
             failures_root=container.failures_root,
         )
@@ -237,6 +237,7 @@ def _run_fleet_step(container: Container, step: RegisteredStep, flags: dict[str,
         op_id=op_id,
         actor=container.actor,
         run_id=op_id,
+        params=flags,
         staging_root=container.staging_root,
         failures_root=container.failures_root,
     )

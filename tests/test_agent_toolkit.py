@@ -340,3 +340,124 @@ def test_a_successful_run_shows_up_in_the_audit_tail(tmp_path: Path) -> None:
     # Assert
     actions = [event["action"] for event in toolkit.audit_tail(50)]
     assert any("touch" in action for action in actions)
+
+
+# -- Cancel and rerun: what the Home Assistant panel drives ------------------
+
+
+def test_a_finished_operation_can_be_rerun_with_the_flags_it_had(tmp_path: Path) -> None:
+    """Rerunning with default flags instead of the recorded ones silently
+    reruns a different job than the one the user is looking at."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    first = toolkit.run_step("stub.touch", device_id="stub-1", params={"profile": "gold"})
+
+    # Act
+    second = toolkit.rerun_operation(first["op_id"])
+
+    # Assert
+    assert second["rerun_of"] == first["op_id"]
+    assert second["op_id"] != first["op_id"]
+    assert second["status"] == "completed"
+    rerun = toolkit.get_operation(second["op_id"])
+    assert rerun is not None and rerun["params"] == {"profile": "gold"}
+
+
+def test_the_original_operation_survives_its_rerun(tmp_path: Path) -> None:
+    """A failed attempt's logs are the evidence for why it was rerun."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    first = toolkit.run_step("stub.touch", device_id="stub-1")
+
+    # Act
+    toolkit.rerun_operation(first["op_id"])
+
+    # Assert
+    assert toolkit.get_operation(first["op_id"]) is not None
+    assert len(toolkit.list_operations()) == 2
+
+
+def test_a_rerun_is_gated_afresh(tmp_path: Path) -> None:
+    """Approving a destructive step once must not license repeating it."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, GATED)
+    first = toolkit.run_step("stub.touch", device_id="stub-1", approve=True)
+
+    # Act / Assert
+    with pytest.raises(ApprovalRequired):
+        toolkit.rerun_operation(first["op_id"])
+    assert toolkit.rerun_operation(first["op_id"], approve=True)["status"] == "completed"
+
+
+def test_rerunning_an_unknown_operation_says_so(tmp_path: Path) -> None:
+    # Act / Assert
+    with pytest.raises(FleetError) as caught:
+        _toolkit(tmp_path, PERMISSIVE).rerun_operation("no-such-op")
+    assert "Unknown operation" in str(caught.value)
+
+
+def test_cancelling_a_finished_operation_is_refused_not_silently_accepted(tmp_path: Path) -> None:
+    """A panel that shows "cancelled" for work that already ran is lying."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    finished = toolkit.run_step("stub.touch", device_id="stub-1")
+
+    # Act
+    outcome = toolkit.cancel_operation(finished["op_id"])
+
+    # Assert
+    assert outcome["requested"] is False
+    assert outcome["reason"] == "Already completed"
+
+
+def test_cancelling_an_unknown_operation_reports_it(tmp_path: Path) -> None:
+    # Act
+    outcome = _toolkit(tmp_path, PERMISSIVE).cancel_operation("no-such-op")
+
+    # Assert
+    assert outcome == {"op_id": "no-such-op", "requested": False, "status": None, "reason": "Unknown operation"}
+
+
+def test_a_running_operation_accepts_a_cancel_request(tmp_path: Path) -> None:
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    toolkit.container.operations.start("live-op", "stub.touch", "stub-1")
+
+    # Act
+    outcome = toolkit.cancel_operation("live-op")
+
+    # Assert
+    assert outcome["requested"] is True
+    assert toolkit.container.operations.is_cancel_requested("live-op")
+
+
+def test_every_cancel_is_audited(tmp_path: Path) -> None:
+    """Cancellation stops work mid-flight; who asked must be on the record."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    toolkit.container.operations.start("live-op", "stub.touch", "stub-1")
+
+    # Act
+    toolkit.cancel_operation("live-op")
+
+    # Assert
+    events = [event for event in toolkit.container.audit.records() if event.action.startswith("operation.cancel")]
+    assert len(events) == 1
+    assert events[0].kind is AuditKind.DECISION
+    assert events[0].outcome is Outcome.OK
+    assert events[0].target == "stub-1"
+
+
+def test_an_operation_records_the_step_it_ran(tmp_path: Path) -> None:
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    outcome = toolkit.run_step("stub.look", device_id="stub-1")
+
+    # Assert
+    snapshot = toolkit.get_operation(outcome["op_id"])
+    assert snapshot is not None
+    assert snapshot["step_id"] == "stub.look"
+    assert snapshot["target"] == "stub-1"
+    assert toolkit.get_operation("nope") is None

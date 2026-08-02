@@ -114,12 +114,30 @@ def build_server(toolkit: Toolkit) -> Any:
         """Report one operation's current status and its log so far."""
 
         def _lookup() -> str:
-            snapshots = {snapshot["id"]: snapshot for snapshot in toolkit.list_operations()}
-            if op_id not in snapshots:
-                return _render({"error": f"No operation {op_id!r} in this process."})
-            return _render(snapshots[op_id])
+            snapshot = toolkit.get_operation(op_id)
+            return _render(snapshot if snapshot else {"error": f"No operation {op_id!r} in this process."})
 
         return _guard(_lookup)
+
+    @server.tool()
+    def cancel_operation(op_id: str) -> str:
+        """Ask a running operation to stop.
+
+        It stops at its next step boundary rather than immediately, so a
+        device is never left mid-transfer. Poll operation_status to see it
+        take effect.
+        """
+        return _guard(lambda: _render(toolkit.cancel_operation(op_id)))
+
+    @server.tool()
+    def rerun_operation(op_id: str, approve: bool = False) -> str:
+        """Run a finished operation's step again with the same parameters.
+
+        Starts a new operation, leaving the original's logs intact. Policy is
+        applied afresh, so set `approve` only after showing the user what the
+        step will change.
+        """
+        return _guard(lambda: _render(toolkit.rerun_operation(op_id, approve=approve)))
 
     return server
 

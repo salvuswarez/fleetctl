@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 from ..effects import missing_capabilities
 from ..errors import FleetError, OperationCancelled
@@ -44,6 +44,7 @@ def run_step(
     target: str = "",
     actor: str = "-",
     run_id: str = "-",
+    params: Mapping[str, Any] | None = None,
     staging_root: Path,
     failures_root: Path | None = None,
 ) -> OperationStatus:
@@ -57,13 +58,14 @@ def run_step(
         `target` (str): Device id or address, empty for fleet-level work.  <br>
         `actor` (str): Who initiated this, recorded on every audit event.  <br>
         `run_id` (str): Correlation id for the enclosing workflow run.  <br>
+        `params` (Mapping[str, Any] | None): Flags this run was given, recorded on the operation so it can be rerun.  <br>
         `staging_root` (Path): Parent directory for the operation's workspace.  <br>
         `failures_root` (Path | None, optional): Where to preserve the workspace on failure. Defaults to ``None``.  <br>
 
     **RETURNS:**
         `OperationStatus`: The terminal status recorded for this operation.  <br>
     """
-    handle = registry.start(op_id, spec.id, target)
+    handle = registry.start(op_id, spec.id, target, params)
     with correlate(run_id=run_id, step_id=spec.id, op_id=op_id, actor=actor):
         try:
             with workspace(staging_root, op_id, failures_root=failures_root) as staging:
