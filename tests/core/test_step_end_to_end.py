@@ -47,6 +47,19 @@ def _cleanup_step(context: DeviceStepContext) -> StepResult:
     return StepResult(summary=f"Cleaned {context.device.id}", facts={"free": freed})
 
 
+class _NullApps:
+    """An app manager that refuses to be used, for steps that never touch it."""
+
+    def installed_version(self, identifier: str) -> str:
+        raise AssertionError("this step must not query installed apps")
+
+    def install(self, package: Path, *, identifier: str = "") -> None:
+        raise AssertionError("this step must not install anything")
+
+    def stop(self, identifier: str) -> None:
+        raise AssertionError("this step must not stop an app")
+
+
 class _NullState:
     """A state manager that refuses to be used, for steps that never touch it."""
 
@@ -104,6 +117,7 @@ def _run(
                 device=device,
                 transport=transport,
                 state=_NullState(),
+                apps=_NullApps(),
                 artifacts=artifacts,
                 inventory=inventory,
                 config={"prune_paths": prune_paths},

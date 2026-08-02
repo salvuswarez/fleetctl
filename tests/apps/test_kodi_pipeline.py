@@ -27,6 +27,7 @@ from fleetctl.core.state import StateManager
 from fleetctl.core.transport.auditing import AuditingTransport
 from fleetctl.core.transport.fake import FakeTransport
 from fleetctl.core.workflow.step import DeviceStepContext, TransformStepContext
+from fleetctl.packs.android.appmgr import AndroidAppManager
 from fleetctl.packs.android.quirks import AndroidQuirks
 from fleetctl.packs.android.state import AndroidStateManager
 
@@ -95,6 +96,7 @@ def _device_context(
         device=device,
         transport=transport,
         state=state if state is not None else AndroidStateManager(transport, FIRE_OS),
+        apps=AndroidAppManager(transport, FIRE_OS),
         artifacts=store,
         inventory=inventory,
         config=config,

@@ -1,0 +1,19 @@
+name: fleet-maintenance
+description: >
+  Debloat, apply performance settings and trim caches across the fleet,
+  touching no Kodi profile. Safe to run on a schedule.
+
+steps:
+  - id: maintain-firetv
+    use: firetv.maintain
+    targets:
+      type: firetv
+    concurrency: 4
+    on_error: continue
+
+  - id: maintain-shield
+    use: shield.maintain
+    targets:
+      type: shield
+    concurrency: 2
+    on_error: continue

@@ -15,6 +15,7 @@ from fleetctl.core.operations.registry import OperationRegistry
 from fleetctl.core.transport.auditing import AuditingTransport
 from fleetctl.core.transport.base import Transport
 from fleetctl.core.workflow.step import DeviceStepContext
+from fleetctl.packs.android.appmgr import AndroidAppManager
 from fleetctl.packs.android.quirks import AndroidQuirks
 from fleetctl.packs.android.state import AndroidStateManager
 
@@ -59,6 +60,7 @@ def device_context(tmp_path: Path) -> DeviceContextFactory:
             device=device,
             transport=audited,
             state=AndroidStateManager(audited, quirks or AndroidQuirks()),
+            apps=AndroidAppManager(audited, quirks or AndroidQuirks()),
             artifacts=LocalArtifactStore(tmp_path / "store"),
             inventory=inventory,
             config=config or {},

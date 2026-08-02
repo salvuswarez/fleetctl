@@ -163,3 +163,29 @@ def stop_app(runner: CommandRunner, package: str) -> None:
 def reboot(runner: CommandRunner) -> None:
     """Reboot the device."""
     runner.exec_ok("reboot", effect=Effect.DESTRUCTIVE)
+
+
+def health(runner: CommandRunner, *, storage_path: str = "/sdcard") -> dict[str, str]:
+    """Collect a quick health picture from a device.
+
+    Read-only by construction: every probe here is a `getprop` or a `df`, so
+    a check can be run against the whole fleet without gating it.
+
+    **PARAMETERS:**
+        `runner` (CommandRunner): Connection to the device.  <br>
+        `storage_path` (str): Filesystem to report free space for.  <br>
+
+    **RETURNS:**
+        `dict[str, str]`: Facts plus `uptime` and `free_mb` where the device answered.  <br>
+    """
+    facts = read_facts(runner)
+    uptime = runner.exec_ok("cat /proc/uptime", effect=Effect.READ).split(" ")[0]
+    if uptime:
+        facts["uptime_hours"] = f"{float(uptime) / 3600:.1f}" if uptime.replace(".", "", 1).isdigit() else uptime
+    free = runner.exec_ok(f"df -k {shlex.quote(storage_path)}", effect=Effect.READ).splitlines()
+    if len(free) >= 2:
+        for value in reversed(free[-1].split()):
+            if value.isdigit():
+                facts["free_mb"] = str(int(value) // 1024)
+                break
+    return facts

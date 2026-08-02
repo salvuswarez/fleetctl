@@ -43,6 +43,19 @@ DEMANDING = StepSpec(
 EXPLODES = StepSpec(id="stub.explodes", summary="Always fails.", effect=Effect.MUTATING, requires=frozenset(), scope="device")
 
 
+class _StubApps:
+    """An application manager for a pack with no real device behind it."""
+
+    def installed_version(self, identifier: str) -> str:
+        return ""
+
+    def install(self, package: Path, *, identifier: str = "") -> None:
+        return None
+
+    def stop(self, identifier: str) -> None:
+        return None
+
+
 class _StubState:
     platform = "stub"
 
@@ -76,6 +89,9 @@ class _StubPack:
 
     def state_manager(self, transport: Transport) -> _StubState:
         return _StubState()
+
+    def app_manager(self, transport: Transport) -> _StubApps:
+        return _StubApps()
 
     def steps(self) -> Iterable[RegisteredStep]:
         return [

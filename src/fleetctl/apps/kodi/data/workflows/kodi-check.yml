@@ -1,0 +1,19 @@
+name: kodi-check
+description: >
+  Read-only health sweep. Reports each device's facts and free space, and
+  whether a newer stable Kodi exists than the published base image. Nothing
+  here changes anything, so it needs no approval under any policy.
+
+steps:
+  - id: check-devices
+    use: firetv.check
+    targets:
+      tags: [kodi]
+      type: firetv
+    concurrency: 8
+    on_error: continue
+
+  - id: check-kodi-update
+    use: kodi.check_update
+    targets: none
+    on_error: continue

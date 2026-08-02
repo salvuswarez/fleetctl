@@ -176,6 +176,7 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
         transport = container.transport_for(device)
         check_capabilities(step.spec, transport)
         state = container.state_for(device, transport)
+        app_manager = container.apps_for(device, transport)
 
         def body(handle: Any, workspace: Path) -> StepResult:
             return step.run(
@@ -183,6 +184,7 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
                     device=device,
                     transport=transport,
                     state=state,
+                    apps=app_manager,
                     artifacts=container.artifacts,
                     inventory=container.inventory,
                     config=resolved.values,

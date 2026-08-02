@@ -12,10 +12,12 @@ import yaml
 from ...core.registry import RegisteredStep
 from ...core.workflow.step import ProfileTransform
 from ...core.workflow.workflow import Workflow
-from . import steps
+from . import base_image, device_config, steps
 from .spec import APP_ID
 from .transforms.addons import PruneAddons
+from .transforms.advanced import RemoveThumbnailSubstitution
 from .transforms.settings import ApplySettings
+from .transforms.view_types import ApplyViewTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -60,10 +62,17 @@ class KodiApp:
         """
         prune = self.recipe.get("prune_addons", {})
         settings = self.recipe.get("apply_settings", {})
-        return (
+        views = self.recipe.get("apply_view_types", {})
+        thumbnails = self.recipe.get("remove_thumbnail_substitution")
+        chain: list[ProfileTransform] = [
             PruneAddons(allow=tuple(prune.get("allow", ())), allow_prefixes=tuple(prune.get("allow_prefixes", ()))),
             ApplySettings(overrides=settings.get("settings", {})),
-        )
+        ]
+        if thumbnails is not None:
+            chain.append(RemoveThumbnailSubstitution())
+        if views:
+            chain.append(ApplyViewTypes(includes_path=str(views.get("includes_path", "")), expressions=views.get("expressions", {})))
+        return tuple(chain)
 
     def workflows(self) -> list[Workflow]:
         """RETURNS: list[Workflow]: Workflows shipped with this app.
@@ -84,4 +93,8 @@ class KodiApp:
             RegisteredStep(spec=steps.CAPTURE, run=steps.capture, provider=APP_ID),
             RegisteredStep(spec=steps.BUILD, run=steps.build, provider=APP_ID),
             RegisteredStep(spec=steps.DEPLOY, run=steps.deploy, provider=APP_ID),
+            RegisteredStep(spec=base_image.FETCH_BASE, run=base_image.fetch_base, provider=APP_ID),
+            RegisteredStep(spec=base_image.CHECK_UPDATE, run=base_image.check_update, provider=APP_ID),
+            RegisteredStep(spec=base_image.INSTALL_BASE, run=base_image.install_base, provider=APP_ID),
+            RegisteredStep(spec=device_config.APPLY_DEVICE_CONFIG, run=device_config.apply_device_config, provider=APP_ID),
         ]

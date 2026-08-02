@@ -1,0 +1,15 @@
+name: kodi-capture-gold
+description: >
+  Capture the reference device's live profile and rebuild from it. Point this
+  at whichever device is currently the source of truth by tagging it `gold`;
+  nothing is deployed, so the result can be reviewed before it goes anywhere.
+
+steps:
+  - id: capture
+    use: kodi.capture
+    targets:
+      tags: [gold]
+
+  - id: build
+    use: kodi.build
+    targets: none

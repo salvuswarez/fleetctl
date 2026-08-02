@@ -5,12 +5,28 @@
 # second YAML file rather than a fork of the code.
 
 prune_addons:
-  # Exact addon ids to keep. Update when the gold profile's addon set
-  # intentionally changes.
+  # VERIFIED: derived 2026-08-02 from a real capture (Kodi 21.3 on Fire OS
+  # 7.7.1.3) rather than invented. An earlier placeholder list here would have
+  # deleted the skin, the main content addons and live TV, which is exactly
+  # the failure the predecessor hit by carrying a borrowed list forward.
+  #
+  # This is capture-faithful, NOT curated: it keeps everything that was on the
+  # device. Removing an entry is how you prune; do that deliberately, and
+  # test the result on a disposable device before it reaches one you rely on.
   allow:
+    - plugin.program.autocompletion
+    - plugin.program.lazylinks
+    - plugin.program.thecrewiz
+    - plugin.video.themoviedb.helper
+    - plugin.video.umbrella
     - plugin.video.youtube
+    - pvr.iptvsimple
+    - script.embuary.helper
+    - script.embuary.info
     - script.globalsearch
     - script.skinvariables
+    - script.texturemaker
+    - skin.arctic.fuse.3
 
   # Dependency and engine categories, kept by prefix. These only provide
   # libraries and services other addons rely on, never a standalone content
@@ -25,4 +41,69 @@ prune_addons:
     - repository.
 
 apply_settings:
-  settings: {}
+  # VERIFIED: ported from the predecessor's SETTING_OVERRIDES. Every entry
+  # here has an incident behind it, recorded inline — none is a preference.
+  settings:
+    addon_data/skin.arctic.fuse.3/settings.xml:
+      # Was `true`: preloaded every home tab's widgets at Kodi startup rather
+      # than only the visible one, which contributed to a low-memory kill on
+      # a 1.7GB stick.
+      startup.enablehubpreloading: "false"
+
+      # Arctic Fuse stores each of these under BOTH a lowercase and a
+      # PascalCase key -- an artefact of a skin-version migration -- and reads
+      # whichever it finds. Both spellings must be set or the tab keeps its
+      # old name.
+      homeswitcher.1102.name: "Series"
+      HomeSwitcher.1102.Name: "Series"
+      HomeSwitcher.1102.Shortcut.label: "Series"
+      homeswitcher.1104.name: "Browse"
+      HomeSwitcher.1104.Name: "Browse"
+      HomeSwitcher.1104.Shortcut.label: "Browse"
+
+      # Hides the Addons tab (slot 1108), leaving Live TV as the last one.
+      # The skin gates visibility on `!String.IsEmpty(...)`, so empty is off.
+      homeswitcher.1108.toggle: ""
+
+      # script.skinvariables only recompiles home-screen JSON into the skin's
+      # rendered includes when this hash changes. Without invalidating it, new
+      # hub JSON lands but the compiled includes stay stale even across a
+      # restart and a cache clear.
+      script-skinvariables-generator-hash: "invalidated-by-deploy"
+
+    addon_data/plugin.video.themoviedb.helper/settings.xml:
+      # Was `10`: up to ten concurrent background discover/image threads at
+      # once. A lower cap staggers the load instead of bursting it.
+      max_threads: "4"
+      # Trakt was never authenticated in this household, so every scrobble
+      # failed silently on every playback.
+      trakt_scrobbling: "false"
+
+    addon_data/plugin.video.umbrella/settings.xml:
+      # Was `Trakt` with no account authenticated, so every watched/progress
+      # lookup failed. This restores the addon's own shipped default.
+      indicators: "Local"
+
+    addon_data/plugin.video.thecrew/settings.xml:
+      trakt.scrobble: "false"
+      # Showed a Trakt list nav entry that cannot load without an account.
+      navi.traktlist: "false"
+
+# Kodi's thumbnail cache redirected over network SMB instead of local storage,
+# which compounded the low-memory kill above. Removing the substitution
+# restores the default local cache.
+remove_thumbnail_substitution: {}
+
+# Corrections to the skin's compiled view-type routing. Shipped defaults
+# render TV shows and seasons differently depending on whether the content
+# came from the library or a plugin; these make both unconditional. Held as
+# config because they are skin-version-specific.
+apply_view_types:
+  includes_path: skin.arctic.fuse.3/1080i/script-skinviewtypes-includes.xml
+  expressions:
+    Exp_View_505: >-
+      [[Container.Content(movies) + [[String.IsEmpty(Container.PluginName) |  String.IsEqual(Container.PluginName,plugin.video.themoviedb.helper)] |  [!String.IsEmpty(Container.PluginName)]]] | [Container.Content(tvshows)]]
+    Exp_View_521: >-
+      [Container.Content() + String.IsEqual(Container.Property(param.info),watch_providers) +  [!String.IsEmpty(Container.PluginName)]]
+    Exp_View_524: >-
+      [[Container.Content(sets) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [Container.Content(seasons)] |  [Container.Content(videoversions) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [!Window.IsVisible(MyMusicNav.xml) + Container.Content(genres) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [Container.Content(studios) + [[String.IsEmpty(Container.PluginName)] | [!String.IsEmpty(Container.PluginName)]]] |  [Container.Content(playlists) + [String.IsEmpty(Container.PluginName)]] |  [Container.Content() + String.IsEqual(Container.Property(param.info),watch_providers) + [String.IsEmpty(Container.PluginName)]]]

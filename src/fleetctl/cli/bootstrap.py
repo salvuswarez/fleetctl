@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from ..core.appmgr import AppManager
 from ..core.artifacts.store import ArtifactStore, LocalArtifactStore
 from ..core.config.loader import load_yaml_file
 from ..core.config.secrets import EnvSecretProvider, SecretResolver
@@ -137,6 +138,19 @@ class Container:
             raise FleetError(f"Device pack {device.type!r} provides no transport")
         settings = {"key_dir": self.home / "keys", "audit": self.audit}
         return AuditingTransport(factory(device, settings), self.audit)
+
+    def apps_for(self, device: Device, transport: Transport) -> AppManager:
+        """RETURNS: AppManager: The device pack's application manager for this device.
+
+        **RAISES:**
+            `FleetError`: If the pack does not implement the `apps` verb.  <br>
+        """
+        pack = self.registry.device_pack(device.type)
+        factory = getattr(pack, "app_manager", None)
+        if factory is None:
+            raise FleetError(f"Device pack {device.type!r} does not support application management")
+        manager: AppManager = factory(transport)
+        return manager
 
     def state_for(self, device: Device, transport: Transport) -> StateManager:
         """RETURNS: StateManager: The device pack's state manager for this device.

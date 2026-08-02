@@ -22,6 +22,7 @@ from ...core.state import AppStateSpec
 from ...core.transport.base import CommandRunner, Transport
 from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
 from ..android import actions
+from ..android.appmgr import AndroidAppManager
 from ..android.keys import AdbKeyStore
 from ..android.quirks import AndroidQuirks
 from ..android.state import AndroidStateManager
@@ -52,6 +53,15 @@ MAINTAIN = StepSpec(
     summary="Disable configured packages and trim caches on an NVIDIA Shield.",
     effect=Effect.DESTRUCTIVE,
     requires=frozenset({Capability.EXEC, Capability.APPS, Capability.CLEANUP}),
+    scope="device",
+)
+
+
+CHECK = StepSpec(
+    id="shield.check",
+    summary="Report a Shield device's identity, uptime and free space.",
+    effect=Effect.READ,
+    requires=frozenset({Capability.EXEC, Capability.FACTS}),
     scope="device",
 )
 
@@ -99,7 +109,10 @@ class ShieldPack:
 
     def steps(self) -> list[RegisteredStep]:
         """RETURNS: list[RegisteredStep]: The steps this pack provides."""
-        return [RegisteredStep(spec=MAINTAIN, run=self.maintain, provider=PACK_ID)]
+        return [
+            RegisteredStep(spec=MAINTAIN, run=self.maintain, provider=PACK_ID),
+            RegisteredStep(spec=CHECK, run=self.check, provider=PACK_ID),
+        ]
 
     def probe(self, runner: CommandRunner) -> dict[str, str] | None:
         """Claim a host if it is an NVIDIA device.
@@ -121,6 +134,10 @@ class ShieldPack:
         transport.connect()
         return transport
 
+    def app_manager(self, transport: Transport) -> AndroidAppManager:
+        """RETURNS: AndroidAppManager: An application manager carrying this pack's quirks."""
+        return AndroidAppManager(transport, self.quirks)
+
     def state_manager(self, transport: Transport) -> AndroidStateManager:
         """RETURNS: AndroidStateManager: A state manager carrying this pack's quirks."""
         return AndroidStateManager(transport, self.quirks)
@@ -128,6 +145,20 @@ class ShieldPack:
     def state_root(self, transport: Transport, spec: AppStateSpec) -> str:
         """RETURNS: str: Where `spec`'s app keeps its state on this device."""
         return self.state_manager(transport).state_root(spec)
+
+    def check(self, context: DeviceStepContext) -> StepResult:
+        """Report what the device says about itself.
+
+        Read-only throughout, so it stays runnable against the whole fleet
+        without approval under any policy.
+
+        **RETURNS:**
+            `StepResult`: Facts gathered, with anything the device declined to answer simply absent.  <br>
+        """
+        facts = actions.health(context.transport, storage_path=self.quirks.external_storage)
+        detail = ", ".join(f"{key}={value}" for key, value in sorted(facts.items()))
+        context.handle.log(detail or "device answered nothing")
+        return StepResult(summary=f"{context.device.id}: {detail or 'no response'}", facts=dict(facts))
 
     def maintain(self, context: DeviceStepContext) -> StepResult:
         """Disable configured packages and trim caches.

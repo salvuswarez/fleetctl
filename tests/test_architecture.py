@@ -39,15 +39,39 @@ def _modules(ring: str) -> Iterator[tuple[Path, ast.Module]]:
         yield path, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
-def _imported_names(tree: ast.Module) -> Iterator[tuple[int, str]]:
-    """Yield `(lineno, dotted_name)` for every import, relative ones resolved
-    only far enough to see which top-level package they reach."""
+def _imported_names(tree: ast.Module, path: Path) -> Iterator[tuple[int, str]]:
+    """Yield `(lineno, dotted_name)` for every import, absolute or relative.
+
+    Relative imports are resolved against the importing module's own package.
+    Skipping them, as an earlier version of this did, left the widest hole
+    possible: `from ...packs.android import actions` inside an app pack is
+    exactly the violation these tests exist to catch, and it sailed straight
+    through.
+    """
+    package = _package_of(path)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 yield node.lineno, alias.name
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            yield node.lineno, node.module
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0:
+                if node.module:
+                    yield node.lineno, node.module
+            else:
+                yield node.lineno, _resolve_relative(package, node.level, node.module)
+
+
+def _package_of(path: Path) -> list[str]:
+    """RETURNS: list[str]: The dotted package parts of the module at `path`."""
+    relative = path.relative_to(SRC.parent)
+    parts = list(relative.parts[:-1]) if relative.name == "__init__.py" else list(relative.parts[:-1])
+    return parts
+
+
+def _resolve_relative(package: list[str], level: int, module: str | None) -> str:
+    """RETURNS: str: A relative import resolved to its absolute dotted name."""
+    base = package[: len(package) - (level - 1)] if level > 1 else package
+    return ".".join([*base, *([module] if module else [])])
 
 
 def test_core_does_not_import_packs_or_apps() -> None:
@@ -55,7 +79,7 @@ def test_core_does_not_import_packs_or_apps() -> None:
     violations = [
         f"{path}:{lineno} imports {name}"
         for path, tree in _modules("core")
-        for lineno, name in _imported_names(tree)
+        for lineno, name in _imported_names(tree, path)
         if name.startswith(("fleetctl.packs", "fleetctl.apps"))
     ]
 
@@ -68,7 +92,10 @@ def test_apps_do_not_import_packs() -> None:
     the provider. Importing a device pack defeats the whole design."""
     # Arrange / Act
     violations = [
-        f"{path}:{lineno} imports {name}" for path, tree in _modules("apps") for lineno, name in _imported_names(tree) if name.startswith("fleetctl.packs")
+        f"{path}:{lineno} imports {name}"
+        for path, tree in _modules("apps")
+        for lineno, name in _imported_names(tree, path)
+        if name.startswith("fleetctl.packs")
     ]
 
     # Assert
@@ -78,7 +105,10 @@ def test_apps_do_not_import_packs() -> None:
 def test_packs_do_not_import_apps() -> None:
     # Arrange / Act
     violations = [
-        f"{path}:{lineno} imports {name}" for path, tree in _modules("packs") for lineno, name in _imported_names(tree) if name.startswith("fleetctl.apps")
+        f"{path}:{lineno} imports {name}"
+        for path, tree in _modules("packs")
+        for lineno, name in _imported_names(tree, path)
+        if name.startswith("fleetctl.apps")
     ]
 
     # Assert
@@ -90,7 +120,7 @@ def test_a_pack_imports_no_sibling_pack_except_the_shared_android_base() -> None
     violations = []
     for path, tree in _modules("packs"):
         own = f"fleetctl.packs.{path.relative_to(SRC / 'packs').parts[0]}"
-        for lineno, name in _imported_names(tree):
+        for lineno, name in _imported_names(tree, path):
             if name.startswith("fleetctl.packs.") and not name.startswith((own, SHARED_PACK)):
                 violations.append(f"{path}:{lineno} imports {name}")
 

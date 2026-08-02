@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
+from ..appmgr import AppManager
 from ..artifacts.ref import ArtifactRef
 from ..artifacts.store import ArtifactStore
 from ..effects import Capability, Effect
@@ -83,6 +84,7 @@ class DeviceStepContext:
         `device` (Device): The target. Never optional here.  <br>
         `transport` (Transport): Already wrapped for auditing by the composition root.  <br>
         `state` (StateManager): The device pack's state manager for this device.  <br>
+        `apps` (AppManager): The device pack's application manager for this device.  <br>
         `artifacts` (ArtifactStore): Where artifacts are read and written.  <br>
         `inventory` (DeviceStore): The known fleet.  <br>
         `config` (Mapping[str, Any]): Config already resolved for this device and step.  <br>
@@ -93,6 +95,7 @@ class DeviceStepContext:
     device: Device
     transport: Transport
     state: StateManager
+    apps: AppManager
     artifacts: ArtifactStore
     inventory: DeviceStore
     config: Mapping[str, Any]
