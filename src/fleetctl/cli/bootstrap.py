@@ -5,6 +5,7 @@ from __future__ import annotations
 import getpass
 import logging
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -20,6 +21,7 @@ from ..core.errors import FleetError, TransportError
 from ..core.inventory.device import Device
 from ..core.inventory.store import DeviceStore
 from ..core.observability.audit import ChainedAuditWriter, JsonlAuditSink
+from ..core.operations.dispatcher import Dispatcher
 from ..core.operations.registry import OperationRegistry
 from ..core.policy import Policy, load_policy
 from ..core.registry import Registry, discover
@@ -34,7 +36,7 @@ DEFAULT_HOME = Path.home() / ".fleetctl"
 DEFAULT_CONFIG_DIR = Path("config")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Container:
     """Resolved dependencies for one CLI invocation.
 
@@ -47,6 +49,7 @@ class Container:
         `config` (Mapping[str, Any]): Fleet-level configuration, secrets resolved.  <br>
         `home` (Path): Runtime state directory.  <br>
         `actor` (str): Who is running this, recorded on every audit event.  <br>
+        `config_dir` (Path): Where `fleet.yml` and `inventory/` were read from.  <br>
     """
 
     registry: Registry
@@ -58,6 +61,23 @@ class Container:
     home: Path
     actor: str
     config_dir: Path
+
+    @cached_property
+    def dispatcher(self) -> Dispatcher:
+        """RETURNS: Dispatcher: Background pool for callers that cannot block. Built on first use, so a plain CLI run never starts threads."""
+        return Dispatcher(actor=self.actor)
+
+    def shutdown(self, *, wait: bool = False) -> None:
+        """Release what the container owns.
+
+        Only meaningful for a long-lived host such as the Home Assistant
+        integration; a CLI process exits and takes the pool with it.
+
+        **PARAMETERS:**
+            `wait` (bool): Whether to block until in-flight operations finish. Defaults to ``False``.  <br>
+        """
+        if "dispatcher" in self.__dict__:
+            self.dispatcher.shutdown(wait=wait)
 
     @property
     def staging_root(self) -> Path:

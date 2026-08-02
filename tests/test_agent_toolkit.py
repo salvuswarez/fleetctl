@@ -33,6 +33,7 @@ TOUCH = StepSpec(
 )
 LOOK = StepSpec(id="stub.look", summary="Read something.", effect=Effect.READ, requires=frozenset({Capability.EXEC}), scope="device")
 REPORT = StepSpec(id="stub.report", summary="Report versions.", effect=Effect.READ, requires=frozenset({Capability.EXEC}), scope="device")
+BOOM = StepSpec(id="stub.boom", summary="Fail on purpose.", effect=Effect.READ, requires=frozenset({Capability.EXEC}), scope="device")
 
 WORKFLOW = "name: tidy\nsteps:\n  - id: touch\n    use: stub.touch\n    targets: {tags: [managed]}\n    on_error: continue\n"
 
@@ -89,7 +90,11 @@ class _StubPack:
             RegisteredStep(spec=TOUCH, run=self._touch, provider=self.id),
             RegisteredStep(spec=LOOK, run=self._touch, provider=self.id),
             RegisteredStep(spec=REPORT, run=self._report, provider=self.id),
+            RegisteredStep(spec=BOOM, run=self._boom, provider=self.id),
         ]
+
+    def _boom(self, context: DeviceStepContext) -> StepResult:
+        raise FleetError("detonated")
 
     def _report(self, context: DeviceStepContext) -> StepResult:
         return StepResult(summary="21.2 -> 21.3", facts={"current": "21.2", "latest": "21.3", "update_available": True})
@@ -130,7 +135,7 @@ def test_reads_need_no_approval(tmp_path: Path) -> None:
 
     # Act / Assert
     assert [device["id"] for device in toolkit.list_devices()] == ["stub-1"]
-    assert {step["id"] for step in toolkit.list_steps()} == {"stub.touch", "stub.look", "stub.report", "fleet.scan"}
+    assert {step["id"] for step in toolkit.list_steps()} == {"stub.touch", "stub.look", "stub.report", "stub.boom", "fleet.scan"}
     assert [workflow["name"] for workflow in toolkit.list_workflows()] == ["fleet-scan", "tidy"]
 
 
@@ -499,3 +504,73 @@ def test_a_steps_structured_results_reach_the_caller(tmp_path: Path) -> None:
     assert outcome["facts"] == {"current": "21.2", "latest": "21.3", "update_available": True}
     snapshot = toolkit.get_operation(outcome["op_id"])
     assert snapshot is not None and snapshot["facts"]["latest"] == "21.3"
+
+
+# -- Background dispatch: what a panel needs instead of a blocking call ------
+
+
+def test_a_started_step_returns_its_id_before_it_finishes(tmp_path: Path) -> None:
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    started = toolkit.start_step("stub.touch", device_id="stub-1")
+    toolkit.container.dispatcher.wait(timeout=10)
+
+    # Assert
+    assert started["status"] == "running"
+    assert started["target"] == "stub-1"
+    finished = toolkit.get_operation(started["op_id"])
+    assert finished is not None and finished["status"] == "completed"
+
+
+def test_policy_is_applied_before_dispatch_not_inside_the_worker(tmp_path: Path) -> None:
+    """A caller must learn it needs approval when it asks, not by polling an
+    operation that already failed."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, GATED)
+
+    # Act / Assert
+    with pytest.raises(ApprovalRequired):
+        toolkit.start_step("stub.touch", device_id="stub-1")
+    assert toolkit.list_operations() == []
+
+
+def test_starting_work_on_a_busy_device_fails_the_caller_not_the_operation(tmp_path: Path) -> None:
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    toolkit.container.operations.start("live-op", "stub.touch", "stub-1")
+
+    # Act / Assert
+    with pytest.raises(FleetError) as caught:
+        toolkit.start_step("stub.touch", device_id="stub-1")
+    assert "busy with live-op" in str(caught.value)
+
+
+def test_a_backgrounded_failure_lands_on_the_operation(tmp_path: Path) -> None:
+    """Nothing is watching the future, so a failure that only raised there
+    would be lost entirely."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    started = toolkit.start_step("stub.boom", device_id="stub-1")
+    toolkit.container.dispatcher.wait(timeout=10)
+
+    # Assert
+    operation = toolkit.get_operation(started["op_id"])
+    assert operation is not None
+    assert operation["status"] == "failed"
+    assert "detonated" in (operation["result"] or "")
+
+
+def test_shutdown_is_safe_when_nothing_was_ever_dispatched(tmp_path: Path) -> None:
+    """A CLI run must not pay for a thread pool it never used."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    toolkit.container.shutdown()
+
+    # Assert
+    assert "dispatcher" not in toolkit.container.__dict__

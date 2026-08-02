@@ -110,6 +110,16 @@ def build_server(toolkit: Toolkit) -> Any:
         return _guard(lambda: _render(toolkit.run_step(step_id, device_id=device_id, params=params, approve=approve)))
 
     @server.tool()
+    def start_step(step_id: str, device_id: str | None = None, params: dict[str, Any] | None = None, approve: bool = False) -> str:
+        """Start a step in the background and get its operation id back at once.
+
+        Use for work that takes minutes -- a capture or a deploy -- then poll
+        operation_status. Set `approve` only after showing the user what the
+        step will change.
+        """
+        return _guard(lambda: _render(toolkit.start_step(step_id, device_id=device_id, params=params, approve=approve)))
+
+    @server.tool()
     def operation_status(op_id: str) -> str:
         """Report one operation's current status and its log so far."""
 

@@ -53,6 +53,7 @@ integration.
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
 | `cancel_operation` | `cancel_operation(id)` | `Toolkit.cancel_operation(id)` |
+| (entry unload) | `shutdown()` | `container.shutdown()` |
 | `rerun_operation` | `rerun_operation(id)` | `Toolkit.rerun_operation(id)` |
 
 Both keep the predecessor's semantics: cancel is a request the work observes
@@ -80,7 +81,13 @@ per request would lose every operation id the panel is tracking.
 the human-readable summary. The panel should read `facts` for anything it
 renders as data — versions, counts, addresses.
 
-**Synchronous by default.** `FleetService.start_*` dispatched to a thread pool
-and returned an id immediately. `Toolkit.run_step` runs to completion. The
-integration owns its own dispatch, and should pass the op id back to the panel
-from `run_step`'s return value.
+**Two ways to run a step.** `Toolkit.run_step` blocks and returns the outcome;
+`Toolkit.start_step` dispatches to a pool and returns the operation id at
+once, which is what the panel's `start_*` commands map to. Policy is applied
+before dispatch in both, so a caller learns it needs approval when it asks
+rather than by polling an operation that already failed.
+
+**Call `container.shutdown()`** when the config entry unloads. It replaces
+`FleetService.shutdown()` and, like it, does not cancel work already running —
+a deploy killed mid-transfer leaves a device worse off than one allowed to
+finish.

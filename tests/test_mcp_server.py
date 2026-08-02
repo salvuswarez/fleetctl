@@ -21,7 +21,7 @@ from fleetctl.core.errors import FleetError
 from fleetctl.core.registry import Registry
 from fleetctl.mcp.server import SERVER_NAME, _guard, build_server
 
-MUTATING_TOOLS = {"plan_workflow", "run_workflow", "run_step", "operation_status", "cancel_operation", "rerun_operation"}
+MUTATING_TOOLS = {"plan_workflow", "run_workflow", "run_step", "start_step", "operation_status", "cancel_operation", "rerun_operation"}
 READ_RESOURCES = {
     "fleetctl://devices",
     "fleetctl://steps",

@@ -12,6 +12,7 @@ from ..core.observability.audit import AuditEvent, AuditKind, Outcome
 from ..core.observability.correlation import correlate
 from ..core.operations.registry import OperationStatus
 from ..core.policy import Verdict
+from ..core.registry import RegisteredStep
 from ..core.workflow.engine import WorkflowEngine
 from ..core.workflow.plan import Plan, PlannedTask, build_plan
 
@@ -196,30 +197,9 @@ class Toolkit:
             `ApprovalRequired`: If the policy asks and `approve` is false.  <br>
             `PolicyDenied`: If the policy refuses outright.  <br>
         """
-        step = self.container.registry.step(step_id)
-        device = self.container.inventory.get(device_id) if device_id else None
-        if device_id and device is None:
-            raise FleetError(f"Unknown device: {device_id}")
-        if device is not None and not device.is_actionable:
-            raise FleetError(f"{device.id} is {device.status.value}; it cannot be acted on until that is resolved.")
-
-        decision = self.container.policy.check(actor=self.actor, step_id=step_id, effect=step.spec.effect, device=device)
-        if decision.verdict is Verdict.DENY:
-            self._record_denial(step_id, device_id or "fleet", decision.reason)
-            raise PolicyDenied(decision.reason)
-        if decision.verdict is Verdict.CONFIRM and not approve:
-            raise ApprovalRequired(decision.reason, (f"{step_id} on {device_id or 'fleet'}",))
-
-        from ..cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
-
-        op_id = self.container.operations.new_id(f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}")
-        flags = dict(params or {})
+        step, op_id = self._authorize(step_id, device_id, approve=approve)
         with correlate(actor=self.actor):
-            status = (
-                _run_device_step(self.container, step, device_id, flags, op_id)
-                if step.spec.scope == "device"
-                else _run_fleet_step(self.container, step, flags, op_id)
-            )
+            status = self._invoke(step, device_id, dict(params or {}), op_id)
         operation = self.container.operations.get(op_id)
         return {
             "op_id": op_id,
@@ -292,7 +272,75 @@ class Toolkit:
         outcome = self.run_step(operation.step_id, device_id=operation.target or None, params=operation.params, approve=approve)
         return {**outcome, "rerun_of": op_id}
 
+    def start_step(self, step_id: str, *, device_id: str | None = None, params: Mapping[str, Any] | None = None, approve: bool = False) -> dict[str, Any]:
+        """Start a step in the background and return its id immediately.
+
+        Policy is applied before dispatch, not inside the worker: a caller
+        must learn it needs approval when it asks, not by polling an
+        operation that already failed. Poll `get_operation` for progress.
+
+        **PARAMETERS:**
+            `step_id` (str): Which step, from `list_steps`.  <br>
+            `device_id` (str | None): Target device for a device-scoped step.  <br>
+            `params` (Mapping[str, Any] | None): Step parameters.  <br>
+            `approve` (bool): Whether the caller approves, when the policy asks.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The new operation's id and target.  <br>
+
+        **RAISES:**
+            `FleetError`: If the step or device is unknown, or the device is busy.  <br>
+            `ApprovalRequired`: If the policy asks and `approve` is false.  <br>
+            `PolicyDenied`: If the policy refuses outright.  <br>
+        """
+        step, op_id = self._authorize(step_id, device_id, approve=approve)
+
+        # Checked here as well as in the runner so a busy device is an error
+        # the caller sees, not an operation that fails a moment later.
+        busy = self.container.operations.running_for(device_id) if device_id else None
+        if busy is not None:
+            raise FleetError(f"{device_id} is busy with {busy}; wait for it or cancel it before starting {step_id}")
+
+        flags = dict(params or {})
+        self.container.dispatcher.submit(op_id, lambda: self._invoke(step, device_id, flags, op_id))
+        return {"op_id": op_id, "step": step_id, "target": device_id or "fleet", "status": OperationStatus.RUNNING.value}
+
     # -- Internal ----------------------------------------------------------
+
+    def _authorize(self, step_id: str, device_id: str | None, *, approve: bool) -> tuple[RegisteredStep, str]:
+        """Resolve a step, check it is allowed, and mint its operation id.
+
+        **RETURNS:**
+            `tuple[RegisteredStep, str]`: The step and its new operation id.  <br>
+
+        **RAISES:**
+            `FleetError`: If the step or device is unknown, or the device is not actionable.  <br>
+            `ApprovalRequired`: If the policy asks and `approve` is false.  <br>
+            `PolicyDenied`: If the policy refuses outright.  <br>
+        """
+        step = self.container.registry.step(step_id)
+        device = self.container.inventory.get(device_id) if device_id else None
+        if device_id and device is None:
+            raise FleetError(f"Unknown device: {device_id}")
+        if device is not None and not device.is_actionable:
+            raise FleetError(f"{device.id} is {device.status.value}; it cannot be acted on until that is resolved.")
+
+        decision = self.container.policy.check(actor=self.actor, step_id=step_id, effect=step.spec.effect, device=device)
+        if decision.verdict is Verdict.DENY:
+            self._record_denial(step_id, device_id or "fleet", decision.reason)
+            raise PolicyDenied(decision.reason)
+        if decision.verdict is Verdict.CONFIRM and not approve:
+            raise ApprovalRequired(decision.reason, (f"{step_id} on {device_id or 'fleet'}",))
+
+        return step, self.container.operations.new_id(f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}")
+
+    def _invoke(self, step: RegisteredStep, device_id: str | None, flags: dict[str, Any], op_id: str) -> OperationStatus:
+        """RETURNS: OperationStatus: The terminal status, having run the step through the CLI's own wiring."""
+        from ..cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
+
+        if step.spec.scope == "device":
+            return _run_device_step(self.container, step, device_id, flags, op_id)
+        return _run_fleet_step(self.container, step, flags, op_id)
 
     def _plan(self, name: str) -> Plan:
         workflows = self.container.workflows()
