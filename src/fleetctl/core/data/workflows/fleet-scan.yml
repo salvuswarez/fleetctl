@@ -1,0 +1,14 @@
+name: fleet-scan
+description: >
+  Sweep the home subnet and merge whatever answers into the inventory.
+  Devices that are reachable but refuse the key are recorded and flagged
+  rather than dropped, so you can see something is there. Override the
+  subnet with `--set subnet=...`; nothing else about a known device is
+  overwritten, so this is safe to run on a schedule.
+
+steps:
+  - id: scan
+    use: fleet.scan
+    targets: none
+    with:
+      subnet: 192.168.1.0/24

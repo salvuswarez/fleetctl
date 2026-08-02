@@ -143,3 +143,16 @@ def test_the_scan_step_is_mutating_and_needs_no_transport(tmp_path: Path) -> Non
     assert SCAN.effect is Effect.MUTATING
     assert SCAN.requires == frozenset()
     assert SCAN.scope == "discovery"
+
+
+def test_the_scan_workflow_ships_by_default() -> None:
+    """A fleet with no config of its own should still be able to find itself."""
+    # Act
+    from fleetctl.core.workflow.workflow import builtin_workflows
+
+    shipped = builtin_workflows()
+
+    # Assert
+    assert "fleet-scan" in shipped
+    assert [step.use for step in shipped["fleet-scan"].steps] == ["fleet.scan"]
+    assert shipped["fleet-scan"].steps[0].params["subnet"]

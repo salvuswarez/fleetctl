@@ -1,0 +1,20 @@
+name: kodi-deploy-all
+description: >
+  Push the current published build to every Kodi device, without rebuilding
+  it. Use after reviewing a build that kodi-capture-gold produced; use
+  kodi-refresh instead when the base image should be updated too.
+
+steps:
+  - id: deploy
+    use: kodi.deploy
+    targets:
+      tags: [kodi]
+    concurrency: 1
+    on_error: continue
+
+  - id: device-config
+    use: kodi.apply_device_config
+    targets:
+      tags: [kodi]
+    concurrency: 4
+    on_error: continue

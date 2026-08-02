@@ -131,7 +131,7 @@ def test_reads_need_no_approval(tmp_path: Path) -> None:
     # Act / Assert
     assert [device["id"] for device in toolkit.list_devices()] == ["stub-1"]
     assert {step["id"] for step in toolkit.list_steps()} == {"stub.touch", "stub.look", "stub.report", "fleet.scan"}
-    assert [workflow["name"] for workflow in toolkit.list_workflows()] == ["tidy"]
+    assert [workflow["name"] for workflow in toolkit.list_workflows()] == ["fleet-scan", "tidy"]
 
 
 def test_the_step_listing_exposes_the_effect_class(tmp_path: Path) -> None:

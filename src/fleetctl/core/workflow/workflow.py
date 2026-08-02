@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from importlib import resources
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -193,4 +194,15 @@ def load_workflows(directory: Path) -> dict[str, Workflow]:
         if workflow.name in found:
             raise ConfigError(f"Duplicate workflow name {workflow.name!r} in {path}", key=str(path))
         found[workflow.name] = workflow
+    return found
+
+
+def builtin_workflows() -> dict[str, Workflow]:
+    """RETURNS: dict[str, Workflow]: Workflows shipped with core, which belong to no pack."""
+    directory = resources.files("fleetctl.core.data.workflows")
+    found: dict[str, Workflow] = {}
+    for entry in directory.iterdir():
+        if entry.name.endswith(".yml"):
+            workflow = Workflow.from_yaml(entry.read_text(encoding="utf-8"), source=entry.name)
+            found[workflow.name] = workflow
     return found

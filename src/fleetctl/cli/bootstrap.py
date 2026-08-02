@@ -25,7 +25,7 @@ from ..core.registry import Registry, discover
 from ..core.state import StateManager
 from ..core.transport.auditing import AuditingTransport
 from ..core.transport.base import Transport
-from ..core.workflow.workflow import Workflow, load_workflows
+from ..core.workflow.workflow import Workflow, builtin_workflows, load_workflows
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,12 +74,12 @@ class Container:
         return load_policy(self.config)
 
     def workflows(self) -> dict[str, Workflow]:
-        """Every available workflow, shipped ones first.
+        """Every available workflow: core, then app packs, then the user's.
 
         **RETURNS:**
             `dict[str, Workflow]`: By name. A user-defined workflow shadows a shipped one, so shipping a workflow never takes an option away.  <br>
         """
-        available: dict[str, Workflow] = {}
+        available: dict[str, Workflow] = dict(builtin_workflows())
         for app in self.registry.app_packs():
             for workflow in getattr(app, "workflows", list)():
                 available[workflow.name] = workflow
