@@ -14,8 +14,6 @@
       "Bash(git stash:*)"
     ],
     "deny": [
-      "Bash(git push)",
-      "Bash(git push *)",
       "Bash(git reset --hard*)",
       "Bash(git clean*)",
       "Bash(git branch -D*)",
