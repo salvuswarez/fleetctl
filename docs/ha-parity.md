@@ -1,16 +1,15 @@
-# Home Assistant Parity
+<h1 style="margin: 0 0 8px 0; padding: 0; border: 0; font-size: 2em;">Home Assistant Parity</h1>
+<div style="color: #64748b; font-size: 15px; margin: 0 0 16px 0;">Every ha-cyberpunk panel command mapped to its fleetctl equivalent.</div>
 
-The `firetools` integration in `salvuswarez/ha-cyberpunk` drives its panel
-through 21 websocket commands, each a thin wrapper over one `fire_tools`
-`FleetService` method. Nothing may be cut over until every one of them has an
-equivalent here — a panel button that silently does nothing is worse than a
-panel button that is missing.
+<hr style="border: 0; border-top: 2px solid #005288; margin: 0 0 32px 0;"/>
+
+<sub style="color: #64748b;">Last verified 2026-08-02</sub>
+
+The `firetools` integration in `salvuswarez/ha-cyberpunk` drives its panel through 21 websocket commands, each a thin wrapper over one `fire_tools` `FleetService` method. Nothing may be cut over until every one of them has an equivalent here — a panel button that silently does nothing is worse than a panel button that is missing.
 
 This is that mapping, audited against `custom_components/firetools/ws_api.py`.
 
-<hr>
-
-## Reads
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Reads</h2>
 
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
@@ -25,7 +24,7 @@ This is that mapping, audited against `custom_components/firetools/ws_api.py`.
 `get_base_info` and `check_update` collapse into one step: the predecessor's
 `get_base_info` returned a subset of what `check_update` already returns.
 
-## Device actions
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Device actions</h2>
 
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
@@ -37,7 +36,7 @@ This is that mapping, audited against `custom_components/firetools/ws_api.py`.
 | `capture_base` | `start_capture_base()` | `kodi.fetch_base` |
 | `scan` | `start_scan(subnet)` | `fleet.scan` |
 
-## Fleet actions
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Fleet actions</h2>
 
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
@@ -48,7 +47,7 @@ Fan-out is a workflow here rather than a method. The workflow decides its own
 targets from tags, so adding a device to the fleet does not mean editing the
 integration.
 
-## Operation control
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Operation control</h2>
 
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
@@ -60,9 +59,13 @@ Both keep the predecessor's semantics: cancel is a request the work observes
 at its next step boundary, never a kill; rerun mints a new operation and
 leaves the original's logs intact.
 
-<hr>
+<br/>
 
-## Differences the integration must account for
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Differences the integration must account for</h2>
 
 **Policy gating.** Every mutating call can raise `ApprovalRequired` or
 `PolicyDenied`, which `FleetService` had no concept of. The integration must
@@ -91,3 +94,68 @@ rather than by polling an operation that already failed.
 `FleetService.shutdown()` and, like it, does not cancel work already running —
 a deploy killed mid-transfer leaves a device worse off than one allowed to
 finish.
+
+<br/><br/>
+
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<table>
+<tr>
+<td width="22%" valign="top" align="center">
+
+<br/>
+<strong>fleetctl</strong>
+<br/><br/>
+<sub>Home Assistant Parity</sub>
+
+</td>
+<td width="26%" valign="top">
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">Documentation</ins></h4>
+
+- [Getting Started](getting-started.md)
+- [CLI Reference](cli-reference.md)
+- [Configuration](configuration.md)
+- [Architecture](architecture.md)
+- [Safety & Policy](safety.md)
+
+</td>
+<td width="26%" valign="top">
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">Repositories</ins></h4>
+
+- [fleetctl](https://github.com/salvuswarez/fleetctl)
+- [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
+
+- [Observability](observability.md) &mdash; diagnostics, timeline, audit
+- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
+- [HA Parity](ha-parity.md) &mdash; panel command mapping
+
+</td>
+<td width="26%" valign="top">
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">About</ins></h4>
+
+- Plugin-based home device fleet manager
+- MIT licensed
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
+
+- S0&ndash;S6 done &middot; S7 (HA cutover) not started
+
+</td>
+</tr>
+</table>
+
+<br/>
+
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<div align="center">
+  <sub>fleetctl</sub>
+</div>

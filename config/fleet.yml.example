@@ -8,8 +8,8 @@ artifacts:
     host: 192.168.1.50
     share: Kodi
     root: fleetctl
-    user: !ref env:FLEETCTL_SMB_USER
-    password: !ref env:FLEETCTL_SMB_PASS
+    user: !ref env:SMB_USER
+    password: !ref env:SMB_PASS
 
 observability:
   # Relative paths resolve under ~/.fleetctl, not the working directory.

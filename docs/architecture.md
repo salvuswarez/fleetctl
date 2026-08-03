@@ -1,6 +1,11 @@
-# `fleetctl` — a plugin-based home device fleet suite
+<h1 style="margin: 0 0 8px 0; padding: 0; border: 0; font-size: 2em;">`fleetctl` — a plugin-based home device fleet suite</h1>
+<div style="color: #64748b; font-size: 15px; margin: 0 0 16px 0;">The full design: friction points, the three-ring target, config-as-code, and every locked decision.</div>
 
-**Architecture plan — 2026-08-01 · decisions locked**
+<hr style="border: 0; border-top: 2px solid #005288; margin: 0 0 32px 0;"/>
+
+<sub style="color: #64748b;">Last verified 2026-08-02</sub>
+
+Architecture plan — 2026-08-01 · decisions locked
 
 Successor to `firestick_manager`. Built as a **new repository**, not an
 in-place refactor: a plugin architecture where device types and the software
@@ -30,9 +35,13 @@ Decisions** for the full record. Highlights:
 | **Agent scope** | any step or workflow, gated by user approval |
 | **HA** | becomes an actor under the policy layer |
 
----
+<br/>
 
-## 1. Where the code actually is today
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">1. Where the code actually is today</h2>
 
 4,452 lines across 28 modules. Split by what the code is *about*:
 
@@ -48,7 +57,8 @@ Decisions** for the full record. Highlights:
 > proposed below — and it matches your instinct that "for firesticks there
 > are only so many actions, and the rest is Kodi."
 
-### Current module map
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Current module map</h3>
 
 ```mermaid
 flowchart TB
@@ -120,15 +130,20 @@ flowchart TB
 
 <sub>Purple = Kodi · orange = Fire-OS specific · teal = genuinely generic</sub>
 
----
+<br/>
 
-## 2. Friction points — the deepening opportunities
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">2. Friction points — the deepening opportunities</h2>
 
 Each is stated as a **seam that doesn't exist yet**, using the depth
 vocabulary: a *shallow* module has an interface nearly as complex as its
 implementation; a *deep* one puts a lot of behaviour behind a small one.
 
-### F1 — There is no transport seam. ADB *is* the architecture.
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F1 — There is no transport seam. ADB *is* the architecture.</h3>
 
 Every job constructs `AdbClient(ip, adb_keys)` inline. Six of seven jobs
 import `_adb` directly. Nothing in the code can express "talk to this
@@ -143,7 +158,10 @@ The precedent already exists and is good: `AdbShellRunner` is a real
 That is a seam with **one adapter** — hypothetical. Making it two makes it
 real.
 
-### F2 — `Device` is Fire-TV-and-Kodi shaped
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F2 — `Device` is Fire-TV-and-Kodi shaped</h3>
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 class Device(BaseModel):
@@ -156,7 +174,8 @@ Two of eight fields on the *core inventory record* are Kodi state. A PC in
 this store carries a `display` field meaning "Kodi videoscreen.resolution".
 `android_version` is meaningless for half the future fleet.
 
-### F3 — `FleetService` is a shallow fan-out
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F3 — `FleetService` is a shallow fan-out</h3>
 
 Eight `start_*` methods, each: `_require_idle` → mint `f"{kind}_{ip}_{ts}"`
 → `operations.start` → `functools.partial(job, ...)` → `_dispatch`. The
@@ -172,14 +191,16 @@ the HA frontend. That's an Open/Closed violation at five sites.
 consumers, so the module earns its keep. But it should be **one** `start`
 method over a task registry, not eight.
 
-### F4 — `cli.py` repeats the same wiring eight times
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F4 — `cli.py` repeats the same wiring eight times</h3>
 
 Every command re-derives `_build_config()`, `_adb_keys()`, `_smb(config)`,
 then builds its own `functools.partial`. The `.claude/rules/cli.md` rule
 "every command needs `--batch` symmetry" is enforced by discipline, not by
 structure — `capture` and `apply-display` don't have it.
 
-### F5 — The Kodi domain has no package boundary
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F5 — The Kodi domain has no package boundary</h3>
 
 `_hub_layout.py` (423 lines of Arctic Fuse `HomeSwitcher` slot generation),
 `_view_types.py` (Kodi skin boolean expressions), `_settings_overrides.py`,
@@ -191,7 +212,8 @@ Meanwhile the capture→build→deploy *shape* — pull artifact, transform it,
 publish it, push it, apply per-device deltas — is a genuinely generic
 pattern that any app pack would want.
 
-### F6 — Domain knowledge is hardcoded Python, not config
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F6 — Domain knowledge is hardcoded Python, not config</h3>
 
 Every one of these is **data** living in `.py`:
 
@@ -208,20 +230,23 @@ Adding a Shield means a second bloat list. Adding a second Kodi profile
 ("kids build", "guest build") means forking Python. This is exactly where
 config-as-code belongs.
 
-### F7 — Discovery hard-codes "a device is something with `ro.product.model`"
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F7 — Discovery hard-codes "a device is something with `ro.product.model`"</h3>
 
 `Scanner._probe_adb` returns `None` when `getprop ro.product.model` is
 empty — so a PC, a phone, or a printer on the subnet is *by definition* not
 a device. Discovery and device-type identification are fused into one
 method.
 
-### F8 — `ArtifactStore` is `SmbClient`, concretely
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F8 — `ArtifactStore` is `SmbClient`, concretely</h3>
 
 `jobs/*` take `smb: SmbClient` as a typed parameter. `OperationSink`
 already got this right — a `Protocol` with two adapters (SMB, Null). The
 artifact store has one adapter and no protocol.
 
-### F9 — There is no audit trail, and diagnostics are discarded
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">F9 — There is no audit trail, and diagnostics are discarded</h3>
 
 `Operation.logs` is a progress narrative, not a record of effects: one line
 covers ~90 `pm disable-user` calls whose failures are swallowed by design.
@@ -232,9 +257,13 @@ observability design lives; the summary here is that this is a first-class
 architectural concern, not a polish item, because the fix (§10's
 `AuditingTransport`) only works if F1's transport seam exists.
 
----
+<br/>
 
-## 3. Target architecture — three rings
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">3. Target architecture — three rings</h2>
 
 ```mermaid
 flowchart TB
@@ -292,7 +321,8 @@ Ring 2 directly — it declares the *capabilities* it needs and the engine
 resolves which device pack provides them. That's what lets `apps/kodi`
 deploy to a Fire Stick and a Shield without knowing either exists.
 
-### Proposed package layout
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Proposed package layout</h3>
 
 ```text
 src/fleetctl/
@@ -341,7 +371,8 @@ config/                              # ← config-as-code, gitignored where priv
 complete, and declare no management capabilities. Nothing tries to ADB into
 your phone.
 
-### The Android base is the deep one
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The Android base is the deep one</h3>
 
 With a Shield Pro arriving, `packs/android` is not a placeholder — it's
 where most device behaviour actually lives:
@@ -376,9 +407,13 @@ have — and the two-step `tar cf` + `gzip` dance costs real time on a large
 profile. Each pack composes the shared collaborator and declares its own
 quirks as data.
 
----
+<br/>
 
-## 4. The generalized action vocabulary
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">4. The generalized action vocabulary</h2>
 
 The core question you raised: *what are the common actions against any
 device?* Here's the proposed verb set. A device pack implements what it can
@@ -422,6 +457,8 @@ them fails at plan time rather than attempting anything.
 
 **Capabilities are the contract between rings.** An app pack step says:
 
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+
 ```python
 class KodiDeploy(Step):
     requires = {"files.push", "exec", "apps.install", "state.restore"}
@@ -430,7 +467,8 @@ class KodiDeploy(Step):
 and the engine refuses to schedule it against a device whose pack doesn't
 declare those — at **plan time**, before touching anything.
 
-### The transport seam, concretely
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The transport seam, concretely</h3>
 
 ```mermaid
 classDiagram
@@ -468,11 +506,16 @@ listener, the md5 tail check, size-scaled timeouts — moves **behind**
 `AdbTransport` unchanged. That's the depth win: callers get `put()`; the
 1,000 words of gotcha stay in one implementation.
 
----
+<br/>
 
-## 5. Config as code
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
 
-### Layered resolution
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">5. Config as code</h2>
+
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Layered resolution</h3>
 
 ```mermaid
 flowchart LR
@@ -493,7 +536,10 @@ Later layers win. Every layer is inspectable via a `fleet config show <device>`
 command, so "why did this stick get that setting?" is answerable without
 reading Python.
 
-### Inventory becomes type-aware
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Inventory becomes type-aware</h3>
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/inventory/devices.yml
@@ -536,7 +582,10 @@ Note what happened to F2: `display` and `settings` are gone from the core
 record and live under `vars.kodi` — namespaced by the app pack that owns
 them. The core `Device` shrinks to identity + address + type + tags + vars.
 
-### The Kodi profile becomes a recipe
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The Kodi profile becomes a recipe</h3>
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/profiles/kodi/gold.yml
@@ -572,7 +621,8 @@ skin:
 A "kids build" is now `profiles/kodi/kids.yml` with `extends: gold` and a
 shorter allow-list — no Python.
 
-### Format: YAML everywhere user-facing (D6)
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Format: YAML everywhere user-facing (D6)</h3>
 
 YAML for `fleet.yml`, inventory, profiles and workflows. It matches
 `devices.yml` today, supports comments (which config-as-code lives or dies
@@ -584,7 +634,8 @@ would earn a second look is a future machine-written lockfile — a resolved
 `fleet.lock` pinning which build each device actually runs — where TOML's
 unambiguous typing beats YAML's. Not needed yet; noted so the door stays open.
 
-### Secrets: the Home Assistant model (D5)
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Secrets: the Home Assistant model (D5)</h3>
 
 HA's own standard is unambiguous, and since HA is the core target, `fleetctl`
 adopts it wholesale:
@@ -595,6 +646,8 @@ adopts it wholesale:
 > in the repo.
 
 Generalized: **`fleetctl` config files contain references, never values.**
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/fleet.yml — safe to commit, safe to share in a bug report
@@ -650,13 +703,19 @@ Consequences:
 - **The ADB key gets the same treatment**: `!ref` to a path, permissions
   enforced (0700/0600), and every use recorded as an `AUTH` event.
 
----
+<br/>
 
-## 6. Workflows
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">6. Workflows</h2>
 
 Today's pipeline is implicit: you know to run capture → build → deploy in
 that order because the docs say so. A workflow makes the ordering, the
 targeting, and the artifact handoff explicit and inspectable.
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/workflows/kodi-refresh.yml
@@ -691,7 +750,8 @@ steps:
 `packs/firetv`'s debloat list, the Shield runs `packs/shield`'s, a PC
 runs `apt autoremove`. One workflow, heterogeneous fleet.
 
-### Execution
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Execution</h3>
 
 ```mermaid
 sequenceDiagram
@@ -729,9 +789,15 @@ engine is a layer *above* them, not a replacement.
 between steps, per-device locking generalized beyond `_require_idle`,
 declarative concurrency, and `on_error` policy.
 
----
+<br/>
 
-## 7. Plugin registration
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">7. Plugin registration</h2>
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 # packs/firetv/__init__.py
@@ -755,6 +821,8 @@ class FireTvPack:
         return {"maintain": DebloatAction(self.data("bloat.yml")), ...}
 ```
 
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-toml.svg" height="18"/></div>
+
 ```toml
 # pyproject.toml — third-party packs can register the same way
 [project.entry-points."fleetctl.packs"]
@@ -771,7 +839,8 @@ is a string the registry knows about, so adding a job type touches exactly
 one file — the pack that adds it. CLI commands and HA operation types are
 both generated from the registry.
 
-### Discovery becomes claim-based (closes F7)
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Discovery becomes claim-based (closes F7)</h3>
 
 ```mermaid
 flowchart LR
@@ -794,11 +863,16 @@ Probes run in declared priority order; the first to claim a host wins.
 `generic_net` claims anything left over, so a phone or printer lands in the
 inventory as a presence-only device instead of vanishing.
 
----
+<br/>
 
-## 8. Design principles the structure has to satisfy
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
 
-### SOLID, concretely
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">8. Design principles the structure has to satisfy</h2>
+
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">SOLID, concretely</h3>
 
 | Principle | Violated today by | Satisfied in the target by |
 |---|---|---|
@@ -808,7 +882,8 @@ inventory as a presence-only device instead of vanishing.
 | **I** — Interface Segregation | `AdbClient` exposes `shell`, `shell_ok`, `pull`, `push_file`, `free_bytes`, `reconnect` — `jobs/scan` needs one of those, `jobs/display` needs one. Everyone depends on all of it. | Split protocols: `CommandRunner` (`exec`/`exec_ok`), `FileTransfer` (`put`/`get`/`free_bytes`), `Reachable` (`ping`). `Transport` is their composition. A probe depends on `CommandRunner` only. |
 | **D** — Dependency Inversion | `jobs/*` import the concrete `AdbClient` and construct it inline (`with AdbClient(ip, adb_keys) as adb:`). High-level policy depends on low-level transport detail. | Steps receive a `Transport` they never construct. All construction happens in one composition root per consumer. |
 
-### Interface segregation, drawn
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Interface segregation, drawn</h3>
 
 ```mermaid
 classDiagram
@@ -853,7 +928,8 @@ the build step a **chain of substitutable transforms driven by config**,
 which is both the OCP win and the whole testability story for the 700-odd
 lines of Kodi shaping logic.
 
-### Dependency injection — one composition root per consumer
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Dependency injection — one composition root per consumer</h3>
 
 Today, construction is scattered: `cli.py` builds `AdbKeyStore`/`SmbClient`
 in eight commands; jobs construct `AdbClient` and `Scanner` internally;
@@ -879,6 +955,8 @@ flowchart TB
     style CONT fill:#7c3aed,stroke:#5b21b6,color:#fff
     style roots fill:#0f766e,color:#fff
 ```
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -915,7 +993,8 @@ Consequences worth naming:
   interface between policy and transport in the first place — the same
   seam pays for F1 and F9 at once.
 
-### OOP judgement calls
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">OOP judgement calls</h3>
 
 Not everything should become a class. Proposed split:
 
@@ -933,7 +1012,8 @@ Not everything should become a class. Proposed split:
 here would force the Shield to inherit Fire-OS assumptions (`pm disable-user`
 quirks, Amazon package names) it doesn't share.
 
-### PEP 8 and the house Python standards
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">PEP 8 and the house Python standards</h3>
 
 These carry over from the existing global standards and are unchanged by
 this design — listing them so the target isn't a chance to drift:
@@ -963,9 +1043,13 @@ packages importing across the boundary. Under the target layout,
 `core/transport/adb.py` is genuinely public API for pack authors; `_`
 returns to meaning "internal to this subpackage".
 
----
+<br/>
 
-## 9. How today's code maps onto the target
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">9. How today's code maps onto the target</h2>
 
 | Today | Becomes | Change |
 |---|---|---|
@@ -989,7 +1073,8 @@ returns to meaning "internal to this subpackage".
 | `_kodi.py` | `apps/kodi/probe.py` | Kodi facts, not device facts |
 | `const.py` | dissolved | paths → pack/app data; SMB defaults → `fleet.yml` |
 
-### The build pipeline, generalized
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The build pipeline, generalized</h3>
 
 The capture→build→deploy shape survives — it just stops being Kodi's
 private property:
@@ -1021,11 +1106,16 @@ becomes **structurally enforced**: `build` receives a transform chain and no
 transport; `deploy` receives a transport and no transform chain. You
 *can't* put a transform in deploy — it has nothing to call.
 
----
+<br/>
 
-## 10. Logging, audit trail & forensics
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
 
-### What exists today
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">10. Logging, audit trail & forensics</h2>
+
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">What exists today</h3>
 
 Two parallel channels, and **neither is an audit trail**:
 
@@ -1039,7 +1129,8 @@ lock, debounced flush, bounded retention, malformed records skipped,
 `running` records marked failed on restart. The problem isn't quality, it's
 **category**: it's a progress narrative, not an audit record.
 
-### The gaps, concretely
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The gaps, concretely</h3>
 
 ```mermaid
 flowchart TB
@@ -1104,7 +1195,8 @@ no trace, no reason.
 the HA panel, or a scheduled automation. With a third consumer (the HTTP
 API in the design), "who deployed at 3am" has no answer.
 
-### Security-specific findings
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Security-specific findings</h3>
 
 **S1 — `SmbConfig` will print its own password.** It's a
 `@dataclass(frozen=True, slots=True)` with `smb_pass: str` and no
@@ -1131,9 +1223,14 @@ but if the key leaks there's no way to scope the blast radius. This matters
 more once a second key identity exists — which it already does, since the
 HA integration holds a separate one.
 
----
+<br/>
 
-### Target design: three streams, deliberately separated
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Target design: three streams, deliberately separated</h3>
 
 They have different consumers, different retention, and different security
 postures — conflating them is what produces both G3 and S2.
@@ -1167,7 +1264,8 @@ flowchart LR
     style R fill:#dc2626,stroke:#991b1b,color:#fff
 ```
 
-### The key move: audit lives at the Transport seam
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The key move: audit lives at the Transport seam</h3>
 
 This is the payoff of §8's dependency inversion. Because **every** side
 effect on **every** device goes through `exec`/`put`/`get`, wrapping the
@@ -1205,7 +1303,8 @@ audit records with per-command outcomes, without any step author writing a
 single logging line. It also closes **G9** — the actor is bound once at the
 composition root and carried on every record.
 
-### Correlation: one id hierarchy, propagated automatically
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Correlation: one id hierarchy, propagated automatically</h3>
 
 ```mermaid
 flowchart TB
@@ -1224,7 +1323,10 @@ every record means correlation costs step authors nothing and cannot be
 forgotten. This is also what lets you grep one deploy out of eight
 concurrent ones.
 
-### Audit event schema
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Audit event schema</h3>
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1266,7 +1368,8 @@ no representation at all:
 - **`AUTH`** — every use of the ADB key against a device, closing **S4**.
   If a key leaks you can enumerate exactly which devices it touched and when.
 
-### Where it all lands (D7, D9)
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Where it all lands (D7, D9)</h3>
 
 Separate files and directories per subsystem, so "what did the ADB layer do"
 and "what did the Kodi build do" are different files rather than one
@@ -1315,6 +1418,8 @@ that stay in a rotating diagnostic file, and a few hundred `pm disable-user`
 records that go in the durable audit. Nothing is lost; the durable stream
 stays reviewable.
 
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+
 ```yaml
 # config/fleet.yml
 observability:
@@ -1341,7 +1446,8 @@ redaction is applied *before* write and is not optional, and the hash chain
 makes tampering on a shared path detectable rather than silent. `local` stays
 a one-line config change.
 
-### Redaction as a type, not a convention
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Redaction as a type, not a convention</h3>
 
 Fixing S1 and S2 by remembering to be careful will fail. Structural fixes:
 
@@ -1353,7 +1459,8 @@ Fixing S1 and S2 by remembering to be careful will fail. Structural fixes:
 | S4 — no record of ADB key use | `AUTH` events on every signer use, per device. |
 | Secrets in config-as-code | Config holds `!ref` only, resolved per consumer via `SecretProvider` (§5). Audit records the ref, never the value. |
 
-### Forensics: keep the evidence (closes G4, G5)
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Forensics: keep the evidence (closes G4, G5)</h3>
 
 - **Failure bundle.** On a non-cancelled failure, before `workspace()`
   tears the staging dir down, collect a bundle — the failing archive's
@@ -1367,7 +1474,8 @@ Fixing S1 and S2 by remembering to be careful will fail. Structural fixes:
   recorded as `PLAN` events whether or not you then execute, so intent and
   effect are both on the record.
 
-### Worth backporting to `firestick_manager` now
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Worth backporting to `firestick_manager` now</h3>
 
 `firestick_manager` keeps running until S7 cutover, so three of these gaps
 stay live for months. All three are small and independent of the rewrite:
@@ -1378,11 +1486,16 @@ stay live for months. All three are small and independent of the rewrite:
 3. Replace the two bare `except: pass` in `service.py` with a logged
    warning (**G8**).
 
----
+<br/>
 
-## 11. Consumers: CLI, Home Assistant, HTTP API, MCP
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
 
-### First: don't wrap the CLI
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">11. Consumers: CLI, Home Assistant, HTTP API, MCP</h2>
+
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">First: don't wrap the CLI</h3>
 
 The instinct is understandable, but apply the deletion test to
 "MCP server that shells out to the `fleetctl` CLI":
@@ -1402,7 +1515,8 @@ would be nearly as complex as its implementation, and it would actively
 destroy information the core already has. The CLI is itself just a thin
 adapter — wrapping it means adapting an adapter.
 
-### Ports and adapters
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Ports and adapters</h3>
 
 The design already implies this; making it explicit is the point:
 
@@ -1436,6 +1550,8 @@ flowchart TB
 plugin registry combined with §5's Pydantic config schemas. A pack author
 declares a step once:
 
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+
 ```python
 @step(
     id="kodi.deploy",
@@ -1450,7 +1566,7 @@ and gets, with no further work:
 
 | Surface | Derived from |
 |---|---|
-| `fleetctl kodi deploy --device X` | id + `params` → Click options |
+| `fleetctl run kodi.deploy --device X` | id + `params` → Click options |
 | HA service `fleetctl.kodi_deploy` | id + `params` → voluptuous service schema |
 | MCP tool `kodi_deploy` | id + `summary` + `params.model_json_schema()` |
 | `POST /steps/kodi.deploy` | id + `params` → request body |
@@ -1458,7 +1574,8 @@ and gets, with no further work:
 That kills F3 and F4 in one move, and it means adding MCP is **not** a
 per-command porting exercise — it's one adapter module.
 
-### The long-running-operation problem
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">The long-running-operation problem</h3>
 
 MCP tools are request/response. A deploy takes minutes. Fortunately
 `OperationRegistry` already models exactly the right thing, so the MCP
@@ -1498,7 +1615,8 @@ Splitting reads into MCP *resources* rather than tools matters — it keeps
 the mutating tool surface tiny and reviewable, which is the whole game
 below.
 
-### Safety: the part that actually needs designing
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; CONCEPT</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Safety: the part that actually needs designing</h3>
 
 An agent holding these tools can wipe a device's Kodi profile
 (`rm -rf addons/ userdata/ media/`), disable ~90 system packages, reboot
@@ -1514,6 +1632,8 @@ agent with a `kodi_deploy` tool and a device list will not know it exists.
 
 So it becomes **declarative policy**, enforced in the engine for every
 consumer:
+
+<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/fleet.yml
@@ -1604,7 +1724,8 @@ Supporting pieces:
   SMB credentials or ADB key material; §10's `Redactor` applies to tool
   output as well as logs.
 
-### Decisions
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Decisions</h3>
 
 - **MCP: yes**, over **stdio** (D10). One local agent, no listening socket,
   no auth surface of its own, and it's what Claude Code / Claude Desktop
@@ -1622,9 +1743,13 @@ Supporting pieces:
   no policy layer and no audit record is the one sequencing mistake in this
   plan that's genuinely hard to walk back.
 
----
+<br/>
 
-## 12. Testability — what this buys
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">12. Testability — what this buys</h2>
 
 The repo has **zero tests** today, and the reason is visible in the code:
 almost nothing can be exercised without a live Fire Stick and an SMB share.
@@ -1645,9 +1770,13 @@ almost nothing can be exercised without a live Fire Stick and an SMB share.
 reason — the note in its docstring says so. This generalizes that instinct
 to the whole codebase.
 
----
+<br/>
 
-## 13. Open-source readiness
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">13. Open-source readiness</h2>
 
 `fleetctl` ships publicly (D8), which changes several defaults from
 "household tool" to "someone else will run this against their hardware."
@@ -1668,9 +1797,13 @@ gotchas currently living in memory files (toybox `tar -z`, `adb_shell push`,
 `pm disable-user` on Fire OS 5.x) become documented pack behaviour with
 citations — which is where they belonged anyway.
 
----
+<br/>
 
-## 14. Build plan
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">14. Build plan</h2>
 
 This is a **new repository**, not an in-place refactor — which is simpler
 than the migration originally sketched. `firestick_manager` keeps running
@@ -1695,21 +1828,25 @@ flowchart LR
     style RET fill:#334155,stroke:#1e293b,color:#fff
 ```
 
-### Stages
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Stages</h3>
+
+This is the original build plan, recorded here for the rationale behind each stage's contents. For current status, see [`roadmap.md`](roadmap.md) — as of this writing S0–S6 are done and S7–S8 are not started.
 
 | # | Stage | Contents | Exit criterion |
 |---|---|---|---|
 | **S0** | Repo bootstrap | uv + hatchling, `src/fleetctl/`, licence, CI (black/isort/mypy --strict/pytest), `.gitignore` incl. `config/` real data, `.example` files | CI green on an empty package |
 | **S1** | Core kernel | `Transport` protocol + `AdbTransport`; `ArtifactStore` + SMB **and** local adapters; inventory; operations; `SecretProvider` (env + keyring); observability (audit sink, redactor, correlation, log setup) | `FakeTransport` + `LocalArtifactStore` let a trivial step run end-to-end in tests, with audit records asserted |
 | **S2** | First pack + first app | `packs/android` (deep base) → `packs/firetv`; `apps/kodi` with all four transforms; capture/build/deploy steps | **Feature parity**: capture → build → deploy a real device, verified against what `firestick_manager` produces |
-| **S3** | Config-as-code + workflows | bloat/prune/allow/settings/hub-layout → YAML; layered resolution; `Workflow` + engine + plan/dry-run; registry-driven CLI | `fleetctl run kodi-refresh --dry-run` prints a correct plan; `config show <device>` explains every resolved key |
+| **S3** | Config-as-code + workflows | bloat/prune/allow/settings/hub-layout → YAML; layered resolution; `Workflow` + engine + plan/dry-run; registry-driven CLI | `fleetctl workflow plan kodi-refresh` prints a correct plan; `fleetctl config <device>` explains every resolved key |
 | **S4** | Policy + audit hardening | `PolicyEngine`, effect classification on every step, protected-device rules, blast-radius cap, hash chain + `audit verify` | Gold device is **structurally** undeployable-to without a config edit |
 | **S5** | Shield Pro | `packs/shield`; whatever quirks turn out to be Fire-OS-only get pushed down into `packs/firetv` | Same Kodi build deploys to a Stick and a Shield from one workflow |
 | **S6** | MCP adapter | stdio server; tools from the step/workflow registry; resources for inventory/builds/audit; approval flow | Agent completes a full `kodi-refresh` with per-step approval, fully audited |
 | **S7** | HA cutover | HA integration repinned to `fleetctl`; becomes actor `ha:*`; services regenerated from the registry; panel + automations updated | Live panel runs on `fleetctl`; `firestick_manager` archived |
 | **S8** | Later | `packs/linux_host` + SSH transport; HTTP API if a consumer appears; `fleet.lock` | — |
 
-### Open before S1 — six decisions the architecture review surfaced
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Open before S1 — six decisions the architecture review surfaced</h3>
 
 An architecture review of this plan (2026-08-01, against the S0 scaffold)
 found six decisions that are **unmade or wrong as written**, all cheap to
@@ -1745,7 +1882,8 @@ querying the store for the latest build, which is simpler and needed anyway.
 Let workflows be registered Python callables first; add YAML as a thin
 front-end over the same plan model once a second real workflow exists.
 
-### Sequencing rules
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Sequencing rules</h3>
 
 1. **S1 before everything.** Both `ArtifactStore` adapters land in S1 — one
    adapter is a hypothetical seam, two make it real, and the local adapter
@@ -1762,7 +1900,8 @@ front-end over the same plan model once a second real workflow exists.
    own deploy quirks (manual manifest bump + restart, feature branch not
    `main`). Budget for it as its own piece of work.
 
-### Carried forward from `firestick_manager`
+<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
+<h3 style="margin-top: 4px; margin-left: 10px;">Carried forward from `firestick_manager`</h3>
 
 These are hard-won and must survive the port intact — they're the reason
 `fleetctl` starts from working code rather than a blank page:
@@ -1781,9 +1920,13 @@ These are hard-won and must survive the port intact — they're the reason
   "only overwrite when the probe returned something" rule.
 - **The gold-device rule** — but as enforced policy (S4), not a memory file.
 
----
+<br/>
 
-## 15. Decisions
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">15. Decisions</h2>
 
 Recorded so future architecture reviews don't re-litigate them.
 
@@ -1802,7 +1945,76 @@ Recorded so future architecture reviews don't re-litigate them.
 | **D11** | Agent scope | **Any step or workflow**, gated by approval keyed on effect class | An allow-list would silently permit new destructive steps |
 | **D12** | HA under policy? | **Yes** — HA becomes actor `ha:*` | More correct; automations and panel updated after cutover, accepted |
 
----
+<br/>
+
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
 
 *Architecture plan — decisions locked. Build progress is tracked in §14;
 see the README for current status.*
+
+<br/><br/>
+
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<br/>
+
+<table>
+<tr>
+<td width="22%" valign="top" align="center">
+
+<br/>
+<strong>fleetctl</strong>
+<br/><br/>
+<sub>Architecture</sub>
+
+</td>
+<td width="26%" valign="top">
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">Documentation</ins></h4>
+
+- [Getting Started](getting-started.md)
+- [CLI Reference](cli-reference.md)
+- [Configuration](configuration.md)
+- [Architecture](architecture.md)
+- [Safety & Policy](safety.md)
+
+</td>
+<td width="26%" valign="top">
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">Repositories</ins></h4>
+
+- [fleetctl](https://github.com/salvuswarez/fleetctl)
+- [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
+
+- [Observability](observability.md) &mdash; diagnostics, timeline, audit
+- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
+- [HA Parity](ha-parity.md) &mdash; panel command mapping
+
+</td>
+<td width="26%" valign="top">
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">About</ins></h4>
+
+- Plugin-based home device fleet manager
+- MIT licensed
+
+<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
+
+- S0&ndash;S6 done &middot; S7 (HA cutover) not started
+
+</td>
+</tr>
+</table>
+
+<br/>
+
+<hr style="border: 0; border-top: 1px solid rgba(100, 116, 139, 0.35); margin: 24px 0;"/>
+
+<div align="center">
+  <sub>fleetctl</sub>
+</div>
