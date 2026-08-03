@@ -50,6 +50,7 @@ htmlcov/
 !.claude/skills/
 # Architecture decisions and hard-won gotchas: worth as much to the next
 # person as the code. Kept free of real device data like everything else.
+!.claude/memory/
 !.claude/settings.json
 
 # --- OS / editor ------------------------------------------------------------
