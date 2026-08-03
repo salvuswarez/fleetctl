@@ -305,6 +305,37 @@ class Toolkit:
         self.container.dispatcher.submit(op_id, lambda: self._invoke(step, device_id, flags, op_id))
         return {"op_id": op_id, "step": step_id, "target": device_id or "fleet", "status": OperationStatus.RUNNING.value}
 
+    def set_gold_device(self, device_id: str) -> dict[str, Any]:
+        """Designate `device_id` as the sole device carrying the ``gold`` tag.
+
+        Which device is "gold" — the reference capture source — is picked at
+        any time, not fixed in config: a caller (a panel button, an agent)
+        may retarget it on the fly. Exclusive, so exactly one device carries
+        the tag at once, matching what `kodi-capture-gold`'s `targets:
+        {tags: [gold]}` expects.
+
+        **PARAMETERS:**
+            `device_id` (str): The device to designate.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The updated device.  <br>
+
+        **RAISES:**
+            `FleetError`: If `device_id` is not in the inventory.  <br>
+        """
+        device = self.container.inventory.set_tag(device_id, "gold", exclusive=True)
+        with correlate(actor=self.actor):
+            self.container.audit.write(
+                AuditEvent.build(
+                    AuditKind.CONFIG,
+                    "inventory.set_gold_device",
+                    target=device_id,
+                    outcome=Outcome.OK,
+                    detail={"surface": "agent"},
+                )
+            )
+        return {"id": device.id, "tags": list(device.tags)}
+
     # -- Internal ----------------------------------------------------------
 
     def _authorize(self, step_id: str, device_id: str | None, *, approve: bool) -> tuple[RegisteredStep, str]:

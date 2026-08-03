@@ -160,3 +160,57 @@ def test_the_write_is_atomic_leaving_no_temp_files(tmp_path: Path) -> None:
 
     # Assert
     assert [path.name for path in tmp_path.iterdir()] == ["devices.yml"]
+
+
+def test_set_tag_adds_to_the_named_device_only(tmp_path: Path) -> None:
+    # Arrange
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device(id="a", tags=["kodi"]), _device(id="b", address="192.168.1.51", tags=["kodi"])])
+
+    # Act
+    updated = store.set_tag("a", "gold")
+
+    # Assert
+    assert updated.tags == ["kodi", "gold"]
+    other = store.get("b")
+    assert other is not None and other.tags == ["kodi"]
+
+
+def test_set_tag_is_idempotent(tmp_path: Path) -> None:
+    # Arrange
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device(tags=["gold"])])
+
+    # Act
+    updated = store.set_tag("stick-1", "gold")
+
+    # Assert
+    assert updated.tags == ["gold"]
+
+
+def test_set_tag_exclusive_moves_the_tag_rather_than_duplicating_it(tmp_path: Path) -> None:
+    """Which device is "gold" is picked at any time, not fixed in config --
+    exactly one device should carry the tag after a retarget."""
+    # Arrange
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device(id="a", tags=["kodi", "gold"]), _device(id="b", address="192.168.1.51", tags=["kodi"])])
+
+    # Act
+    store.set_tag("b", "gold", exclusive=True)
+
+    # Assert
+    a, b = store.get("a"), store.get("b")
+    assert a is not None and a.tags == ["kodi"]
+    assert b is not None and b.tags == ["kodi", "gold"]
+
+
+def test_set_tag_on_an_unknown_device_is_refused(tmp_path: Path) -> None:
+    # Arrange
+    from fleetctl.core.errors import FleetError
+
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device()])
+
+    # Act / Assert
+    with pytest.raises(FleetError):
+        store.set_tag("nope", "gold")

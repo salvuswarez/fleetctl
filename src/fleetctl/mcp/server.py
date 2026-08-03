@@ -149,6 +149,16 @@ def build_server(toolkit: Toolkit) -> Any:
         """
         return _guard(lambda: _render(toolkit.rerun_operation(op_id, approve=approve)))
 
+    @server.tool()
+    def set_gold_device(device_id: str) -> str:
+        """Designate one device as the sole reference capture source.
+
+        Removes the `gold` tag from every other device and adds it to this
+        one, so `kodi-capture-gold` targets it. Which device is gold can
+        change at any time -- this is how, without editing config by hand.
+        """
+        return _guard(lambda: _render(toolkit.set_gold_device(device_id)))
+
     return server
 
 

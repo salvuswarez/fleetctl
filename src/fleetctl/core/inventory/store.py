@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from ..config.loader import load_yaml_text
-from ..errors import ConfigError
+from ..errors import ConfigError, FleetError
 from .device import Device
 from .reconcile import ReconcileResult, reconcile
 
@@ -80,6 +80,44 @@ class DeviceStore:
         with self._lock:
             result = reconcile(self._load(), discovered)
             self._save(result.devices)
+            return result
+
+    def set_tag(self, device_id: str, tag: str, *, exclusive: bool = False) -> Device:
+        """Add `tag` to one device, persisting immediately.
+
+        A scan never touches tags — this is the one path that mutates them
+        programmatically, for a caller like a UI action that wants to change
+        something scan-derived fields can't express.
+
+        **PARAMETERS:**
+            `device_id` (str): The device to tag.  <br>
+            `tag` (str): Tag to add.  <br>
+            `exclusive` (bool): If true, remove `tag` from every other device first — for a tag that names a single canonical device, like ``gold``.  <br>
+
+        **RETURNS:**
+            `Device`: The updated device.  <br>
+
+        **RAISES:**
+            `FleetError`: If `device_id` is not in the inventory.  <br>
+        """
+        with self._lock:
+            devices = self._load()
+            if not any(device.id == device_id for device in devices):
+                raise FleetError(f"Unknown device: {device_id}")
+
+            updated: builtins.list[Device] = []
+            result: Device | None = None
+            for device in devices:
+                if device.id == device_id:
+                    if tag not in device.tags:
+                        device = device.model_copy(update={"tags": [*device.tags, tag]})
+                    result = device
+                elif exclusive and tag in device.tags:
+                    device = device.model_copy(update={"tags": [existing for existing in device.tags if existing != tag]})
+                updated.append(device)
+
+            self._save(updated)
+            assert result is not None
             return result
 
     def _load(self) -> builtins.list[Device]:

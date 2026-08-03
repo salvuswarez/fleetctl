@@ -574,3 +574,37 @@ def test_shutdown_is_safe_when_nothing_was_ever_dispatched(tmp_path: Path) -> No
 
     # Assert
     assert "dispatcher" not in toolkit.container.__dict__
+
+
+def test_set_gold_device_tags_the_target_and_untags_the_previous_one(tmp_path: Path) -> None:
+    # Arrange
+    devices = "devices:\n  - id: stub-1\n    type: stub\n    address: 192.168.1.50\n    tags: [managed, gold]\n  - id: stub-2\n    type: stub\n    address: 192.168.1.51\n    tags: [managed]\n"
+    toolkit = _toolkit(tmp_path, PERMISSIVE, devices=devices)
+
+    # Act
+    outcome = toolkit.set_gold_device("stub-2")
+
+    # Assert
+    assert outcome == {"id": "stub-2", "tags": ["managed", "gold"]}
+    previous = toolkit.container.inventory.get("stub-1")
+    assert previous is not None and previous.tags == ["managed"]
+
+
+def test_set_gold_device_on_an_unknown_device_raises(tmp_path: Path) -> None:
+    # Act / Assert
+    with pytest.raises(FleetError):
+        _toolkit(tmp_path, PERMISSIVE).set_gold_device("nope")
+
+
+def test_set_gold_device_is_audited(tmp_path: Path) -> None:
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    toolkit.set_gold_device("stub-1")
+
+    # Assert
+    events = [event for event in toolkit.container.audit.records() if event.action == "inventory.set_gold_device"]
+    assert len(events) == 1
+    assert events[0].target == "stub-1"
+    assert events[0].outcome is Outcome.OK
