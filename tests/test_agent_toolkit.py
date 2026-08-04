@@ -608,3 +608,18 @@ def test_set_gold_device_is_audited(tmp_path: Path) -> None:
     assert len(events) == 1
     assert events[0].target == "stub-1"
     assert events[0].outcome is Outcome.OK
+
+
+def test_the_cli_error_type_never_reaches_a_toolkit_caller(tmp_path: Path) -> None:
+    """_invoke goes through the CLI's own step runners, which convert
+    FleetError into click.ClickException so a terminal can print it. Any
+    other consumer catching FleetError would silently miss every one."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    toolkit.container.operations.start("live-op", "stub.touch", "stub-1")
+
+    # Act / Assert
+    with pytest.raises(FleetError) as caught:
+        toolkit.run_step("stub.touch", device_id="stub-1")
+    assert "busy" in str(caught.value)
+    assert "ClickException" not in type(caught.value).__name__

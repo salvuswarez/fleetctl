@@ -366,12 +366,31 @@ class Toolkit:
         return step, self.container.operations.new_id(f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}")
 
     def _invoke(self, step: RegisteredStep, device_id: str | None, flags: dict[str, Any], op_id: str) -> OperationStatus:
-        """RETURNS: OperationStatus: The terminal status, having run the step through the CLI's own wiring."""
+        """Run a step through the CLI's wiring, without leaking the CLI's exceptions.
+
+        `_run_device_step`/`_run_fleet_step` translate `FleetError` into
+        `click.ClickException` so the CLI can print it and exit cleanly.
+        That is right for a terminal and wrong for every other caller: a
+        Home Assistant integration catching `FleetError` silently missed
+        them all, and a "device is busy" came back as an unknown error.
+        Translated back here, at the seam where the CLI's concerns end.
+
+        **RETURNS:**
+            `OperationStatus`: The terminal status.  <br>
+
+        **RAISES:**
+            `FleetError`: Whatever the step raised, with the CLI's wrapper removed.  <br>
+        """
+        import click  # noqa: PLC0415 - only needed to unwrap the CLI's own error type
+
         from ..cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
 
-        if step.spec.scope == "device":
-            return _run_device_step(self.container, step, device_id, flags, op_id)
-        return _run_fleet_step(self.container, step, flags, op_id)
+        try:
+            if step.spec.scope == "device":
+                return _run_device_step(self.container, step, device_id, flags, op_id)
+            return _run_fleet_step(self.container, step, flags, op_id)
+        except click.ClickException as exc:
+            raise FleetError(exc.format_message()) from exc.__cause__ or exc
 
     def _plan(self, name: str) -> Plan:
         workflows = self.container.workflows()
