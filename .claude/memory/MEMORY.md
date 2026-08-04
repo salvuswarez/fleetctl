@@ -17,6 +17,8 @@
 - [str() on a Secret yields its mask](gotcha_secret_str_masks.md) — SMB auth fell back to guest; listings looked like an empty share
 - [Operation ids need a sequence](gotcha_operation_id_collisions.md) — a rerun within one second used to overwrite the record it reran
 - [ADB reauth after a reboot](gotcha_adb_reauth_after_reboot.md) — device unreachable right after a deploy; check for the on-screen prompt before assuming a bug
+- [Cheap reads must not be run_step](gotcha_reads_should_not_be_operations.md) — a polled read became an uncancellable RUNNING operation per page load
+- [Dev commands never build a wheel](gotcha_wheel_build_never_tested.md) — v0.1.0 shipped uninstallable through a fully green gate
 
 ## Feedback
 
