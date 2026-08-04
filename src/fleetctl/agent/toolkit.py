@@ -397,7 +397,10 @@ class Toolkit:
             "summary": report.summary(),
             "succeeded": report.succeeded,
             "stopped_early": report.stopped_early,
-            "tasks": [{"step": outcome.task.step_id, "target": outcome.task.target_id, "status": outcome.status.value} for outcome in report.outcomes],
+            "tasks": [
+                {"op_id": outcome.op_id, "step": outcome.task.step_id, "target": outcome.task.target_id, "status": outcome.status.value}
+                for outcome in report.outcomes
+            ],
             "failed": [outcome.task.target_id for outcome in report.failed],
         }
 
