@@ -154,7 +154,8 @@ def test_the_scan_workflow_ships_by_default() -> None:
 
     # Assert
     assert "fleet-scan" in shipped
-    assert [step.use for step in shipped["fleet-scan"].steps] == ["fleet.scan"]
+    # A scan learns what a device is, then what its display calibration is.
+    assert [step.use for step in shipped["fleet-scan"].steps] == ["fleet.scan", "kodi.read_display"]
     assert shipped["fleet-scan"].steps[0].params["subnet"]
 
 

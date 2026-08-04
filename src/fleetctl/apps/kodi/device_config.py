@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import posixpath
+import shlex
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import Any, Mapping
@@ -11,7 +12,7 @@ from typing import Any, Mapping
 from ...core.effects import Capability, Effect
 from ...core.errors import FleetError
 from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
-from .spec import state_spec
+from .spec import APP_ID, state_spec
 
 LOGGER = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ def apply_overscan(local_path: Path, overscan: Mapping[str, Any]) -> bool:
         tree = ElementTree.parse(local_path)
     except ElementTree.ParseError:
         return False
-    block = tree.getroot().find(".//resolution")
+    block = tree.getroot().find(".//resolution/overscan")
     if block is None:
         return False
     changed = False
@@ -160,3 +161,82 @@ def apply_overscan(local_path: Path, overscan: Mapping[str, Any]) -> bool:
     if changed:
         tree.write(local_path, encoding="utf-8", xml_declaration=True)
     return changed
+
+
+READ_DISPLAY = StepSpec(
+    id="kodi.read_display",
+    summary="Read a device's live Kodi display calibration into its inventory vars.",
+    effect=Effect.MUTATING,
+    requires=frozenset({Capability.EXEC, Capability.STATE}),
+    scope="device",
+)
+
+
+def read_display(context: DeviceStepContext) -> StepResult:
+    """Record what the device's own `guisettings.xml` says about its display.
+
+    **PARAMETERS:**
+        `context` (DeviceStepContext): The device, its transport, and its state manager.  <br>
+
+    **RETURNS:**
+        `StepResult`: Facts carry the calibration found, empty when the device has none.  <br>
+    """
+    root = context.state.state_root(state_spec())
+    path = posixpath.join(root, "userdata", GUISETTINGS)
+    xml = context.transport.exec_ok(f"cat {shlex.quote(path)}", effect=Effect.READ)
+
+    display = parse_display(xml)
+    if not display:
+        # Kodi only writes a setting that differs from its default, so a
+        # device nobody has calibrated genuinely has neither value.
+        context.handle.log(f"{context.device.id} reports no display calibration")
+        return StepResult(summary=f"{context.device.id}: no display calibration", facts={})
+
+    device = context.inventory.get(context.device.id)
+    if device is not None:
+        app_vars = dict(device.vars)
+        kodi_vars = dict(app_vars.get(APP_ID) or {})
+        kodi_vars["display"] = display
+        app_vars[APP_ID] = kodi_vars
+        stored = device.model_copy(update={"vars": app_vars})
+        context.inventory.save([stored if other.id == device.id else other for other in context.inventory.list()])
+
+    context.handle.log(f"{context.device.id}: {display}")
+    return StepResult(summary=f"{context.device.id}: display calibration recorded", facts=dict(display))
+
+
+def parse_display(xml: str) -> dict[str, Any]:
+    """Extract resolution index and overscan from a `guisettings.xml` body.
+
+    **PARAMETERS:**
+        `xml` (str): File contents, or ``""`` when it could not be read.  <br>
+
+    **RETURNS:**
+        `dict[str, Any]`: Any of ``resolution_index`` and ``overscan`` that were present.  <br>
+    """
+    if not xml.strip():
+        return {}
+    try:
+        root = ElementTree.fromstring(xml)
+    except ElementTree.ParseError:
+        LOGGER.debug("guisettings.xml did not parse; reporting no calibration")
+        return {}
+
+    found: dict[str, Any] = {}
+    for setting in root.iter("setting"):
+        if setting.get("id") == RESOLUTION_SETTING and (setting.text or "").strip().lstrip("-").isdigit():
+            found["resolution_index"] = int((setting.text or "").strip())
+            break
+
+    # The first <resolution> block is the active one, matching what
+    # apply_device_config writes back.
+    block = root.find(".//resolution/overscan")
+    if block is not None:
+        overscan = {
+            field: int((element.text or "").strip())
+            for field in OVERSCAN_FIELDS
+            if (element := block.find(field)) is not None and (element.text or "").strip().lstrip("-").isdigit()
+        }
+        if overscan:
+            found["overscan"] = overscan
+    return found

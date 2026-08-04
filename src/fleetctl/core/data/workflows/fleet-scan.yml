@@ -12,3 +12,13 @@ steps:
     targets: none
     with:
       subnet: 192.168.1.0/24
+
+  # A scan learns what a device *is*; this learns how it's calibrated.
+  # Kodi-specific, so it targets only devices tagged for it -- a device
+  # without Kodi is skipped rather than probed for a file it hasn't got.
+  - id: read-display
+    use: kodi.read_display
+    targets:
+      tags: [kodi]
+    concurrency: 4
+    on_error: continue

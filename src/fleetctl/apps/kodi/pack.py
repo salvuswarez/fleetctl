@@ -94,4 +94,5 @@ class KodiApp:
             RegisteredStep(spec=base_image.CHECK_UPDATE, run=base_image.check_update, provider=APP_ID),
             RegisteredStep(spec=base_image.INSTALL_BASE, run=base_image.install_base, provider=APP_ID),
             RegisteredStep(spec=device_config.APPLY_DEVICE_CONFIG, run=device_config.apply_device_config, provider=APP_ID),
+            RegisteredStep(spec=device_config.READ_DISPLAY, run=device_config.read_display, provider=APP_ID),
         ]
