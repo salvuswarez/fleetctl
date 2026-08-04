@@ -51,17 +51,21 @@ class Toolkit:
     # -- Reads -------------------------------------------------------------
 
     def list_devices(self) -> list[dict[str, Any]]:
-        """RETURNS: list[dict[str, Any]]: Every known device, including ones flagged unusable."""
+        """RETURNS: list[dict[str, Any]]: The full inventory record for every known device, including ones flagged unusable."""
         return [
             {
                 "id": device.id,
                 "type": device.type or None,
                 "address": device.address or None,
+                "mac": device.mac or None,
                 "name": device.name or None,
                 "model": device.model or None,
+                "serial": device.serial or None,
+                "os_version": device.os_version or None,
                 "tags": list(device.tags),
                 "status": device.status.value,
                 "actionable": device.is_actionable,
+                "vars": dict(device.vars),
             }
             for device in self.container.inventory.list()
         ]
@@ -366,14 +370,7 @@ class Toolkit:
         return step, self.container.operations.new_id(f"{self.actor.replace(':', '-')}-{step_id.replace('.', '-')}")
 
     def _invoke(self, step: RegisteredStep, device_id: str | None, flags: dict[str, Any], op_id: str) -> OperationStatus:
-        """Run a step through the CLI's wiring, without leaking the CLI's exceptions.
-
-        `_run_device_step`/`_run_fleet_step` translate `FleetError` into
-        `click.ClickException` so the CLI can print it and exit cleanly.
-        That is right for a terminal and wrong for every other caller: a
-        Home Assistant integration catching `FleetError` silently missed
-        them all, and a "device is busy" came back as an unknown error.
-        Translated back here, at the seam where the CLI's concerns end.
+        """Run a step through the CLI's runners, unwrapping their `click.ClickException` so it never reaches a non-CLI caller.
 
         **RETURNS:**
             `OperationStatus`: The terminal status.  <br>

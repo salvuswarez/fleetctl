@@ -623,3 +623,33 @@ def test_the_cli_error_type_never_reaches_a_toolkit_caller(tmp_path: Path) -> No
         toolkit.run_step("stub.touch", device_id="stub-1")
     assert "busy" in str(caught.value)
     assert "ClickException" not in type(caught.value).__name__
+
+
+def test_the_device_listing_carries_the_whole_record(tmp_path: Path) -> None:
+    """A consumer that can't read serial or vars.kodi has to reach past the
+    toolkit into the inventory, which defeats the point of the seam."""
+    # Arrange
+    devices = (
+        "devices:\n"
+        "  - id: stub-1\n"
+        "    type: stub\n"
+        "    address: 192.168.1.50\n"
+        "    mac: aa:bb:cc:dd:ee:ff\n"
+        "    serial: SERIAL123\n"
+        "    os_version: '9'\n"
+        "    tags: [managed]\n"
+        "    vars:\n"
+        "      kodi:\n"
+        "        display:\n"
+        "          resolution_index: 18\n"
+    )
+    toolkit = _toolkit(tmp_path, PERMISSIVE, devices=devices)
+
+    # Act
+    listed = toolkit.list_devices()[0]
+
+    # Assert
+    assert listed["mac"] == "aa:bb:cc:dd:ee:ff"
+    assert listed["serial"] == "SERIAL123"
+    assert listed["os_version"] == "9"
+    assert listed["vars"]["kodi"]["display"]["resolution_index"] == 18
