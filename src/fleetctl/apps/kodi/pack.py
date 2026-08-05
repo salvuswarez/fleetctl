@@ -12,7 +12,7 @@ import yaml
 from ...core.registry import RegisteredStep
 from ...core.workflow.step import ProfileTransform
 from ...core.workflow.workflow import Workflow
-from . import base_image, device_config, steps
+from . import base_image, device_config, health, steps
 from .spec import APP_ID
 from .transforms.addons import PruneAddons
 from .transforms.advanced import RemoveThumbnailSubstitution
@@ -95,4 +95,5 @@ class KodiApp:
             RegisteredStep(spec=base_image.INSTALL_BASE, run=base_image.install_base, provider=APP_ID),
             RegisteredStep(spec=device_config.APPLY_DEVICE_CONFIG, run=device_config.apply_device_config, provider=APP_ID),
             RegisteredStep(spec=device_config.READ_DISPLAY, run=device_config.read_display, provider=APP_ID),
+            RegisteredStep(spec=health.CHECK, run=health.check, provider=APP_ID),
         ]
