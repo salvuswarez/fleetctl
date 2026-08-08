@@ -9,7 +9,7 @@ import shlex
 
 from ...core.effects import Capability, Effect
 from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
-from .spec import IDENTIFIERS, state_spec
+from .spec import state_spec
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +36,11 @@ def check(context: DeviceStepContext) -> StepResult:
     """
     facts: dict[str, str] = {}
 
-    kodi_version = context.apps.installed_version(IDENTIFIERS["android"])
+    # The identifier differs per platform -- `org.xbmc.kodi` on Android,
+    # `tv.kodi.Kodi` under Flatpak. Asking the state manager which platform it
+    # serves is what keeps this from reporting "not installed" on a Steam Deck
+    # running Kodi perfectly well.
+    kodi_version = context.apps.installed_version(state_spec().identifier_for(context.state.platform))
     if kodi_version:
         facts["kodi_version"] = kodi_version
 
