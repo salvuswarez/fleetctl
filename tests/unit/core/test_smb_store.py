@@ -128,6 +128,7 @@ class _FakeSmb:
     def __init__(self, *, fail_times: int = 0) -> None:
         self.files: dict[str, bytes] = {}
         self.opens: list[tuple[str, str, str | None]] = []
+        self.renames: list[tuple[str, str]] = []
         self.dirs: set[str] = set()
         self.fail_times = fail_times
         self.resets = 0
@@ -156,6 +157,12 @@ class _FakeSmb:
         if path not in self.files:
             raise FileNotFoundError(path)
         del self.files[path]
+
+    def replace(self, src: str, dst: str) -> None:
+        if src not in self.files:
+            raise FileNotFoundError(src)
+        self.renames.append((src, dst))
+        self.files[dst] = self.files.pop(src)
 
     def open_file(self, path: str, mode: str = "rb", encoding: str | None = None, share_access: str | None = None) -> Any:
         # Recorded so a test can assert reads permit other readers: opening a
@@ -362,3 +369,95 @@ def test_writes_stay_exclusive(smb: _FakeSmb, tmp_path: Path) -> None:
     writes = [entry for entry in smb.opens if "w" in entry[1]]
     assert writes
     assert all(share is None for _, _, share in writes)
+
+
+def test_a_payload_is_published_by_rename_not_written_in_place(smb: _FakeSmb, tmp_path: Path) -> None:
+    """The real failure: a session dropped 206MB into a 350MB build left a
+    file that listed, sized and deployed exactly like a whole one. Nothing
+    is ever written to the artifact's real name."""
+    # Arrange
+    from fleetctl.core.artifacts.ref import ArtifactRef
+    from fleetctl.core.artifacts.smb import _UPLOADING
+
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"z" * 128)
+    ref = ArtifactRef(kind="builds", name="build.tar.gz")
+
+    # Act
+    _configured().put(payload, ref, meta={"profile": "deck"})
+
+    # Assert
+    payload_writes = [path for path, mode, _ in smb.opens if "w" in mode and not path.endswith(".meta.json")]
+    assert payload_writes, "expected the payload to be written"
+    assert all(path.endswith(_UPLOADING) for path in payload_writes)
+    assert smb.renames == [(payload_writes[0], payload_writes[0].removesuffix(_UPLOADING))]
+
+
+def test_an_interrupted_upload_leaves_nothing_that_lists(smb: _FakeSmb, tmp_path: Path) -> None:
+    """A leftover staging file must not read as an artifact -- that is the
+    whole point of staging it under a different name."""
+    # Arrange
+    from fleetctl.core.artifacts.smb import _UPLOADING
+
+    store = _configured()
+    smb.files[store._path("builds", "build_cut_short.tar.gz" + _UPLOADING)] = b"z" * 64
+
+    # Act
+    found = store.list("builds")
+
+    # Assert
+    assert found == []
+
+
+def test_the_sidecar_is_in_place_before_the_payload_is_published(smb: _FakeSmb, tmp_path: Path) -> None:
+    """Ordering is the guarantee: if the payload is visible under its real
+    name, its metadata is already beside it -- so a build can never appear
+    with the unattributed, undeployable shape the panel cannot reason about."""
+    # Arrange
+    from fleetctl.core.artifacts.ref import ArtifactRef
+
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"z" * 32)
+
+    # Act
+    _configured().put(payload, ArtifactRef(kind="builds", name="build.tar.gz"), meta={"profile": "deck"})
+
+    # Assert
+    sidecar_written = max(i for i, (path, mode, _) in enumerate(smb.opens) if path.endswith(".meta.json") and "w" in mode)
+    assert smb.renames, "expected the payload to be published by rename"
+    # The rename happens after every open, so comparing against the last
+    # sidecar write is enough to pin the order.
+    assert sidecar_written == len(smb.opens) - 1
+
+
+def test_a_retry_clears_the_dead_sessions_staging_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Reopening the path a dropped session was writing gets ACCESS_DENIED
+    while the server still holds its handle, so the retry has to remove it
+    rather than write over it."""
+    # Arrange
+    from fleetctl.core.artifacts.ref import ArtifactRef
+    from fleetctl.core.artifacts.smb import _UPLOADING
+
+    fake = _FakeSmb()
+    removed: list[str] = []
+    original_remove = fake.remove
+
+    def _tracking_remove(path: str) -> None:
+        removed.append(path)
+        original_remove(path)
+
+    fake.remove = _tracking_remove  # type: ignore[method-assign]
+    monkeypatch.setitem(__import__("sys").modules, "smbclient", fake)
+    store = _configured()
+    staged = store._path("builds", "build.tar.gz" + _UPLOADING)
+    fake.files[staged] = b"half a build"
+
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"z" * 32)
+
+    # Act
+    store.put(payload, ArtifactRef(kind="builds", name="build.tar.gz"), meta={})
+
+    # Assert
+    assert staged in removed
+    assert fake.files[store._path("builds", "build.tar.gz")] == b"z" * 32

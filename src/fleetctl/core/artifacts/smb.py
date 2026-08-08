@@ -34,6 +34,11 @@ _RETRIES = 2
 # a lazy import, as everywhere else in this module.
 _SHARING_VIOLATION = 0xC0000043
 _CONTENTION_BACKOFF_S = 0.15
+# Payloads land under this suffix and are renamed into place once whole, so a
+# transfer cut off mid-flight leaves nothing that reads as a finished artifact.
+# `list` skips it; a 350MB build takes long enough that a dropped session
+# during one is routine rather than exceptional.
+_UPLOADING = ".uploading"
 _T = TypeVar("_T")
 
 
@@ -87,6 +92,10 @@ class SmbArtifactStore:
     far more often than they fail outright, and a stale handle is not a
     reason to fail a deploy.
 
+    Uploads publish by rename, never by writing to the final name. Nothing
+    else keeps a session dropped 200MB into a 350MB build from leaving a file
+    that lists, sizes and deploys exactly like a whole one.
+
     **PARAMETERS:**
         `settings` (SmbSettings): Where the share is and how to reach it.  <br>
     """
@@ -133,6 +142,15 @@ class SmbArtifactStore:
     def _path(self, *parts: str) -> str:
         return "\\\\" + "\\".join([self._settings.host, self._settings.share, self._settings.root, *parts])
 
+    def _remove_quietly(self, path: str) -> None:
+        """Delete `path`, treating any failure as "it is not in the way"."""
+        import smbclient
+
+        try:
+            smbclient.remove(path)
+        except Exception as exc:  # noqa: BLE001 - absent is the normal case, and a real problem resurfaces on the write
+            LOGGER.debug("Nothing to clear at %s: %s", path, exc)
+
     def put(self, local_path: Path, ref: ArtifactRef, *, meta: Mapping[str, Any] | None = None) -> ArtifactInfo:
         """Upload `local_path` to the share under `ref`.
 
@@ -151,10 +169,20 @@ class SmbArtifactStore:
 
         def _upload() -> None:
             smbclient.makedirs(self._path(ref.kind), exist_ok=True)
-            with open(local_path, "rb") as source, smbclient.open_file(self._path(ref.kind, ref.name), mode="wb") as target:
+            staged = self._path(ref.kind, ref.name + _UPLOADING)
+            # A retry inherits whatever the dead session left behind, and the
+            # server can still hold a handle on it — reopening that path for
+            # write is refused outright. Clearing it first is what makes the
+            # second attempt possible at all.
+            self._remove_quietly(staged)
+            with open(local_path, "rb") as source, smbclient.open_file(staged, mode="wb") as target:
                 shutil.copyfileobj(source, target, _CHUNK)
             with smbclient.open_file(self._path(ref.kind, ref.meta_name), mode="w", encoding="utf-8") as sidecar:
                 sidecar.write(json.dumps(record, indent=2, default=str))
+            # Last, and the only step that publishes anything: the payload
+            # appearing under its real name means it is whole and its sidecar
+            # is already beside it.
+            smbclient.replace(staged, self._path(ref.kind, ref.name))
 
         try:
             self._retry(_upload)
@@ -211,7 +239,7 @@ class SmbArtifactStore:
 
         found: list[ArtifactInfo] = []
         for name in names:
-            if name.endswith(".meta.json"):
+            if name.endswith(".meta.json") or name.endswith(_UPLOADING):
                 continue
             ref = ArtifactRef(kind=kind, name=name)
             meta = self._meta(ref)
