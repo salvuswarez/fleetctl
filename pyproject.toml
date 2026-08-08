@@ -1,6 +1,6 @@
 [project]
 name = "fleetctl"
-version = "0.0.1"
+version = "0.2.0"
 description = "Plugin-based fleet management for home devices — device packs, app packs, and declarative workflows"
 readme = "README.md"
 license = "MIT"
