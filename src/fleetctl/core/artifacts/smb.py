@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import shutil
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +20,20 @@ from .store import ArtifactInfo
 LOGGER = logging.getLogger(__name__)
 
 _CHUNK = 65536
+
+# Without this, smbprotocol opens a file exclusively and a second reader gets
+# STATUS_SHARING_VIOLATION. Listing a kind reads every sidecar, and the panel
+# lists concurrently, so the same file is routinely opened more than once at a
+# time. Reads declare that they tolerate other readers; writes stay exclusive.
+_SHARE_READ = "r"
+# Kept low deliberately: the share is served by a small router-hosted SMB
+# stack that answers STATUS_INSUFFICIENT_RESOURCES when several clients retry
+# at once, so an eager retry loop turns contention into exhaustion.
 _RETRIES = 2
+# NtStatus.STATUS_SHARING_VIOLATION. Compared numerically so smbprotocol stays
+# a lazy import, as everywhere else in this module.
+_SHARING_VIOLATION = 0xC0000043
+_CONTENTION_BACKOFF_S = 0.15
 _T = TypeVar("_T")
 
 
@@ -99,7 +114,15 @@ class SmbArtifactStore:
             try:
                 return call()
             except Exception as exc:
-                if attempt == _RETRIES - 1 or not _is_transient(exc):
+                if attempt == _RETRIES - 1:
+                    raise
+                if _is_contended(exc):
+                    # Resetting the session would not help and costs a
+                    # reconnect; the competing handle closes on its own.
+                    LOGGER.debug("SMB path contended, retrying: %s", exc)
+                    time.sleep(_CONTENTION_BACKOFF_S * (attempt + 1))
+                    continue
+                if not _is_transient(exc):
                     raise
                 LOGGER.info("SMB session stale, reconnecting: %s", exc)
                 smbclient.reset_connection_cache()
@@ -155,7 +178,7 @@ class SmbArtifactStore:
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _download() -> None:
-            with smbclient.open_file(self._path(ref.kind, ref.name), mode="rb") as source, open(local_path, "wb") as target:
+            with smbclient.open_file(self._path(ref.kind, ref.name), mode="rb", share_access=_SHARE_READ) as source, open(local_path, "wb") as target:
                 shutil.copyfileobj(source, target, _CHUNK)
 
         try:
@@ -177,7 +200,13 @@ class SmbArtifactStore:
         try:
             names = self._retry(lambda: list(smbclient.listdir(self._path(kind))))
         except Exception as exc:
-            LOGGER.debug("SMB listing failed for %s: %s", kind, exc)
+            # An absent kind is normal and stays quiet. Anything else means
+            # this returned "no artifacts" for a share that may be full — the
+            # same shape as a genuinely empty one, so say so loudly.
+            if getattr(exc, "errno", None) == errno.ENOENT:
+                LOGGER.debug("No %s directory on the share yet", kind)
+            else:
+                LOGGER.warning("SMB listing failed for %s, reporting it as empty: %s", kind, exc)
             return []
 
         found: list[ArtifactInfo] = []
@@ -223,7 +252,7 @@ class SmbArtifactStore:
         import smbclient
 
         try:
-            with smbclient.open_file(self._path(ref.kind, ref.meta_name), mode="r", encoding="utf-8") as handle:
+            with smbclient.open_file(self._path(ref.kind, ref.meta_name), mode="r", encoding="utf-8", share_access=_SHARE_READ) as handle:
                 loaded = json.loads(handle.read())
         except Exception as exc:
             LOGGER.debug("No readable sidecar for %s: %s", ref.wire, exc)
@@ -234,6 +263,16 @@ class SmbArtifactStore:
 def _reveal(value: Secret | str) -> str:
     """RETURNS: str: The underlying value. `str()` on a Secret yields its mask, never its content."""
     return value.reveal() if isinstance(value, Secret) else str(value)
+
+
+def _is_contended(exc: BaseException) -> bool:
+    """RETURNS: bool: Whether another handle held the file.
+
+    Distinct from a stale session: nothing needs reconnecting, the other
+    handle simply has to close. Listing a kind opens its directory and every
+    sidecar, and the panel lists concurrently, so this happens routinely.
+    """
+    return bool(getattr(exc, "ntstatus", None) == _SHARING_VIOLATION)
 
 
 def _is_transient(exc: BaseException) -> bool:

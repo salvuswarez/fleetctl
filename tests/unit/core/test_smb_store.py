@@ -127,6 +127,7 @@ class _FakeSmb:
 
     def __init__(self, *, fail_times: int = 0) -> None:
         self.files: dict[str, bytes] = {}
+        self.opens: list[tuple[str, str, str | None]] = []
         self.dirs: set[str] = set()
         self.fail_times = fail_times
         self.resets = 0
@@ -156,7 +157,11 @@ class _FakeSmb:
             raise FileNotFoundError(path)
         del self.files[path]
 
-    def open_file(self, path: str, mode: str = "rb", encoding: str | None = None) -> Any:
+    def open_file(self, path: str, mode: str = "rb", encoding: str | None = None, share_access: str | None = None) -> Any:
+        # Recorded so a test can assert reads permit other readers: opening a
+        # file exclusively is what produced STATUS_SHARING_VIOLATION on a real
+        # share whenever two listings overlapped.
+        self.opens.append((path, mode, share_access))
         return _FakeFile(self, path, mode)
 
 
@@ -317,3 +322,43 @@ def test_a_secret_username_that_resolves_to_nothing_is_not_configured(smb: _Fake
 
     # Assert
     assert settings.configured is False
+
+
+def test_reads_permit_other_readers(smb: _FakeSmb, tmp_path: Path) -> None:
+    """smbprotocol opens exclusively unless told otherwise, and a second
+    reader then gets STATUS_SHARING_VIOLATION. Listing a kind reads every
+    sidecar and the panel lists concurrently, so the same file is routinely
+    open more than once — every metadata read failed on a real share."""
+    # Arrange
+    from fleetctl.core.artifacts.ref import ArtifactRef
+
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"z" * 64)
+    store = _configured()
+    store.put(payload, ArtifactRef(kind="builds", name="build.tar.gz"), meta={"size": 64})
+    smb.opens.clear()
+
+    # Act
+    store.list("builds")
+
+    # Assert
+    reads = [entry for entry in smb.opens if "r" in entry[1]]
+    assert reads, "expected the listing to read a sidecar"
+    assert all(share == "r" for _, _, share in reads)
+
+
+def test_writes_stay_exclusive(smb: _FakeSmb, tmp_path: Path) -> None:
+    """A half-written artifact must not be readable as though complete."""
+    # Arrange
+    from fleetctl.core.artifacts.ref import ArtifactRef
+
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"z" * 64)
+
+    # Act
+    _configured().put(payload, ArtifactRef(kind="builds", name="build.tar.gz"), meta={"size": 64})
+
+    # Assert
+    writes = [entry for entry in smb.opens if "w" in entry[1]]
+    assert writes
+    assert all(share is None for _, _, share in writes)
