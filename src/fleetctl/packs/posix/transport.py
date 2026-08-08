@@ -36,6 +36,36 @@ CAPABILITIES: frozenset[Capability] = frozenset(
 )
 
 
+class UnknownHostKey(Exception):
+    """Raised by the host-key policy when a host is not in `known_hosts`.
+
+    Distinct from an authentication failure. A sweep meets hosts that are not
+    ours at all — a NAS, a phone — and an unrecognised key means "never seen
+    this", not "our device rejected our credentials". Conflating them recorded
+    every stranger with an open port as a device awaiting key approval.
+    """
+
+
+def _reject_unknown_host(paramiko_module: Any) -> Any:
+    """Build a host-key policy that refuses anything absent from `known_hosts`.
+
+    Defined here rather than at module scope because paramiko is imported
+    lazily, matching how the ADB packs treat `adb_shell`.
+
+    Deliberately not `AutoAddPolicy`: silently trusting a new key on a fleet
+    tool turns a man-in-the-middle into a no-op.
+
+    **RETURNS:**
+        `MissingHostKeyPolicy`: A policy raising `UnknownHostKey`.  <br>
+    """
+
+    class _Policy(paramiko_module.MissingHostKeyPolicy):  # type: ignore[misc]
+        def missing_host_key(self, client: Any, hostname: str, key: Any) -> None:
+            raise UnknownHostKey(hostname)
+
+    return _Policy()
+
+
 @dataclass(frozen=True, slots=True)
 class SshSettings:
     """How to authenticate to a POSIX host.
@@ -104,8 +134,8 @@ class SshTransport:
         """Open the SSH session.
 
         **RAISES:**
-            `DeviceUnauthorizedError`: If the host rejected the credential, or its host key is unknown. Distinguished from unreachable, because "enable Remote Access on the device" and "the box is off" need different answers.  <br>
-            `TransportError`: If the host could not be reached at all.  <br>
+            `DeviceUnauthorizedError`: If the host key is known but the credential was refused — an expected host, worth acting on.  <br>
+            `TransportError`: If the host is unreachable, absent from `known_hosts`, or the handshake failed.  <br>
         """
         import paramiko
 
@@ -114,10 +144,7 @@ class SshTransport:
             client.load_host_keys(str(self._settings.known_hosts))
         else:
             client.load_system_host_keys()
-        # Deliberately not AutoAddPolicy: silently trusting a new host key on
-        # a fleet tool turns a MITM into a no-op. An unknown host is an error
-        # the operator resolves once, by adding the key.
-        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        client.set_missing_host_key_policy(_reject_unknown_host(paramiko))
 
         try:
             client.connect(
@@ -130,11 +157,17 @@ class SshTransport:
                 allow_agent=False,
                 look_for_keys=False,
             )
+        except UnknownHostKey as exc:
+            # Not "unauthorized": a sweep meets hosts that are not ours, and
+            # recording each one as awaiting key approval buries the devices
+            # that genuinely are.
+            raise TransportError(f"{self._address} is not in known_hosts", target=self._address) from exc
         except paramiko.AuthenticationException as exc:
+            # Host key is known, so this host is one we expect — the
+            # credentials were refused, and that is worth acting on.
             raise DeviceUnauthorizedError(self._address, str(exc)) from exc
         except paramiko.SSHException as exc:
-            # Covers an unknown host key, which RejectPolicy raises as this.
-            raise DeviceUnauthorizedError(self._address, str(exc)) from exc
+            raise TransportError(f"SSH handshake with {self._address} failed: {exc}", target=self._address) from exc
         except (OSError, socket.error) as exc:
             raise TransportError(f"Could not reach {self._address} over SSH: {exc}", target=self._address) from exc
 

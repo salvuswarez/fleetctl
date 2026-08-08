@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from fleetctl.core.effects import Capability, Effect
-from fleetctl.core.errors import CommandFailedError, TransportError
+from fleetctl.core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
 from fleetctl.packs.posix.transport import SshSettings, SshTransport
 
 
@@ -291,3 +291,40 @@ def test_the_transport_declares_only_what_ssh_actually_provides() -> None:
 def test_the_target_is_the_address_it_was_given() -> None:
     # Act / Assert
     assert SshTransport("192.168.1.70", SshSettings(user="ops")).target == "192.168.1.70"
+
+
+def test_an_unknown_host_is_not_reported_as_unauthorized(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A sweep meets hosts that are not ours. `DeviceUnauthorizedError` means
+    "our device refused our credentials" and puts an entry in the inventory —
+    a stranger with port 22 open must not land there."""
+    # Arrange
+    import paramiko
+
+    from fleetctl.packs.posix.transport import UnknownHostKey
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise UnknownHostKey("192.168.1.70")
+
+    monkeypatch.setattr(paramiko.SSHClient, "connect", _raise)
+    transport = SshTransport("192.168.1.70", SshSettings(user="ops"))
+
+    # Act / Assert
+    with pytest.raises(TransportError, match="not in known_hosts") as caught:
+        transport.connect()
+    assert not isinstance(caught.value, DeviceUnauthorizedError)
+
+
+def test_a_refused_credential_is_still_reported_as_unauthorized(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The host key was known, so this is a host we expect — worth surfacing."""
+    # Arrange
+    import paramiko
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise paramiko.AuthenticationException("bad password")
+
+    monkeypatch.setattr(paramiko.SSHClient, "connect", _raise)
+    transport = SshTransport("192.168.1.70", SshSettings(user="ops"))
+
+    # Act / Assert
+    with pytest.raises(DeviceUnauthorizedError):
+        transport.connect()
