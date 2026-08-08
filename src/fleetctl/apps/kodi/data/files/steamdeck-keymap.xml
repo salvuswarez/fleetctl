@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Steam Deck input for Kodi.
+
+     Launched from Steam, the Deck's controls arrive as KEYBOARD keys, not as
+     joystick buttons: A sends return, X sends escape, the dpad sends arrows,
+     and Y sends nothing at all. The touchscreen acts as a mouse pointer, so
+     Kodi's touch gestures never fire and a press-and-hold is a held *left*
+     click — it cannot produce a right-click.
+
+     Consequence: opening a context menu needs a button mapped in the Steam
+     Input layout, to either Right Mouse Click (action 101) or the `c` key.
+     Umbrella's source window — where Download lives — accepts both. -->
+<keymap>
+  <global>
+    <keyboard>
+      <!-- Stock already binds `c`; restated so this file records the contract
+           the Steam Input layout is expected to satisfy. -->
+      <c>ContextMenu</c>
+      <menu>ContextMenu</menu>
+    </keyboard>
+
+    <!-- Inert under Steam Input, which sends no joystick events. Kept for a
+         directly-attached controller, where stock maps R3 to ShutdownMenu —
+         easy to brush by accident on a handheld. -->
+    <joystick profile="game.controller.default">
+      <a>Select</a>
+      <x>ContextMenu</x>
+      <y>ContextMenu</y>
+      <rightthumb>ContextMenu</rightthumb>
+    </joystick>
+
+    <!-- Only reached when the screen delivers touch gestures rather than
+         pointer events, which is not the case in the desktop Steam client. -->
+    <touch>
+      <longpress>RightClick</longpress>
+      <tap pointers="2">RightClick</tap>
+    </touch>
+  </global>
+</keymap>

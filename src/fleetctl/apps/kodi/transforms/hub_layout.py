@@ -12,6 +12,9 @@ from typing import Any, Mapping, Sequence
 
 import yaml
 
+from ....core.errors import FleetError
+from ..merging import deep_merge
+
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_LAYOUT = "arctic-fuse-3"
@@ -21,11 +24,48 @@ _NODES_REL = "addon_data/plugin.video.themoviedb.helper/nodes"
 _SKINVARS_REL = "addon_data/script.skinvariables/nodes/skin.arctic.fuse.3"
 
 
-def load_layout(name: str = DEFAULT_LAYOUT) -> dict[str, Any]:
-    """RETURNS: dict[str, Any]: A layout definition shipped with this pack."""
+def _read_layout(name: str) -> dict[str, Any]:
+    """RETURNS: dict[str, Any]: One layout file, unresolved."""
     text = resources.files("fleetctl.apps.kodi.data.hubs").joinpath(f"{name}.yml").read_text(encoding="utf-8")
     loaded = yaml.safe_load(text)
     return loaded if isinstance(loaded, dict) else {}
+
+
+def load_layout(name: str = DEFAULT_LAYOUT, *, _seen: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Load a layout, resolving `extends:` and `add_widgets:`.
+
+    A layout is shared by the whole fleet, so a device that needs one extra row
+    — a local folder only it has — declares a variant rather than editing the
+    shared file. `add_widgets` appends, because a plain merge replaces a list
+    and would mean restating a hub's every row to add one.
+
+    **PARAMETERS:**
+        `name` (str): Layout stem, e.g. ``arctic-fuse-3``.  <br>
+        `_seen` (tuple[str, ...]): Layouts already being resolved, used to detect a cycle.  <br>
+
+    **RETURNS:**
+        `dict[str, Any]`: The resolved layout. `extends` and `add_widgets` are not part of the result.  <br>
+
+    **RAISES:**
+        `FleetError`: If the `extends` chain contains a cycle, or `add_widgets` names a hub the layout does not define.  <br>
+    """
+    if name in _seen:
+        raise FleetError(f"Layout {name!r} extends itself: {' -> '.join([*_seen, name])}")
+
+    definition = _read_layout(name)
+    parent = definition.pop("extends", None)
+    additions = definition.pop("add_widgets", None) or {}
+    resolved = deep_merge(load_layout(str(parent), _seen=(*_seen, name)), definition) if parent else definition
+
+    if additions:
+        hubs = {slot: dict(spec) for slot, spec in (resolved.get("hubs") or {}).items()}
+        for slot, rows in additions.items():
+            hub = hubs.get(str(slot))
+            if hub is None:
+                raise FleetError(f"Layout {name!r} adds widgets to unknown hub {slot!r}")
+            hub["widgets"] = [*(hub.get("widgets") or []), *rows]
+        resolved["hubs"] = hubs
+    return resolved
 
 
 def _guid(*parts: str) -> str:

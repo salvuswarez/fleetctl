@@ -18,12 +18,13 @@ from typing import Iterator
 
 import pytest
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "fleetctl"
+SRC = Path(__file__).resolve().parents[2] / "src" / "fleetctl"
 
-# `packs/android` is a shared collaborator library composed by vendor packs.
-# It registers nothing and has no entry point, so it is the one intra-ring
-# import permitted — see docs/pack-authoring.md.
-SHARED_PACK = "fleetctl.packs.android"
+# Shared collaborator libraries composed by vendor packs. Each registers
+# nothing and has no entry point, which is what makes it a base rather than a
+# sibling — these are the only intra-ring imports permitted, see
+# docs/pack-authoring.md. A pack with an entry point never belongs here.
+SHARED_PACKS = ("fleetctl.packs.android", "fleetctl.packs.posix")
 
 # Device and app vocabulary that must never appear in the kernel. A hit here
 # usually means a vendor quirk leaked inward; it belongs to the pack that has
@@ -115,17 +116,31 @@ def test_packs_do_not_import_apps() -> None:
     assert violations == [], "packs/ must not depend on apps/:\n" + "\n".join(violations)
 
 
-def test_a_pack_imports_no_sibling_pack_except_the_shared_android_base() -> None:
+def test_a_pack_imports_no_sibling_pack_except_a_shared_base() -> None:
     # Arrange / Act
     violations = []
     for path, tree in _modules("packs"):
         own = f"fleetctl.packs.{path.relative_to(SRC / 'packs').parts[0]}"
         for lineno, name in _imported_names(tree, path):
-            if name.startswith("fleetctl.packs.") and not name.startswith((own, SHARED_PACK)):
+            if name.startswith("fleetctl.packs.") and not name.startswith((own, *SHARED_PACKS)):
                 violations.append(f"{path}:{lineno} imports {name}")
 
     # Assert
-    assert violations == [], "a pack may only compose packs/android:\n" + "\n".join(violations)
+    assert violations == [], f"a pack may only compose {' or '.join(SHARED_PACKS)}:\n" + "\n".join(violations)
+
+
+def test_no_shared_base_is_registered_as_a_pack() -> None:
+    """A shared base is exempt from the sibling-import rule. If one also had
+    an entry point it would be a vendor pack too, and the exemption would
+    quietly become a hole any pack could import through."""
+    # Arrange
+    pyproject = (SRC.parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+
+    # Act
+    registered = [base for base in SHARED_PACKS if f"{base}.pack:" in pyproject]
+
+    # Assert
+    assert registered == [], "these shared bases are registered as packs:\n" + "\n".join(registered)
 
 
 def _docstring_nodes(tree: ast.Module) -> set[int]:

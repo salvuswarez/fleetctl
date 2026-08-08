@@ -13,13 +13,38 @@ description: The S0–S8 build stages, what each contains, its exit criterion, a
 |---|-------|----------------|--------|
 | **S0** | Repo bootstrap | CI green on an empty package | ✅ done |
 | **S1** | Core kernel | `FakeTransport` + `LocalArtifactStore` run a trivial step end-to-end in tests, with audit records asserted | ✅ done |
-| **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ⬜ next |
+| **S2** | First pack + first app | Parity: capture → build → deploy a real device, matching what `firestick_manager` produces | ✅ done |
 | **S3** | Config-as-code + workflows | `fleetctl workflow run kodi-refresh --dry-run` prints a correct plan; `config <device>` explains every key | ✅ done |
 | **S4** | Policy + audit hardening | A device marked protected cannot be reached by any actor without a config edit | ✅ done |
 | **S5** | Shield Pro | One workflow deploys the same Kodi build to a Stick and a Shield | ✅ done (unverified on hardware) |
 | **S6** | MCP adapter | An agent completes `kodi-refresh` with per-step approval, fully audited | ✅ done |
-| **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ⬜ next |
-| **S8** | Later | `linux_host` + SSH; HTTP API if a consumer appears; `fleet.lock` | ⬜ |
+| **S7** | HA cutover | Live panel runs on `fleetctl`; `firestick_manager` archived | ✅ done (2026-08-06) |
+| **S8** | Later | `linux_host` + SSH; HTTP API if a consumer appears; `fleet.lock` | 🟡 in progress — SSH slice only |
+
+## S8 in progress — what has landed and what has not
+
+S8 as written bundles three unrelated things. Only the first is started:
+
+| Slice | Status |
+|-------|--------|
+| `packs/posix` (shared SSH base) + `packs/linux_host` + `packs/steamdeck` | ✅ verified on a Steam Deck |
+| HTTP API | ⬜ not started, and conditional — only "if a consumer appears" |
+| `fleet.lock` | ⬜ not started |
+
+`packs/posix` is the second shared base after `packs/android`, so
+`SHARED_PACKS` in `tests/unit/test_architecture.py` is a tuple. A shared base
+must have **no entry point** — that is what makes it a base rather than a
+sibling, and a test asserts it.
+
+A Steam Deck is claimed by `packs/steamdeck`, not `linux_host`: SteamOS mounts
+`/` read-only and keeps applications in Flatpak sandboxes, so `linux_host`
+declines `ID=steamos` rather than applying its writable-root defaults.
+`linux_host` itself declares neither `STATE` nor `APPS` and remains unverified
+against a plain Linux box.
+
+Capture, build, deploy, per-device config, maintenance and cache trimming all
+run against the Deck. What that took is in
+`project_steamdeck_kodi_pack_plan.md`.
 
 ## Six decisions that were open before S1 — five now settled
 

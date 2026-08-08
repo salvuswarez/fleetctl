@@ -45,7 +45,8 @@ class AndroidStateManager:
             `str`: Absolute on-device path.  <br>
         """
         package = spec.identifier_for(PLATFORM)
-        return posixpath.join(self._quirks.app_data_root, package, "files", *([spec.app_root] if spec.app_root else []))
+        app_root = spec.root_for(PLATFORM)
+        return posixpath.join(self._quirks.app_data_root, package, "files", *([app_root] if app_root else []))
 
     def snapshot(self, spec: AppStateSpec, destination: Path) -> Path:
         """Trim, archive, and retrieve the app's state.

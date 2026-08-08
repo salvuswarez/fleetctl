@@ -1,0 +1,13 @@
+name: kodi-trim-caches
+description: >
+  Clear Kodi's regenerable caches on every Kodi device — thumbnails, the
+  texture index, and temp. Touches no user data and needs no rebuild, so it is
+  safe to run on a schedule when a device's storage is filling up.
+
+steps:
+  - id: trim
+    use: kodi.trim_caches
+    targets:
+      tags: [kodi]
+    concurrency: 4
+    on_error: continue

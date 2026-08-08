@@ -1,0 +1,20 @@
+# The shared Arctic Fuse layout plus the Deck's local downloads.
+#
+# A variant rather than an edit to the shared file: these paths exist only on
+# the Deck's SD card, and a row pointing at them would be dead on every other
+# device.
+#
+# The rows read the folders directly rather than the library. The video
+# database is shared MySQL on the router, so a library row needs the network —
+# which defeats the point of having downloaded the files.
+
+extends: arctic-fuse-3
+
+add_widgets:
+  home:
+    - label: Downloaded Shows
+      icon: "{tmdb}/download.png"
+      path: /run/media/deck/SC400/kodi/TVShows/
+    - label: Downloaded Movies
+      icon: "{tmdb}/download.png"
+      path: /run/media/deck/SC400/kodi/Movies/

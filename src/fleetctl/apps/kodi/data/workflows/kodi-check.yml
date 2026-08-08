@@ -5,12 +5,30 @@ description: >
   here changes anything, so it needs no approval under any policy.
 
 steps:
-  - id: check-devices
+  # One step per device type: each pack reports what its own hardware can
+  # answer, so a sweep that named only one type left the rest unchecked.
+  - id: check-firetv
     use: firetv.check
     targets:
       tags: [kodi]
       type: firetv
     concurrency: 8
+    on_error: continue
+
+  - id: check-shield
+    use: shield.check
+    targets:
+      tags: [kodi]
+      type: shield
+    concurrency: 4
+    on_error: continue
+
+  - id: check-steamdeck
+    use: steamdeck.check
+    targets:
+      tags: [kodi]
+      type: steamdeck
+    concurrency: 2
     on_error: continue
 
   - id: check-kodi-update

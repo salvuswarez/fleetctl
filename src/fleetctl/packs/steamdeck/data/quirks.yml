@@ -1,0 +1,34 @@
+# Valve Steam Deck deviations from a conventional POSIX host.
+#
+# VERIFICATION STATUS: read off a Steam Deck OLED running SteamOS 3.8.24 on
+# 2026-08-06, over SSH. Every value below was measured on that device, not
+# inferred. Where a value is a default rather than a measurement, it says so.
+
+# `test -w /` reported READONLY. The root filesystem is an immutable image;
+# only $HOME and the Flatpak sandbox are writable. This is the single reason
+# a Deck cannot be managed as a generic `linux_host`.
+writable_root: false
+
+# `sudo -n true` reported "a password is required". Passwordless sudo does
+# NOT work here, so `sudo -n` would fail rather than hang. Nothing this pack
+# does needs elevation: the Kodi profile lives under $HOME.
+use_sudo: false
+
+# NOT /tmp. `/` is read-only and /tmp is a small tmpfs; the home partition is
+# 984GB with ~350GB free, which is where a multi-hundred-MB profile archive
+# has to land.
+staging_dir: "~/.cache/fleetctl"
+
+# Flatpak's per-application data directory. `{identifier}` is substituted with
+# the app's Linux identifier — `tv.kodi.Kodi` for Kodi.
+#
+# Note there is NO `.kodi` below this: under Flatpak the profile members sit
+# directly in `data/`. That is expressed in the app's own spec, not here.
+app_data_root: "~/.var/app/{identifier}/data"
+
+disk_headroom: 3.0
+
+# GNU tar 1.35 and gzip 1.14 are present and `tar czf` round-trips correctly,
+# so the Fire OS `split_gzip` dance is not needed and is not offered here.
+# NVMe storage; this floor only scales timeouts, so it stays conservative.
+min_unpack_bytes_per_s: 20000000.0

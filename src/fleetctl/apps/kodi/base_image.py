@@ -20,6 +20,10 @@ BASE = "base"
 MIRROR_URL = "https://mirrors.kodi.tv/releases/android/arm/"
 DEFAULT_ARCH = "armeabi-v7a"
 
+# The mirror above serves Android APKs only, so the base image applies to this
+# platform and no other.
+ANDROID = "android"
+
 # Anything carrying one of these is a pre-release. A fleet should not drift
 # onto a nightly because it happened to sort highest.
 UNSTABLE_MARKERS = ("beta", "rc", "alpha", "nightly", "dev")
@@ -168,7 +172,15 @@ def install_base(context: DeviceStepContext) -> StepResult:
     **RAISES:**
         `FleetError`: If no base image has been published.  <br>
     """
-    package = IDENTIFIERS["android"]
+    # The published base image is an Android APK. A device on any other
+    # platform installs Kodi from its own package source, so this is a skip
+    # rather than a failure — the fleet workflow targets every Kodi device.
+    platform = context.state.platform
+    if platform != ANDROID:
+        context.handle.log(f"Base image is an Android APK; {context.device.id} is {platform} and manages Kodi itself.")
+        return StepResult(summary=f"{context.device.id}: skipped, not an Android device", facts={"changed": False, "skipped": True, "platform": platform})
+
+    package = IDENTIFIERS[ANDROID]
     installed = context.apps.installed_version(package)
     published = _published_version(context.artifacts)
 

@@ -1,0 +1,21 @@
+# What routine maintenance does on a Steam Deck.
+#
+# Device-level only: this pack does not know what applications are installed
+# or what their data means. Anything Kodi-specific belongs to the app pack.
+#
+# The root filesystem is an immutable image, so there is nothing to trim there
+# — only the writable home partition and the Flatpak store accumulate.
+
+# Removed outright. Only fleetctl's own staging area, which holds nothing but
+# in-flight transfers.
+prune_paths:
+  - "~/.cache/fleetctl"
+
+# systemd's journal is uncapped by default and grows without bound on a device
+# that is rarely rebooted.
+journal_retention: 7d
+
+# Flatpak keeps every runtime version an application has ever needed. These
+# are reclaimable and reinstall on demand, but the removal is slow and can
+# surprise someone mid-session, so it is opt-in.
+remove_unused_runtimes: false

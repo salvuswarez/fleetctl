@@ -1,0 +1,20 @@
+# Generic Linux host deviations from the POSIX base.
+#
+# VERIFICATION STATUS: not yet confirmed on hardware. Every value below is the
+# conventional-Linux default, chosen deliberately. This pack describes an
+# ordinary mutable-root box; a host that deviates — an immutable root, a
+# sandboxed application data area, no usable sudo — gets its own pack
+# composing `packs/posix`, rather than this one growing a branch.
+#
+# Notably NOT set:
+#   use_sudo  — assumed unnecessary. A host needing it says so in its own
+#               config; turning it on globally would mean every command on
+#               every Linux box runs elevated.
+
+writable_root: true
+staging_dir: /tmp
+app_data_root: "~"
+disk_headroom: 3.0
+
+# A floor used only to scale timeouts, so a conservative value costs nothing.
+min_unpack_bytes_per_s: 10000000.0

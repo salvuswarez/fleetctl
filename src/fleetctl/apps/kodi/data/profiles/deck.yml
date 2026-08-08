@@ -1,0 +1,86 @@
+# The gold profile, minus the addons the host platform supplies itself.
+#
+# WHY THIS EXISTS
+#
+# `gold` is captured from a Fire TV Stick, which runs the `armeabi-v7a`
+# Android build of Kodi. Most of a Kodi profile is Python and XML and moves
+# between architectures untouched — but *binary* addons are compiled `.so`
+# objects, and Kodi's own repository partitions them by platform and
+# architecture (`+android-armv7`, `+android-aarch64`, `+osx-x86_64`,
+# `+windows-x86_64`).
+#
+# A host that installs Kodi as a self-contained bundle ships those binary
+# addons inside the application image, already built for its own
+# architecture. Verified 2026-08-06 against Kodi 21.3-Omega on SteamOS 3.8:
+# `inputstream.adaptive`, `inputstream.ffmpegdirect`, `inputstream.rtmp`,
+# `pvr.iptvsimple` and `vfs.libarchive` are all present inside the image, and
+# the user profile on that device contains no `.so` files at all.
+#
+# An addon in the *user profile* shadows the one in the application image. So
+# deploying the ARM binaries from a stick capture would replace working
+# native ones with objects the host cannot load — and a binary addon that
+# fails to load does so quietly, taking most video playback with it.
+#
+# Everything else — the skin, the content plugins, the script modules, the
+# metadata scrapers, every setting, view type and hub layout — is inherited
+# from `gold` unchanged, so the two profiles cannot drift apart.
+
+extends: gold
+
+# Files the capture cannot contain, because they exist on no Fire Stick.
+#
+# The keymap makes the context menu reachable from touch and from the
+# controller — without it, Umbrella's source window (where Download lives) can
+# only be opened by a mouse right-click.
+ship_files:
+  files:
+    userdata/keymaps/steamdeck.xml: steamdeck-keymap.xml
+
+# Where Umbrella's downloads land, so they are browsable under Videos → Files.
+#
+# Deliberately sources only, never scraped into the library: the video database
+# is shared MySQL on the router, so it needs the network — useless offline,
+# which is the whole point of downloading — and a device-local path written
+# there resolves on no other device in the fleet.
+# Adds the two download rows to the home hub; everything else is inherited.
+apply_hub_layout:
+  layout: arctic-fuse-3-deck
+
+add_video_sources:
+  sources:
+    - name: Deck Downloads - Movies
+      path: /run/media/deck/SC400/kodi/Movies/
+      thumbnail: DefaultMovies.png
+    - name: Deck Downloads - TV Shows
+      path: /run/media/deck/SC400/kodi/TVShows/
+      thumbnail: DefaultTVShows.png
+
+prune_addons:
+  # Both lists REPLACE their inherited counterparts rather than adding to
+  # them; that is what lets this profile drop entries. Keep in step with
+  # `gold.yml` when its allow-list changes.
+  #
+  # `pvr.iptvsimple` is dropped here and nowhere else: it is the one exact-id
+  # entry in gold's list that is a compiled addon rather than Python.
+  allow:
+    - plugin.program.autocompletion
+    - plugin.program.lazylinks
+    - plugin.program.thecrewiz
+    - plugin.video.themoviedb.helper
+    - plugin.video.umbrella
+    - plugin.video.youtube
+    - script.embuary.helper
+    - script.embuary.info
+    - script.globalsearch
+    - script.skinvariables
+    - script.texturemaker
+    - skin.arctic.fuse.3
+
+  # `inputstream.` is dropped from the inherited prefixes. Every addon under
+  # it is a compiled video-stream engine supplied by the application image.
+  allow_prefixes:
+    - script.module.
+    - service.
+    - metadata.
+    - resource.
+    - repository.

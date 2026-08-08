@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import posixpath
+import xml.etree.ElementTree as ElementTree
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -167,3 +169,83 @@ def test_per_device_settings_are_pulled_edited_and_pushed_back(device_context: A
     # Assert
     assert result.facts["changes"] == 1
     assert any(call.kind == "put" for call in transport.calls)
+
+
+def test_overriding_a_default_marked_setting_clears_the_default_flag(device_context: Any, tmp_path: Path) -> None:
+    """`default="true"` asserts the value is the addon's default, and Kodi may
+    discard a setting marked that way. Leaving it set writes a change that
+    reads back correctly and then does not take effect."""
+    # Arrange
+    settings = '<settings><setting id="downloads" default="true">false</setting></settings>'
+    root = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+    relative = "addon_data/plugin.video.umbrella/settings.xml"
+    transport = FakeTransport(responses={f"{root}/userdata/{relative}": settings})
+    device = Device(
+        id="stick-1",
+        type="firetv",
+        address="192.168.1.50",
+        vars={"kodi": {"settings": {relative: {"downloads": "true"}}}},
+    )
+    context = replace(device_context(transport), device=device)
+
+    # Act
+    apply_device_config(context)
+
+    # Assert
+    local = context.workspace / posixpath.join("userdata", relative).replace("/", "_")
+    written = ElementTree.parse(local).getroot()
+    element = written.find("setting")
+    assert element is not None
+    assert element.text == "true"
+    assert "default" not in element.attrib
+
+
+def test_a_setting_absent_from_the_build_is_created(device_context: Any, tmp_path: Path) -> None:
+    """The build strips device-specific settings, so the ones a device most
+    needs to override are exactly the ones missing from it. Skipping them made
+    per-device display calibration unappliable."""
+    # Arrange
+    settings = '<settings><setting id="lookandfeel.skin">skin.arctic.fuse.3</setting></settings>'
+    root = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+    transport = FakeTransport(responses={f"{root}/userdata/guisettings.xml": settings})
+    device = Device(
+        id="stick-1",
+        type="firetv",
+        address="192.168.1.50",
+        vars={"kodi": {"display": {"resolution_index": 17}}},
+    )
+    context = replace(device_context(transport), device=device)
+
+    # Act
+    result = apply_device_config(context)
+
+    # Assert
+    written = ElementTree.parse(context.workspace / "userdata_guisettings.xml").getroot()
+    created = {element.get("id"): element.text for element in written.iter("setting")}
+    assert created["videoscreen.resolution"] == "17"
+    assert created["lookandfeel.skin"] == "skin.arctic.fuse.3"
+    assert result.facts["changes"] == 1
+
+
+def test_a_setting_left_at_its_value_keeps_its_default_flag(device_context: Any, tmp_path: Path) -> None:
+    """Only an actual override clears the flag; an unchanged file is not
+    rewritten at all."""
+    # Arrange
+    settings = '<settings><setting id="downloads" default="true">false</setting></settings>'
+    root = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+    relative = "addon_data/plugin.video.umbrella/settings.xml"
+    transport = FakeTransport(responses={f"{root}/userdata/{relative}": settings})
+    device = Device(
+        id="stick-1",
+        type="firetv",
+        address="192.168.1.50",
+        vars={"kodi": {"settings": {relative: {"downloads": "false"}}}},
+    )
+    context = replace(device_context(transport), device=device)
+
+    # Act
+    result = apply_device_config(context)
+
+    # Assert
+    assert result.facts["changes"] == 0
+    assert not [call for call in transport.calls if call.kind == "put"]

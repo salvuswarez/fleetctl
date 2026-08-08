@@ -3,7 +3,7 @@
 
 <hr style="border: 0; border-top: 2px solid #005288; margin: 0 0 32px 0;"/>
 
-<sub style="color: #64748b;">Last verified 2026-08-02</sub>
+<sub style="color: #64748b;">Last verified 2026-08-08</sub>
 
 The `firetools` integration in `salvuswarez/ha-cyberpunk` drives its panel through 21 websocket commands, each a thin wrapper over one `fire_tools` `FleetService` method. Nothing may be cut over until every one of them has an equivalent here — a panel button that silently does nothing is worse than a panel button that is missing.
 
@@ -28,11 +28,11 @@ This is that mapping, audited against `custom_components/firetools/ws_api.py`.
 
 | Panel command | `FleetService` | fleetctl |
 |---|---|---|
-| `check_device` | `check_device(ip)` | `firetv.check` / `shield.check` |
+| `check_device` | `check_device(ip)` | `firetv.check` / `shield.check` / `steamdeck.check` |
 | `capture` | `start_capture(ip)` | `kodi.capture` |
 | `build` | `start_build()` | `kodi.build` |
 | `deploy` | `start_deploy(ip)` | `kodi.deploy` |
-| `maintain` | `start_maintain(ip)` | `firetv.maintain` / `shield.maintain` |
+| `maintain` | `start_maintain(ip)` | `firetv.maintain` / `shield.maintain` / `steamdeck.maintain` |
 | `capture_base` | `start_capture_base()` | `kodi.fetch_base` |
 | `scan` | `start_scan(subnet)` | `fleet.scan` |
 

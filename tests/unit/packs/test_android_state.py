@@ -20,7 +20,7 @@ from fleetctl.packs.android.state import AndroidStateManager
 SPEC = AppStateSpec(
     app_id="demo",
     identifiers={"android": "com.example.demo"},
-    app_root=".demo",
+    app_roots={"android": ".demo"},
     members=("addons", "userdata"),
     exclude=("userdata/Thumbnails", "temp"),
 )

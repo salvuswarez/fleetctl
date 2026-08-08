@@ -130,13 +130,15 @@ def test_the_shipped_packs_are_discovered_through_entry_points() -> None:
 
 def test_the_kodi_app_builds_its_transform_chain_from_the_shipped_recipe() -> None:
     """Order matters: addons are pruned first, so settings are not applied to
-    files that are about to be deleted."""
+    files that are about to be deleted, and device settings are stripped before
+    the recipe's own overrides so a deliberately pinned key wins."""
     # Act
     transforms = KodiApp().transforms
 
     # Assert
     assert [transform.name for transform in transforms] == [
         "prune_addons",
+        "strip_device_settings",
         "apply_settings",
         "remove_thumbnail_substitution",
         "apply_view_types",
@@ -146,12 +148,14 @@ def test_the_kodi_app_builds_its_transform_chain_from_the_shipped_recipe() -> No
 
 def test_a_recipe_with_nothing_configured_yields_only_the_always_on_transforms() -> None:
     """A transform whose config is absent is not added, so a minimal profile
-    does not pay for skin-specific work it does not need."""
+    does not pay for skin-specific work it does not need. Stripping device
+    settings is not one of those: a shared artifact must never carry one
+    device's calibration, so no recipe can opt out by omission."""
     # Act
     transforms = KodiApp(overrides={}).transforms
 
     # Assert
-    assert [transform.name for transform in transforms] == ["prune_addons", "apply_settings"]
+    assert [transform.name for transform in transforms] == ["prune_addons", "strip_device_settings", "apply_settings"]
 
 
 def test_the_firetv_pack_registers_exactly_its_maintain_step() -> None:

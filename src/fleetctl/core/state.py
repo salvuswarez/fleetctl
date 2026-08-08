@@ -16,14 +16,14 @@ class AppStateSpec:
     **PARAMETERS:**
         `app_id` (str): The app pack's id, e.g. ``kodi``.  <br>
         `identifiers` (Mapping[str, str]): Platform to platform-native identifier, e.g. ``{"android": "org.xbmc.example"}``. The pack looks up its own platform.  <br>
-        `app_root` (str): Subdirectory holding the state, relative to whatever data directory the pack resolves for this app. Empty when the state *is* that directory.  <br>
+        `app_roots` (Mapping[str, str]): Platform to the subdirectory holding the state, relative to whatever data directory the pack resolves. Absent or empty means the state *is* that directory. Per-platform because an app's own layout can differ between them — the same application keeps its profile in a dotted subdirectory on one platform and directly in a sandboxed data directory on another.  <br>
         `members` (tuple[str, ...]): Top-level entries that constitute the state, relative to its root. These are what a restore replaces.  <br>
         `exclude` (tuple[str, ...]): Paths to drop before snapshotting, relative to the state root — caches and other regenerable data.  <br>
     """
 
     app_id: str
     identifiers: Mapping[str, str] = field(default_factory=dict)
-    app_root: str = ""
+    app_roots: Mapping[str, str] = field(default_factory=dict)
     members: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
 
@@ -43,6 +43,17 @@ class AppStateSpec:
         if not identifier:
             raise FleetError(f"App {self.app_id!r} declares no identifier for platform {platform!r}")
         return identifier
+
+    def root_for(self, platform: str) -> str:
+        """Look up the state subdirectory this app uses on a platform.
+
+        **PARAMETERS:**
+            `platform` (str): The device pack's platform, e.g. ``android``.  <br>
+
+        **RETURNS:**
+            `str`: The subdirectory, or ``""`` when the state is the resolved data directory itself. Unlike `identifier_for`, an absent entry is a legitimate answer rather than an error — "no subdirectory" is a real layout.  <br>
+        """
+        return self.app_roots.get(platform, "")
 
 
 class StateManager(Protocol):

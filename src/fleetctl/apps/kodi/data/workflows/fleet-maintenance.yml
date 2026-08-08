@@ -17,3 +17,12 @@ steps:
       type: shield
     concurrency: 2
     on_error: continue
+
+  # Reclaims space rather than debloating: SteamOS ships nothing to disable,
+  # and its root filesystem is read-only.
+  - id: maintain-steamdeck
+    use: steamdeck.maintain
+    targets:
+      type: steamdeck
+    concurrency: 1
+    on_error: continue

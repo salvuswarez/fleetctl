@@ -120,10 +120,18 @@ def _apply_file(context: DeviceStepContext, root: str, relative: str, overrides:
     for setting_id, value in overrides.items():
         element = by_id.get(setting_id)
         if element is None:
-            LOGGER.debug("Setting %s absent from %s, skipping", setting_id, relative)
-            continue
+            # Created rather than skipped: a build is device-neutral, so the
+            # settings a device most needs to override are exactly the ones
+            # stripped out of it. Skipping made per-device display calibration
+            # unappliable.
+            element = ElementTree.SubElement(xml_root, "setting", {"id": setting_id})
         if (element.text or "") != value:
             element.text = value
+            # `default="true"` asserts the value *is* the addon's default, and
+            # Kodi is free to discard a setting marked that way. Leaving it set
+            # on an overridden value writes a change that reads back correctly
+            # and then does not take effect.
+            element.attrib.pop("default", None)
             changed.append(f"{relative}: {setting_id} = {value}")
 
     if not changed:

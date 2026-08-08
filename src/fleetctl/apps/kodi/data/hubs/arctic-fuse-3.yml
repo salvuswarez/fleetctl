@@ -18,9 +18,10 @@
 # Slots deliberately absent: 1103 (hand-curated), 1107 (Live TV), 1108
 # (Addons, disabled in the profile settings).
 
+# TMDbHelper ships no `white` icon set; rows that referenced one rendered
+# without an icon. The skin's own set is large and always present.
 icons:
   tmdb: special://home/addons/plugin.video.themoviedb.helper/resources/icons/themoviedb
-  white: special://home/addons/plugin.video.themoviedb.helper/resources/icons/white
   skin: special://skin/extras/icons
 
 # Kodi library smartlists: local, instant, no network round-trip. Every hub
@@ -196,8 +197,8 @@ hubs:
     node: home_hub.json
     node_name: HOME
     widgets:
-      - {label: Continue Watching, icon: "{white}/recent.png", path: *lib_tv_progress}
-      - {label: Recently Added, icon: "{white}/calendar.png", path: *lib_movie_recent}
+      - {label: Continue Watching, icon: "{skin}/clock-rotate-left.png", path: *lib_tv_progress}
+      - {label: Recently Added, icon: "{skin}/calendar.png", path: *lib_movie_recent}
       - label: New Releases This Week
         icon: "{tmdb}/intheatres.png"
         discover:
@@ -220,8 +221,8 @@ hubs:
     node: movies_hub_main.json
     node_name: MOVIES
     widgets:
-      - {label: Continue Watching, icon: "{white}/recent.png", path: *lib_movie_progress}
-      - {label: Recently Added, icon: "{white}/calendar.png", path: *lib_movie_recent}
+      - {label: Continue Watching, icon: "{skin}/clock-rotate-left.png", path: *lib_movie_progress}
+      - {label: Recently Added, icon: "{skin}/calendar.png", path: *lib_movie_recent}
       - label: New Releases
         icon: "{tmdb}/intheatres.png"
         discover: {tmdb_type: movie, sort_by: primary_release_date.desc, with_original_language: en, vote_count.gte: 25, primary_release_date.lte: T-0}
@@ -244,8 +245,8 @@ hubs:
     node: tv_hub_main.json
     node_name: SERIES
     widgets:
-      - {label: Continue Watching, icon: "{white}/recent.png", path: *lib_tv_progress}
-      - {label: Recently Added Episodes, icon: "{white}/calendar.png", path: *lib_tv_recent}
+      - {label: Continue Watching, icon: "{skin}/clock-rotate-left.png", path: *lib_tv_progress}
+      - {label: Recently Added Episodes, icon: "{skin}/calendar.png", path: *lib_tv_recent}
       - label: New Premieres
         icon: "{tmdb}/trending.png"
         discover:
