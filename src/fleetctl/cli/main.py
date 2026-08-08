@@ -311,20 +311,27 @@ def _profile_for_source(container: Container, provider: str, source: Any) -> str
 def _app_profile(container: Container, provider: str, device: Device) -> str:
     """Which profile of `provider` this device's hardware needs.
 
-    The device's own `vars.<app>.profile` beats the pack's default, so one odd
-    device is a config edit rather than a code change.
+    Resolution order: the device's own `vars.<app>.profile`, then its pack's
+    declaration, then the app's own default. It falls through to the default
+    rather than to nothing so that *every* device names a profile — a device
+    that resolved to "no opinion" could be sent a build shaped for different
+    hardware, because there would be nothing to disagree with.
 
     **RETURNS:**
-        `str`: The profile name, or empty to use the app's own default.  <br>
+        `str`: The profile name, or empty only if `provider` is not an installed app.  <br>
     """
     named = device.app_vars(provider).get("profile")
     if named:
         return str(named)
     try:
+        app = container.registry.app_pack(provider)
+    except FleetError:
+        return ""  # a device pack's own step: nothing here has a profile
+    try:
         pack = container.registry.device_pack(device.type)
     except FleetError:
-        return ""
-    return str(dict(getattr(pack, "app_profiles", {})).get(provider, ""))
+        return str(getattr(app, "profile", ""))
+    return str(dict(getattr(pack, "app_profiles", {})).get(provider, "") or getattr(app, "profile", ""))
 
 
 def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, Any]:

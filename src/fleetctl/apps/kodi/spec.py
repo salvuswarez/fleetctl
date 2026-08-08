@@ -6,6 +6,12 @@ from ...core.state import AppStateSpec
 
 APP_ID = "kodi"
 
+# The recipe used when nothing names another. It lives here rather than in
+# `pack` so `steps` can read it without importing the pack that imports it:
+# a build published before profiles were recorded can only have been made
+# with this one, because the entry point could construct no other.
+DEFAULT_PROFILE = "gold"
+
 # Top-level entries that constitute a Kodi profile. A restore replaces exactly
 # these, and a build archive carries exactly these at its root — flat, with no
 # wrapping directory, so it extracts straight into the state root.

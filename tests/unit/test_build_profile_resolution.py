@@ -154,12 +154,24 @@ def test_a_capture_with_no_recorded_device_falls_back_to_the_default(container: 
     assert chain == KodiApp("gold").transforms
 
 
-def test_a_device_whose_pack_is_not_installed_falls_back(container: Container, tmp_path: Path) -> None:
-    """A device typed for a pack this install lacks must not break the build."""
+def test_a_device_whose_pack_is_not_installed_still_names_a_profile(container: Container, tmp_path: Path) -> None:
+    """A device typed for a pack this install lacks must not break the build,
+    and must not resolve to "no opinion" either -- a device with no profile
+    can be sent a build shaped for other hardware, because nothing disagrees."""
     # Arrange
     container.inventory.save([Device(id="ghost-1", type="absent", address="192.168.1.53")])
     device = container.inventory.get("ghost-1")
     assert device is not None
 
     # Act / Assert
-    assert _app_profile(container, "kodi", device) == ""
+    assert _app_profile(container, "kodi", device) == KodiApp().profile
+
+
+def test_a_pack_step_resolves_no_profile(container: Container) -> None:
+    """`steamdeck.maintain` is not an app step; nothing there has a profile."""
+    # Arrange
+    device = container.inventory.get("deck-1")
+    assert device is not None
+
+    # Act / Assert
+    assert _app_profile(container, "steamdeck", device) == ""

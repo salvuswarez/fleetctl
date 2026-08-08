@@ -14,7 +14,7 @@ from ...core.effects import Capability, Effect
 from ...core.errors import FleetError
 from ...core.state import AppStateSpec
 from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec, TransformStepContext
-from .spec import APP_ID, PROFILE_MEMBERS, state_spec
+from .spec import APP_ID, DEFAULT_PROFILE, PROFILE_MEMBERS, state_spec
 
 LOGGER = logging.getLogger(__name__)
 
@@ -134,11 +134,15 @@ def deploy(context: DeviceStepContext) -> StepResult:
         `StepResult`: Names the build that was deployed.  <br>
 
     **RAISES:**
-        `FleetError`: If the named artifact is not a build, no build exists, or the build was shaped for different hardware.  <br>
+        `FleetError`: If the named artifact is not a build, the build was shaped for different hardware, or no build for this device's profile exists.  <br>
     """
+    wanted = str(context.config.get("profile") or DEFAULT_PROFILE)
     named = context.config.get("build")
-    ref = require_kind(ArtifactRef.parse(named), BUILDS) if named else context.artifacts.latest(BUILDS)
-    _require_matching_profile(context, ref)
+    if named:
+        ref = require_kind(ArtifactRef.parse(named), BUILDS)
+        _require_matching_profile(context, ref, wanted)
+    else:
+        ref = _latest_for_profile(context, wanted)
 
     context.handle.log(f"Deploying {ref.wire} to {context.device.id}...")
     local = context.artifacts.get(ref, context.workspace / ref.name)
@@ -151,28 +155,62 @@ def deploy(context: DeviceStepContext) -> StepResult:
     return StepResult(summary=f"Deployed {ref.wire} to {context.device.id}", facts={"build": ref.wire})
 
 
-def _require_matching_profile(context: DeviceStepContext, ref: ArtifactRef) -> None:
+def _profile_of(info: Any) -> str:
+    """RETURNS: str: The recipe a build was shaped with.
+
+    A build carrying no recorded profile predates per-device profiles, and
+    could only have been made with the default: until the profile reached the
+    build step, the registered app was constructed with no arguments and no
+    caller could name another recipe. Treating it as the default is a fact
+    about how it was produced, not a guess.
+    """
+    return str(info.meta.get("profile") or DEFAULT_PROFILE)
+
+
+def _require_matching_profile(context: DeviceStepContext, ref: ArtifactRef, wanted: str) -> None:
     """Refuse a build shaped for hardware other than this device's.
 
     A build is one artifact for the whole fleet, but not every device can run
     every recipe: a `gold` build carries ARM addon binaries an x86 Steam Deck
-    cannot execute. Both sides are advisory — a build published before profiles
-    were recorded, or a device whose pack names no profile, deploys as before.
-    Only a definite disagreement stops.
+    cannot execute, and a `deck` build carries that Deck's keymap and SD-card
+    sources onto a Fire Stick. Every device resolves to a definite profile and
+    every build to one, so this is symmetric — naming a build explicitly does
+    not waive it.
 
     **PARAMETERS:**
-        `context` (DeviceStepContext): Carries the device's expected profile under `profile`.  <br>
+        `context` (DeviceStepContext): The device being deployed to.  <br>
         `ref` (ArtifactRef): The build about to be deployed.  <br>
+        `wanted` (str): The profile this device needs.  <br>
 
     **RAISES:**
-        `FleetError`: If the build names a profile and the device needs a different one.  <br>
+        `FleetError`: If the build was shaped with a different recipe. Unknown builds pass: `get` reports a missing artifact better than this can.  <br>
     """
-    wanted = str(context.config.get("profile") or "")
-    if not wanted:
+    info = next((item for item in context.artifacts.list(BUILDS) if item.ref.name == ref.name), None)
+    if info is None:
         return
-    built = next((str(info.meta.get("profile", "")) for info in context.artifacts.list(BUILDS) if info.ref.name == ref.name), "")
-    if built and built != wanted:
-        raise FleetError(f"{ref.wire} was built with the {built!r} profile but {context.device.id} needs {wanted!r}; build from a capture of this device")
+    built = _profile_of(info)
+    if built != wanted:
+        raise FleetError(f"{ref.wire} was built with the {built!r} profile but {context.device.id} needs {wanted!r}; build from a capture of this device first")
+
+
+def _latest_for_profile(context: DeviceStepContext, wanted: str) -> ArtifactRef:
+    """Pick the newest build shaped for this device.
+
+    A workflow that names no build deploys to a mixed fleet, so "newest
+    overall" is the wrong answer: one Steam Deck build published after a gold
+    one would otherwise be sent to every Fire Stick.
+
+    **RETURNS:**
+        `ArtifactRef`: The newest build whose profile matches.  <br>
+
+    **RAISES:**
+        `FleetError`: If no build for this profile exists.  <br>
+    """
+    # `list` is already newest-first.
+    for info in context.artifacts.list(BUILDS):
+        if _profile_of(info) == wanted:
+            return info.ref
+    raise FleetError(f"No build with the {wanted!r} profile that {context.device.id} needs; build one from a capture of this device")
 
 
 def _find_profile(extracted: Path) -> Path:

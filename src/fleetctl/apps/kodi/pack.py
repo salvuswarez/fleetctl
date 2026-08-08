@@ -15,7 +15,7 @@ from ...core.workflow.step import ProfileTransform
 from ...core.workflow.workflow import Workflow
 from . import base_image, caches, device_config, health, steps
 from .merging import deep_merge
-from .spec import APP_ID
+from .spec import APP_ID, DEFAULT_PROFILE
 from .transforms.addons import PruneAddons
 from .transforms.advanced import RemoveThumbnailSubstitution
 from .transforms.device_settings import DEVICE_SETTINGS, StripDeviceSettings
@@ -26,8 +26,6 @@ from .transforms.sources import AddVideoSources
 from .transforms.view_types import ApplyViewTypes
 
 LOGGER = logging.getLogger(__name__)
-
-DEFAULT_PROFILE = "gold"
 
 
 def profiles() -> tuple[str, ...]:

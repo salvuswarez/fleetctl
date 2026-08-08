@@ -335,8 +335,10 @@ def test_deploy_refuses_a_build_shaped_for_other_hardware(tmp_path: Path, store:
 
 
 def test_deploy_allows_a_build_with_no_recorded_profile(tmp_path: Path, store: LocalArtifactStore, capture_artifact: ArtifactRef) -> None:
-    """Builds published before profiles were recorded must stay deployable;
-    only a definite disagreement stops."""
+    """A build with no recorded profile predates per-device profiles, so it can
+    only have been made with the default -- the app was constructed with no
+    arguments and no caller could name another recipe. It stays deployable to
+    a device wanting the default, and is refused for any other."""
     # Arrange
     built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire}))
     name = built.artifacts["build"].name
@@ -351,10 +353,76 @@ def test_deploy_allows_a_build_with_no_recorded_profile(tmp_path: Path, store: L
         }
     )
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
-    context = _device_context(tmp_path, store, transport, {"build": built.artifacts["build"].wire, "profile": "deck"}, "ws-legacy")
+    wire = built.artifacts["build"].wire
 
     # Act
-    result = steps.deploy(context)
+    result = steps.deploy(_device_context(tmp_path, store, transport, {"build": wire, "profile": "gold"}, "ws-legacy"))
 
     # Assert
-    assert built.artifacts["build"].wire in result.summary
+    assert wire in result.summary
+    with pytest.raises(FleetError, match="built with the 'gold' profile"):
+        steps.deploy(_device_context(tmp_path, store, transport, {"build": wire, "profile": "deck"}, "ws-legacy-deck"))
+
+
+def test_deploy_refuses_a_deck_build_on_a_fire_stick(tmp_path: Path, store: LocalArtifactStore, capture_artifact: ArtifactRef) -> None:
+    """The guard is symmetric. It first protected only the Deck, because a
+    Fire Stick resolved to no profile and so had nothing to disagree with --
+    a deck build would have carried that Deck's keymap and SD-card sources
+    onto every stick."""
+    # Arrange
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire, "profile": "deck"}))
+    inner = FakeTransport()
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+    config: dict[str, object] = {"build": built.artifacts["build"].wire, "profile": "gold"}
+
+    # Act / Assert
+    with pytest.raises(FleetError, match="built with the 'deck' profile"):
+        steps.deploy(_device_context(tmp_path, store, transport, config, "ws-deck-on-stick"))
+    assert not inner.commands()
+
+
+def test_deploy_without_a_named_build_picks_one_for_this_device(tmp_path: Path, store: LocalArtifactStore, capture_artifact: ArtifactRef) -> None:
+    """A workflow that names no build deploys to a mixed fleet, so "newest
+    overall" is wrong: publishing a deck build after a gold one would send it
+    to every Fire Stick. This is the real `kodi-refresh` hazard."""
+    # Arrange
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire, "profile": "gold"}))
+    payload = store.get(built.artifacts["build"], tmp_path / "payload.tar.gz")
+    # Published by hand so the deck build sorts ahead of the gold one; two
+    # `steps.build` calls in the same second would collide on the timestamp.
+    gold_ref = ArtifactRef(kind=steps.BUILDS, name="build_20260101_000000.tar.gz")
+    deck_ref = ArtifactRef(kind=steps.BUILDS, name="build_20260102_000000.tar.gz")
+    store.put(payload, gold_ref, meta={"app": "kodi", "profile": "gold"})
+    store.put(payload, deck_ref, meta={"app": "kodi", "profile": "deck"})
+    assert store.list("builds")[0].ref.name == deck_ref.name, "the deck build must be the newest"
+
+    name = gold_ref.name
+    inner = FakeTransport(
+        responses={
+            f"mkdir -p {ROOT}": "",
+            f"ls {ROOT}/addons": "skin.example",
+            f"ls {ROOT}/userdata": "addon_data",
+            f"ls {ROOT}/media": "art",
+            f"gzip -d /sdcard/{name}": "",
+            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+        }
+    )
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+
+    # Act
+    result = steps.deploy(_device_context(tmp_path, store, transport, {"profile": "gold"}, "ws-pick"))
+
+    # Assert
+    assert gold_ref.wire in result.summary
+    assert deck_ref.name not in result.summary
+
+
+def test_deploy_says_what_to_build_when_nothing_matches(tmp_path: Path, store: LocalArtifactStore, capture_artifact: ArtifactRef) -> None:
+    """Refusing is right, but it has to name the way out."""
+    # Arrange
+    steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire, "profile": "gold"}))
+    transport = AuditingTransport(FakeTransport(), ChainedAuditWriter(InMemoryAuditSink()))
+
+    # Act / Assert
+    with pytest.raises(FleetError, match="No build with the 'deck' profile"):
+        steps.deploy(_device_context(tmp_path, store, transport, {"profile": "deck"}, "ws-none"))
