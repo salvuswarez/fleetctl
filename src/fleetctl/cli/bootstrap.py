@@ -112,13 +112,38 @@ class Container:
         """RETURNS: Path: The inventory file, so a user can be told where to edit it."""
         return self.config_dir / "inventory" / "devices.yml"
 
+    def transport_settings(self, device: Device | None = None) -> dict[str, Any]:
+        """Assemble what a pack's `transport_for` needs to authenticate.
+
+        ADB needs only the fleet's key directory, but SSH needs a credential
+        and a scan has no device record to read one from — the host is not in
+        the inventory yet, which is the point of scanning. Fleet-level defaults
+        come from `fleet.yml`, where `!ref` values are already resolved; a
+        device's own `vars.ssh` overrides them.
+
+        **PARAMETERS:**
+            `device` (Device | None): The target, when there is one. Defaults to ``None``, as during discovery.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: Settings for the pack's transport factory.  <br>
+        """
+        defaults = self.config.get("ssh")
+        settings: dict[str, Any] = {"key_dir": self.home / "keys", "audit": self.audit}
+        if isinstance(defaults, dict):
+            settings.update(defaults)
+        if device is not None:
+            override = device.vars.get("ssh")
+            if isinstance(override, dict):
+                settings.update(override)
+        return settings
+
     def connector(self) -> Callable[[str, str], Transport]:
         """Build the callback discovery uses to reach a candidate host.
 
         **RETURNS:**
             `Callable[[str, str], Transport]`: Takes an address and a platform; raises `TransportError` if no transport can be opened.  <br>
         """
-        settings = {"key_dir": self.home / "keys", "audit": self.audit}
+        settings = self.transport_settings()
 
         def _connect(address: str, pack_platform: str) -> Transport:
             for pack in self.registry.device_packs():
@@ -147,8 +172,7 @@ class Container:
         factory = getattr(pack, "transport_for", None)
         if factory is None:
             raise FleetError(f"Device pack {device.type!r} provides no transport")
-        settings = {"key_dir": self.home / "keys", "audit": self.audit}
-        return AuditingTransport(factory(device, settings), self.audit)
+        return AuditingTransport(factory(device, self.transport_settings(device)), self.audit)
 
     def apps_for(self, device: Device, transport: Transport) -> AppManager:
         """RETURNS: AppManager: The device pack's application manager for this device.

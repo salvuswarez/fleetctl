@@ -11,6 +11,21 @@ artifacts:
     user: !ref env:SMB_USER
     password: !ref env:SMB_PASS
 
+# Fleet-wide SSH identity, used by every pack whose transport is SSH.
+#
+# A scan probes hosts that are not in the inventory yet, so there is no device
+# record to read a credential from — without this an SSH probe has nothing to
+# authenticate with. A device can override any of these under `vars.ssh`.
+ssh:
+  user: deck
+  key_path: ~/.ssh/id_ed25519
+  # Or a password instead of a key. Hold it as a reference, never a value.
+  # password: !ref env:FLEETCTL_SSH_PASS
+  #
+  # Unknown host keys are rejected rather than trusted on first use, so a host
+  # must be in this file before it can be reached.
+  known_hosts: ~/.fleetctl/known_hosts
+
 observability:
   # Relative paths resolve under ~/.fleetctl, not the working directory.
   audit_dir: audit
