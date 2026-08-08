@@ -109,3 +109,44 @@ def test_a_profile_that_extends_itself_is_rejected() -> None:
     # Act / Assert
     with pytest.raises(FleetError, match="extends itself"):
         _load_profile("deck", _seen=("gold", "deck"))
+
+
+def test_transforms_for_shapes_a_capture_with_another_devices_recipe() -> None:
+    """One registered app serves the whole fleet. The instance the entry point
+    builds defaults to `gold`, so a Deck build is only possible if a caller can
+    name a different profile without constructing a second app."""
+    # Arrange
+    app = KodiApp()
+
+    # Act
+    chain = app.transforms_for("deck")
+
+    # Assert
+    assert chain != app.transforms
+    assert chain == KodiApp("deck").transforms
+
+
+def test_transforms_for_falls_back_to_the_default_profile() -> None:
+    # Arrange
+    app = KodiApp()
+
+    # Act / Assert
+    assert app.transforms_for(None) == app.transforms
+
+
+def test_pinned_overrides_beat_a_named_profile() -> None:
+    """A caller that supplied its own recipe means it; a device's profile name
+    must not silently replace it."""
+    # Arrange
+    app = KodiApp(overrides={"prune_addons": {"allow": ["only.this"]}})
+
+    # Act / Assert
+    assert app.transforms_for("deck") == app.transforms
+
+
+def test_an_unknown_profile_names_the_ones_that_ship() -> None:
+    """A device pointed at a missing profile would otherwise fail deep in the
+    transform chain, or build with the wrong recipe entirely."""
+    # Act / Assert
+    with pytest.raises(FleetError, match="No Kodi profile 'nope'"):
+        KodiApp().transforms_for("nope")

@@ -81,6 +81,7 @@ class ShieldPack:
     # Probes ahead of nothing in particular; both vendor packs key off
     # manufacturer, so neither can claim the other's device.
     probe_priority = 10
+    app_profiles: Mapping[str, str] = {}
 
     def __init__(self, data: Mapping[str, Any] | None = None) -> None:
         self._overrides = dict(data or {})

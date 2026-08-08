@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from importlib import metadata
-from typing import Any, Callable, Iterable, Protocol, runtime_checkable
+from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
 from .effects import Capability
 from .errors import FleetError
@@ -43,6 +43,16 @@ class DevicePack(Protocol):
     platform: str
     capabilities: frozenset[Capability]
     probe_priority: int
+
+    @property
+    def app_profiles(self) -> Mapping[str, str]:
+        """RETURNS: Mapping[str, str]: App id -> the profile this hardware needs, for apps shipping more than one. Empty means every app's default is right.
+
+        The pack states this because the hardware is the reason: a build shaped
+        for a Fire Stick carries ARM addon binaries a Steam Deck cannot execute,
+        and nothing else in the chain knows that. Read at the composition root;
+        an app pack never sees it.
+        """
 
     def probe(self, runner: CommandRunner) -> dict[str, str] | None:
         """RETURNS: dict[str, str] | None: Device facts if this pack claims the host, else None."""

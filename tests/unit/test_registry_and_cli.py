@@ -27,6 +27,7 @@ class _StubPack:
         self.platform = "stub"
         self.capabilities = frozenset({Capability.EXEC})
         self.probe_priority = priority
+        self.app_profiles: dict[str, str] = {}
         self._step_id = step_id
 
     def probe(self, runner: CommandRunner) -> dict[str, str] | None:

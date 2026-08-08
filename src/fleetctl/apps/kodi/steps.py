@@ -93,8 +93,9 @@ def build(context: TransformStepContext) -> StepResult:
     """
     source = context.config.get("source")
     ref = ArtifactRef.parse(source) if source else context.artifacts.latest(CAPTURES)
+    recipe = str(context.config.get("profile") or "")
 
-    context.handle.log(f"Building from {ref.wire}...")
+    context.handle.log(f"Building from {ref.wire}" + (f" with the {recipe} profile..." if recipe else "..."))
     local = context.artifacts.get(ref, context.workspace / ref.name)
 
     extracted = context.workspace / "profile"
@@ -115,9 +116,12 @@ def build(context: TransformStepContext) -> StepResult:
     context.handle.log(f"Packed {', '.join(members)}")
 
     build_ref = ArtifactRef(kind=BUILDS, name=name)
-    info = context.artifacts.put(output, build_ref, meta={"app": APP_ID, "source": ref.wire})
+    # The profile is recorded so `deploy` can refuse to send this build to
+    # hardware it was not shaped for; the composition root resolved it.
+    meta = {"app": APP_ID, "source": ref.wire, "profile": recipe}
+    info = context.artifacts.put(output, build_ref, meta=meta)
     context.handle.log(f"Build ready: {build_ref.wire} ({info.size // 1024}KB)")
-    return StepResult(summary=f"Built {build_ref.wire}", artifacts={"build": build_ref}, facts={"source": ref.wire})
+    return StepResult(summary=f"Built {build_ref.wire}", artifacts={"build": build_ref}, facts={"source": ref.wire, "profile": recipe})
 
 
 def deploy(context: DeviceStepContext) -> StepResult:
@@ -130,10 +134,11 @@ def deploy(context: DeviceStepContext) -> StepResult:
         `StepResult`: Names the build that was deployed.  <br>
 
     **RAISES:**
-        `FleetError`: If the named artifact is not a build, or no build exists.  <br>
+        `FleetError`: If the named artifact is not a build, no build exists, or the build was shaped for different hardware.  <br>
     """
     named = context.config.get("build")
     ref = require_kind(ArtifactRef.parse(named), BUILDS) if named else context.artifacts.latest(BUILDS)
+    _require_matching_profile(context, ref)
 
     context.handle.log(f"Deploying {ref.wire} to {context.device.id}...")
     local = context.artifacts.get(ref, context.workspace / ref.name)
@@ -144,6 +149,30 @@ def deploy(context: DeviceStepContext) -> StepResult:
 
     context.handle.log("Profile restored")
     return StepResult(summary=f"Deployed {ref.wire} to {context.device.id}", facts={"build": ref.wire})
+
+
+def _require_matching_profile(context: DeviceStepContext, ref: ArtifactRef) -> None:
+    """Refuse a build shaped for hardware other than this device's.
+
+    A build is one artifact for the whole fleet, but not every device can run
+    every recipe: a `gold` build carries ARM addon binaries an x86 Steam Deck
+    cannot execute. Both sides are advisory — a build published before profiles
+    were recorded, or a device whose pack names no profile, deploys as before.
+    Only a definite disagreement stops.
+
+    **PARAMETERS:**
+        `context` (DeviceStepContext): Carries the device's expected profile under `profile`.  <br>
+        `ref` (ArtifactRef): The build about to be deployed.  <br>
+
+    **RAISES:**
+        `FleetError`: If the build names a profile and the device needs a different one.  <br>
+    """
+    wanted = str(context.config.get("profile") or "")
+    if not wanted:
+        return
+    built = next((str(info.meta.get("profile", "")) for info in context.artifacts.list(BUILDS) if info.ref.name == ref.name), "")
+    if built and built != wanted:
+        raise FleetError(f"{ref.wire} was built with the {built!r} profile but {context.device.id} needs {wanted!r}; build from a capture of this device")
 
 
 def _find_profile(extracted: Path) -> Path:

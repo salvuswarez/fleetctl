@@ -40,6 +40,7 @@ class _Pack:
     platform = "demo"
     capabilities = frozenset({Capability.EXEC})
     probe_priority = 5
+    app_profiles: dict[str, str] = {}
 
     def probe(self, runner: CommandRunner) -> dict[str, str] | None:
         return None

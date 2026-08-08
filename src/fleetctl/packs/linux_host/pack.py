@@ -76,6 +76,7 @@ class LinuxHostPack:
     # does not answer, but a vendor-specific Linux pack must get first refusal
     # on the hosts it knows.
     probe_priority = 50
+    app_profiles: Mapping[str, str] = {}
 
     def __init__(self, data: Mapping[str, Any] | None = None) -> None:
         self._overrides = dict(data or {})

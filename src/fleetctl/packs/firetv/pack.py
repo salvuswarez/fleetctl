@@ -79,6 +79,7 @@ class FireTvPack:
     platform = PLATFORM
     capabilities = CAPABILITIES
     probe_priority = 10
+    app_profiles: Mapping[str, str] = {}
 
     def __init__(self, data: Mapping[str, Any] | None = None) -> None:
         self._overrides = dict(data or {})

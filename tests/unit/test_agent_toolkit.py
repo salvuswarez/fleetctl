@@ -69,6 +69,7 @@ class _StubPack:
     platform = "stub"
     capabilities = frozenset({Capability.EXEC})
     probe_priority = 5
+    app_profiles: dict[str, str] = {}
 
     def __init__(self) -> None:
         self.transport = FakeTransport(target="192.168.1.50", responses={"touch": "ok"}, supported=self.capabilities)

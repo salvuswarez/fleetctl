@@ -24,6 +24,7 @@ class _Pack:
     platform = "android"
     capabilities = frozenset({Capability.EXEC})
     probe_priority = 10
+    app_profiles: dict[str, str] = {}
 
     def probe(self, runner: Any) -> dict[str, str] | None:
         return None

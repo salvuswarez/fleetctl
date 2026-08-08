@@ -32,6 +32,7 @@ class _Pack:
         self.platform = platform
         self.capabilities = frozenset({Capability.EXEC})
         self.probe_priority = priority
+        self.app_profiles: dict[str, str] = {}
         self._manufacturer = manufacturer
         self._explode = explode
 

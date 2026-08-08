@@ -88,6 +88,11 @@ class SteamDeckPack:
     # Ahead of `linux_host` (50): a Deck answers every generic Linux probe, so
     # whichever pack knows its quirks must get first refusal.
     probe_priority = 20
+    # x86_64 under Flatpak: the gold recipe's addons carry ARM binaries this
+    # hardware cannot execute, and its display settings assume a TV rather than
+    # a fixed-90Hz panel. Building a Deck capture with `gold` produces an image
+    # that installs cleanly and then crashes on playback.
+    app_profiles = {"kodi": "deck"}
 
     def __init__(self, data: Mapping[str, Any] | None = None) -> None:
         self._overrides = dict(data or {})

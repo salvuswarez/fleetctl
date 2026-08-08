@@ -11,9 +11,11 @@ import click
 import yaml
 
 from .._version import get_version
+from ..core.artifacts.ref import ArtifactRef
 from ..core.config.layering import for_device
 from ..core.discovery.scan import Scanner, ScanOutcome
 from ..core.errors import FleetError
+from ..core.inventory.device import Device
 from ..core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
 from ..core.observability.correlation import CorrelationFilter, correlate
 from ..core.operations.registry import OperationStatus
@@ -169,6 +171,13 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
     if device is None:
         raise click.ClickException(f"Unknown device: {device_id}")
 
+    # What this hardware needs, for a step that must check an artifact was
+    # shaped for it. An explicit flag still wins.
+    if not flags.get("profile"):
+        needed = _app_profile(container, step.provider, device)
+        if needed:
+            flags["profile"] = needed
+
     resolved = for_device(fleet=dict(container.config), device=device.vars, flags=flags)
     transport: Transport | None = None
     try:
@@ -213,8 +222,8 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
 
 
 def _run_fleet_step(container: Container, step: RegisteredStep, flags: dict[str, Any], op_id: str) -> OperationStatus:
+    transforms = _transforms_for(container, step.provider, flags)
     resolved = for_device(fleet=dict(container.config), flags=flags)
-    transforms = _transforms_for(container, step.provider)
 
     def body(handle: Any, workspace: Path) -> StepResult:
         if step.spec.scope == "transform":
@@ -252,13 +261,70 @@ def _run_fleet_step(container: Container, step: RegisteredStep, flags: dict[str,
     )
 
 
-def _transforms_for(container: Container, provider: str) -> tuple[Any, ...]:
-    """RETURNS: tuple: The provider app's transform chain, or empty if it has none."""
+def _transforms_for(container: Container, provider: str, flags: dict[str, Any]) -> tuple[Any, ...]:
+    """Resolve the transform chain a build should apply.
+
+    Which recipe to use is a composition-root decision because it needs three
+    things no single ring holds: the artifact store (to learn which device a
+    capture came from), the inventory, and the device pack (which knows its
+    hardware needs a different recipe). The app pack is handed a name and
+    stays device-agnostic.
+
+    The resolved name is written back into `flags` so the build step records it
+    on the artifact, which is what lets `deploy` reject a mismatched build.
+
+    **PARAMETERS:**
+        `container` (Container): The composition root's wiring.  <br>
+        `provider` (str): Id of the app that registered the step.  <br>
+        `flags` (dict[str, Any]): Step parameters. An explicit `profile` wins; `source` names the capture to build from.  <br>
+
+    **RETURNS:**
+        `tuple`: The chain, or empty if the provider has no transforms.  <br>
+    """
     try:
         app = container.registry.app_pack(provider)
     except FleetError:
         return ()
-    return tuple(getattr(app, "transforms", ()))
+    chain_for = getattr(app, "transforms_for", None)
+    if chain_for is None:
+        return tuple(getattr(app, "transforms", ()))
+
+    profile = str(flags.get("profile") or "") or _profile_for_source(container, provider, flags.get("source"))
+    chain = tuple(chain_for(profile or None))
+    flags["profile"] = profile or getattr(app, "profile", "")
+    return chain
+
+
+def _profile_for_source(container: Container, provider: str, source: Any) -> str:
+    """RETURNS: str: The profile the device behind a capture needs, or empty if that cannot be determined."""
+    if not source:
+        return ""
+    try:
+        ref = ArtifactRef.parse(str(source))
+    except (FleetError, ValueError):
+        return ""
+    device_id = next((str(info.meta.get("device_id", "")) for info in container.artifacts.list(ref.kind) if info.ref.name == ref.name), "")
+    device = container.inventory.get(device_id) if device_id else None
+    return _app_profile(container, provider, device) if device is not None else ""
+
+
+def _app_profile(container: Container, provider: str, device: Device) -> str:
+    """Which profile of `provider` this device's hardware needs.
+
+    The device's own `vars.<app>.profile` beats the pack's default, so one odd
+    device is a config edit rather than a code change.
+
+    **RETURNS:**
+        `str`: The profile name, or empty to use the app's own default.  <br>
+    """
+    named = device.app_vars(provider).get("profile")
+    if named:
+        return str(named)
+    try:
+        pack = container.registry.device_pack(device.type)
+    except FleetError:
+        return ""
+    return str(dict(getattr(pack, "app_profiles", {})).get(provider, ""))
 
 
 def _parse_overrides(overrides: tuple[str, ...]) -> dict[str, Any]:

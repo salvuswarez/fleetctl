@@ -313,3 +313,48 @@ def test_the_state_spec_declares_kodis_members_and_exclusions() -> None:
     assert spec.members == PROFILE_MEMBERS
     assert "userdata/Thumbnails" in spec.exclude
     assert "userdata/Database/Textures13.db" in spec.exclude
+
+
+def test_deploy_refuses_a_build_shaped_for_other_hardware(tmp_path: Path, store: LocalArtifactStore, capture_artifact: ArtifactRef) -> None:
+    """`kodi-refresh` deploys the newest build to everything tagged `kodi`. A
+    gold build carries ARM addon binaries, so reaching an x86 Steam Deck that
+    way installs cleanly and then crashes on playback -- the failure this
+    guard exists to make loud and early."""
+    # Arrange
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire, "profile": "gold"}))
+    inner = FakeTransport()
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+    config: dict[str, object] = {"build": built.artifacts["build"].wire, "profile": "deck"}
+    context = _device_context(tmp_path, store, transport, config, "ws-mismatch")
+
+    # Act / Assert
+    with pytest.raises(FleetError, match="built with the 'gold' profile"):
+        steps.deploy(context)
+    # Refused before the profile was wiped, not part-way through restoring it.
+    assert not inner.commands()
+
+
+def test_deploy_allows_a_build_with_no_recorded_profile(tmp_path: Path, store: LocalArtifactStore, capture_artifact: ArtifactRef) -> None:
+    """Builds published before profiles were recorded must stay deployable;
+    only a definite disagreement stops."""
+    # Arrange
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire}))
+    name = built.artifacts["build"].name
+    inner = FakeTransport(
+        responses={
+            f"mkdir -p {ROOT}": "",
+            f"ls {ROOT}/addons": "skin.example",
+            f"ls {ROOT}/userdata": "addon_data",
+            f"ls {ROOT}/media": "art",
+            f"gzip -d /sdcard/{name}": "",
+            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+        }
+    )
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+    context = _device_context(tmp_path, store, transport, {"build": built.artifacts["build"].wire, "profile": "deck"}, "ws-legacy")
+
+    # Act
+    result = steps.deploy(context)
+
+    # Assert
+    assert built.artifacts["build"].wire in result.summary
