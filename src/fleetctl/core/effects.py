@@ -32,6 +32,21 @@ class Capability(str, Enum):
     CLEANUP = "cleanup"
 
 
+# Verbs the connection itself performs, so the transport is the only honest
+# answer for them. The rest — state, apps, settings, cleanup — are built on
+# these by a pack's managers, and whether a pack has one is a property of the
+# pack, not of the wire.
+WIRE_CAPABILITIES: frozenset[Capability] = frozenset(
+    {
+        Capability.REACH,
+        Capability.FACTS,
+        Capability.EXEC,
+        Capability.FILES,
+        Capability.POWER,
+    }
+)
+
+
 def missing_capabilities(required: frozenset[Capability], provided: frozenset[Capability]) -> frozenset[Capability]:
     """Report which required capabilities a provider does not offer.
 

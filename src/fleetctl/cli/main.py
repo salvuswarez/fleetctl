@@ -173,7 +173,8 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
     transport: Transport | None = None
     try:
         transport = container.transport_for(device)
-        check_capabilities(step.spec, transport)
+        pack = container.registry.device_pack(device.type)
+        check_capabilities(step.spec, transport, provided_by_pack=getattr(pack, "capabilities", frozenset()))
         state = container.state_for(device, transport)
         app_manager = container.apps_for(device, transport)
 

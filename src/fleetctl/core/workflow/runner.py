@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from ..effects import missing_capabilities
+from ..effects import WIRE_CAPABILITIES, Capability, missing_capabilities
 from ..errors import FleetError, OperationCancelled
 from ..observability.correlation import correlate
 from ..operations.registry import OperationHandle, OperationRegistry, OperationStatus
@@ -19,17 +19,30 @@ LOGGER = logging.getLogger(__name__)
 StepBody = Callable[[OperationHandle, Path], StepResult]
 
 
-def check_capabilities(spec: StepSpec, transport: Transport) -> None:
-    """Verify a transport can satisfy a step before anything is touched.
+def check_capabilities(spec: StepSpec, transport: Transport, *, provided_by_pack: frozenset[Capability] = frozenset()) -> None:
+    """Verify a target can satisfy a step before anything is touched.
+
+    A transport carries the wire verbs — reach, exec, files. The deeper ones
+    are supplied by the pack's own managers: `state` and `apps` are built on
+    exec and files, and whether a pack has them is a property of the pack, not
+    of the connection. One `SshTransport` serves both a Steam Deck, which has a
+    state manager, and a generic Linux host, which does not, so the transport
+    cannot answer for either. Checking it alone rejected steps the pack could
+    in fact run.
 
     **PARAMETERS:**
         `spec` (StepSpec): The step about to run.  <br>
         `transport` (Transport): The resolved transport for the target.  <br>
+        `provided_by_pack` (frozenset[Capability]): What the device pack declares. Defaults to empty, leaving the transport the sole authority — correct when there is no pack, as in a direct transport test.  <br>
 
     **RAISES:**
-        `FleetError`: If the transport does not provide everything the step requires.  <br>
+        `FleetError`: If neither the transport nor the pack provides something the step requires.  <br>
     """
-    missing = missing_capabilities(spec.requires, transport.capabilities())
+    # A pack may add the derived verbs it implements, but never claim a wire
+    # verb the connection does not have — that would hide a dead transport
+    # behind a pack's declaration.
+    provided = transport.capabilities() | (provided_by_pack - WIRE_CAPABILITIES)
+    missing = missing_capabilities(spec.requires, provided)
     if missing:
         names = ", ".join(sorted(capability.value for capability in missing))
         raise FleetError(f"{spec.id} requires unsupported capabilities on {transport.target}: {names}")
