@@ -50,6 +50,43 @@ class FlatpakAppManager:
                 return value.strip()
         return ""
 
+    def installed_abi(self, identifier: str) -> str:
+        """Report the architecture a Flatpak application runs as.
+
+        Reads `flatpak info`'s ``Arch:`` line. Flatpak resolves a runtime to
+        the host architecture when it installs, so this rarely differs from the
+        host — but it is read rather than assumed, because a manually installed
+        32-bit branch on a 64-bit host would otherwise go unnoticed.
+
+        **PARAMETERS:**
+            `identifier` (str): Flathub application id.  <br>
+
+        **RETURNS:**
+            `str`: The architecture, e.g. ``x86_64``, or ``""`` when the application is absent.  <br>
+        """
+        output = self._transport.exec_ok(f"flatpak info {shlex.quote(identifier)}", effect=Effect.READ)
+        for line in output.splitlines():
+            key, separator, value = line.partition(":")
+            if separator and key.strip().lower() == "arch":
+                return value.strip()
+        return ""
+
+    def launch(self, identifier: str) -> None:
+        """Not supported: a graphical Flatpak does not start from a bare SSH session.
+
+        `flatpak run` needs a session bus and a display the SSH session does
+        not have, and on this hardware the application is started by the game
+        launcher rather than directly. Raising says so; starting a process that
+        immediately dies would report success for a black screen.
+
+        **RAISES:**
+            `FleetError`: Always.  <br>
+        """
+        raise FleetError(
+            f"Launching {identifier} over SSH is not supported: a Flatpak application needs a session bus and display, "
+            "and on this platform it is started by the desktop or game launcher",
+        )
+
     def install(self, package: Path, *, identifier: str = "") -> None:
         """Not supported: a Flatpak is installed from a remote, not a local file.
 

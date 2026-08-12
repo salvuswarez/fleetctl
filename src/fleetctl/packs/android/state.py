@@ -113,10 +113,19 @@ class AndroidStateManager:
         self._verify(root, spec)
 
     def _verify(self, root: str, spec: AppStateSpec) -> None:
-        """Fail loudly if extraction left the state unusable."""
+        """Fail loudly if extraction left the state unusable.
+
+        Counts entries rather than reading `ls` output directly: a failed `ls`
+        writes "No such file or directory" to the merged stream, which is
+        *non-empty*, so testing for empty output treats a missing directory as
+        proof it exists. Stderr is discarded and the count is parsed, so the
+        only thing that can satisfy this is a directory with contents.
+        """
         for member in spec.members:
-            listing = self._transport.exec_ok(f"ls {shlex.quote(posixpath.join(root, member))}", effect=Effect.READ)
-            if not listing.strip():
+            path = shlex.quote(posixpath.join(root, member))
+            counted = self._transport.exec_ok(f"ls -1 {path} 2>/dev/null | wc -l", effect=Effect.READ).strip()
+            entries = int(counted) if counted.isdigit() else 0
+            if not entries:
                 raise TransportError(f"Restore verification failed: {root}/{member} is missing or empty", target=self._transport.target)
 
     def _require_space(self, archive_size: int) -> None:

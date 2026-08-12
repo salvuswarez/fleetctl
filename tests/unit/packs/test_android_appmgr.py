@@ -9,6 +9,7 @@ import pytest
 
 from fleetctl.apps.kodi.spec import state_spec
 from fleetctl.core.appmgr import AppManager
+from fleetctl.core.errors import TransportError
 from fleetctl.core.transport.fake import FakeTransport
 from fleetctl.packs.android.appmgr import AndroidAppManager
 from fleetctl.packs.android.quirks import AndroidQuirks
@@ -39,50 +40,111 @@ def test_an_absent_package_reports_no_version_rather_than_failing() -> None:
     assert AndroidAppManager(transport).installed_version("org.xbmc.kodi") == ""
 
 
+STAGED = "/data/local/tmp/kodi.apk"
+
+
 def test_installing_stages_the_apk_and_cleans_up(tmp_path: Path) -> None:
     """`pm install` reads a path on the device, so the file has to get there
     first -- and leaving it behind wastes space a stick does not have."""
     # Arrange
     apk = tmp_path / "kodi.apk"
     apk.write_bytes(b"apk" * 100)
-    transport = FakeTransport(responses={"pm install -r /sdcard/kodi.apk": "Success"})
+    transport = FakeTransport(responses={f"pm install -r {STAGED}": "Success", DUMPSYS: "  versionName=21.3\n"})
 
     # Act
     AndroidAppManager(transport).install(apk, identifier="org.xbmc.kodi")
 
     # Assert
     issued = transport.commands()
-    assert "pm install -r /sdcard/kodi.apk" in issued
-    assert issued.count("rm -f /sdcard/kodi.apk") == 2  # before and after
+    assert f"pm install -r {STAGED}" in issued
+    assert issued.count(f"rm -f {STAGED}") == 2  # before and after
     assert any(call.kind == "put" for call in transport.calls)
+
+
+def test_an_apk_is_never_staged_on_external_storage(tmp_path: Path) -> None:
+    """From Android 11 /sdcard is a FUSE mount the installer has no SELinux
+    permission to read: the push succeeds, `pm install` cannot open the file,
+    and nothing in the command layer notices."""
+    # Arrange
+    apk = tmp_path / "kodi.apk"
+    apk.write_bytes(b"apk")
+    transport = FakeTransport(responses={f"pm install -r {STAGED}": "Success", DUMPSYS: "  versionName=21.3\n"})
+
+    # Act
+    AndroidAppManager(transport).install(apk, identifier="org.xbmc.kodi")
+
+    # Assert
+    assert not [command for command in transport.commands() if "/sdcard/kodi.apk" in command]
+
+
+def test_an_install_that_reports_nothing_but_installed_nothing_is_an_error(tmp_path: Path) -> None:
+    """The exact failure seen on real hardware: `pm install` wrote its error to
+    stdout, the transport cannot read an exit status, and the step reported
+    success for an install that never happened."""
+    # Arrange
+    apk = tmp_path / "kodi.apk"
+    apk.write_bytes(b"apk")
+    transport = FakeTransport(responses={f"pm install -r {STAGED}": "Error: Can't open file", DUMPSYS: ""})
+
+    # Act / Assert
+    with pytest.raises(TransportError, match="not present afterwards"):
+        AndroidAppManager(transport).install(apk, identifier="org.xbmc.kodi")
 
 
 def test_the_staged_apk_is_removed_even_when_the_install_fails(tmp_path: Path) -> None:
     # Arrange
     apk = tmp_path / "kodi.apk"
     apk.write_bytes(b"apk")
-    transport = FakeTransport(failures={"pm install -r /sdcard/kodi.apk": "INSTALL_FAILED"})
+    transport = FakeTransport(failures={f"pm install -r {STAGED}": "INSTALL_FAILED"})
 
     # Act
     with pytest.raises(Exception):
         AndroidAppManager(transport).install(apk)
 
     # Assert
-    assert transport.commands().count("rm -f /sdcard/kodi.apk") == 2
+    assert transport.commands().count(f"rm -f {STAGED}") == 2
 
 
 def test_staging_follows_the_packs_own_quirks(tmp_path: Path) -> None:
     # Arrange
     apk = tmp_path / "kodi.apk"
     apk.write_bytes(b"apk")
-    quirks = AndroidQuirks(external_storage="/storage/emulated/0")
-    transport = FakeTransport(responses={"pm install -r /storage/emulated/0/kodi.apk": "Success"})
+    quirks = AndroidQuirks(apk_staging_dir="/data/local/tmp/custom")
+    transport = FakeTransport(responses={"pm install -r /data/local/tmp/custom/kodi.apk": "Success"})
 
     # Act
     AndroidAppManager(transport, quirks).install(apk)
 
     # Assert
-    assert "pm install -r /storage/emulated/0/kodi.apk" in transport.commands()
+    assert "pm install -r /data/local/tmp/custom/kodi.apk" in transport.commands()
+
+
+def test_it_reads_the_installed_abi() -> None:
+    """The app's own architecture, not the device's — a process loads only
+    libraries matching itself."""
+    # Arrange
+    transport = FakeTransport(responses={DUMPSYS: "  primaryCpuAbi=armeabi-v7a\n  versionName=21.3\n"})
+
+    # Act / Assert
+    assert AndroidAppManager(transport).installed_abi("org.xbmc.kodi") == "armeabi-v7a"
+
+
+def test_a_package_with_no_native_code_reports_no_abi() -> None:
+    """`dumpsys` prints the literal string "null" — returning that as an
+    architecture would make it look like a real, unsatisfiable requirement."""
+    # Arrange
+    transport = FakeTransport(responses={DUMPSYS: "  primaryCpuAbi=null\n"})
+
+    # Act / Assert
+    assert AndroidAppManager(transport).installed_abi("org.xbmc.kodi") == ""
+
+
+def test_an_absent_package_reports_no_abi() -> None:
+    # Arrange
+    transport = FakeTransport(responses={DUMPSYS: ""})
+
+    # Act / Assert
+    assert AndroidAppManager(transport).installed_abi("org.xbmc.kodi") == ""
 
 
 def test_stopping_an_app_force_stops_it() -> None:

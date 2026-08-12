@@ -162,9 +162,9 @@ def test_deploy_hands_the_build_to_the_device_pack(tmp_path: Path, store: LocalA
     inner = FakeTransport(
         responses={
             f"mkdir -p {ROOT}": "",
-            f"ls {ROOT}/addons": "skin.example",
-            f"ls {ROOT}/userdata": "addon_data",
-            f"ls {ROOT}/media": "art",
+            f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
         }
     )
     inner.responses = {**inner.responses, **{f"gzip -d /sdcard/{built.artifacts['build'].name}": ""}}
@@ -207,9 +207,9 @@ def test_the_app_pack_issues_no_tar_command(tmp_path: Path, store: LocalArtifact
             f"gzip -d /sdcard/{name}": "",
             f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
             f"mkdir -p {ROOT}": "",
-            f"ls {ROOT}/addons": "skin.example",
-            f"ls {ROOT}/userdata": "addon_data",
-            f"ls {ROOT}/media": "art",
+            f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
         }
     )
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
@@ -345,9 +345,9 @@ def test_deploy_allows_a_build_with_no_recorded_profile(tmp_path: Path, store: L
     inner = FakeTransport(
         responses={
             f"mkdir -p {ROOT}": "",
-            f"ls {ROOT}/addons": "skin.example",
-            f"ls {ROOT}/userdata": "addon_data",
-            f"ls {ROOT}/media": "art",
+            f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
             f"gzip -d /sdcard/{name}": "",
             f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
         }
@@ -388,6 +388,12 @@ def test_deploy_without_a_named_build_picks_one_for_this_device(tmp_path: Path, 
     # Arrange
     built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire, "profile": "gold"}))
     payload = store.get(built.artifacts["build"], tmp_path / "payload.tar.gz")
+    # Dropped once its payload is in hand. `build` names artifacts by current
+    # timestamp, so it outsorts both fixed-date fixtures below on name — and
+    # `list` breaks a `created_at` tie by name, which all three hit whenever
+    # the three writes land in the same second. Leaving it published made this
+    # test fail roughly one run in five.
+    store.delete(built.artifacts["build"])
     # Published by hand so the deck build sorts ahead of the gold one; two
     # `steps.build` calls in the same second would collide on the timestamp.
     gold_ref = ArtifactRef(kind=steps.BUILDS, name="build_20260101_000000.tar.gz")
@@ -400,9 +406,9 @@ def test_deploy_without_a_named_build_picks_one_for_this_device(tmp_path: Path, 
     inner = FakeTransport(
         responses={
             f"mkdir -p {ROOT}": "",
-            f"ls {ROOT}/addons": "skin.example",
-            f"ls {ROOT}/userdata": "addon_data",
-            f"ls {ROOT}/media": "art",
+            f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
             f"gzip -d /sdcard/{name}": "",
             f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
         }
@@ -426,3 +432,102 @@ def test_deploy_says_what_to_build_when_nothing_matches(tmp_path: Path, store: L
     # Act / Assert
     with pytest.raises(FleetError, match="No build with the 'deck' profile"):
         steps.deploy(_device_context(tmp_path, store, transport, {"profile": "deck"}, "ws-none"))
+
+
+def _arm_capture(tmp_path: Path, store: LocalArtifactStore) -> ArtifactRef:
+    """RETURNS: ArtifactRef: A published capture carrying a 32-bit ARM binary addon."""
+    staging = tmp_path / "arm-src"
+    profile = _make_profile(staging / ".kodi")
+    header = bytearray(b"\x7fELF" + b"\x00" * 16)
+    header[18:20] = (0x28).to_bytes(2, "little")
+    (profile / "addons" / "script.module.dep" / "dep.so").write_bytes(bytes(header))
+
+    archive = tmp_path / "arm-capture.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(profile, arcname=".kodi")
+    ref = ArtifactRef(kind=steps.CAPTURES, name="arm-capture.tar.gz")
+    store.put(archive, ref)
+    return ref
+
+
+def test_build_records_the_architectures_it_packed(tmp_path: Path, store: LocalArtifactStore) -> None:
+    """Recorded at build because the profile is already extracted there, and
+    because a recipe name cannot describe what the binaries actually are."""
+    # Arrange
+    capture = _arm_capture(tmp_path, store)
+
+    # Act
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture.wire, "profile": "gold"}))
+
+    # Assert
+    assert built.facts["machines"] == "arm"
+
+
+def test_deploy_refuses_a_build_the_device_cannot_execute(tmp_path: Path, store: LocalArtifactStore) -> None:
+    """The gap the profile guard cannot close: a Shield and a Fire Stick both
+    resolve to `gold`, so the names match while the machine code does not."""
+    # Arrange
+    capture = _arm_capture(tmp_path, store)
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture.wire, "profile": "gold"}))
+    inner = FakeTransport()
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+    config: dict[str, object] = {"build": built.artifacts["build"].wire, "profile": "gold", "runtime_abis": "arm64-v8a"}
+
+    # Act / Assert
+    with pytest.raises(FleetError, match="carries arm binary addons"):
+        steps.deploy(_device_context(tmp_path, store, transport, config, "ws-abi"))
+
+    # Refused before the existing profile was wiped.
+    assert not inner.commands()
+
+
+def test_deploy_allows_a_build_whose_architecture_the_device_covers(tmp_path: Path, store: LocalArtifactStore) -> None:
+    """A 64-bit device that still runs 32-bit binaries takes the build."""
+    # Arrange
+    capture = _arm_capture(tmp_path, store)
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture.wire, "profile": "gold"}))
+    name = built.artifacts["build"].name
+    inner = FakeTransport(
+        responses={
+            f"mkdir -p {ROOT}": "",
+            f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
+            f"gzip -d /sdcard/{name}": "",
+            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+        }
+    )
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+    config: dict[str, object] = {"build": built.artifacts["build"].wire, "profile": "gold", "runtime_abis": "arm64-v8a,armeabi-v7a,armeabi"}
+
+    # Act
+    result = steps.deploy(_device_context(tmp_path, store, transport, config, "ws-abi-ok"))
+
+    # Assert
+    assert built.artifacts["build"].wire in result.summary
+
+
+def test_deploy_gives_no_verdict_when_the_kodi_abi_is_unknown(tmp_path: Path, store: LocalArtifactStore) -> None:
+    """Blocking on an unverifiable claim would stop working deploys — every
+    device whose Kodi ABI is not yet known."""
+    # Arrange
+    capture = _arm_capture(tmp_path, store)
+    built = steps.build(_transform_context(tmp_path, store, {"source": capture.wire, "profile": "gold"}))
+    name = built.artifacts["build"].name
+    inner = FakeTransport(
+        responses={
+            f"mkdir -p {ROOT}": "",
+            f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
+            f"gzip -d /sdcard/{name}": "",
+            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+        }
+    )
+    transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
+
+    # Act
+    result = steps.deploy(_device_context(tmp_path, store, transport, {"build": built.artifacts["build"].wire, "profile": "gold"}, "ws-abi-unknown"))
+
+    # Assert
+    assert built.artifacts["build"].wire in result.summary

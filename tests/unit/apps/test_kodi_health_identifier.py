@@ -56,6 +56,12 @@ class _RecordingApps:
         self.asked.append(identifier)
         return self.version if identifier == self.installed else ""
 
+    def installed_abi(self, identifier: str) -> str:
+        return "armeabi-v7a" if identifier == self.installed else ""
+
+    def launch(self, identifier: str) -> None:
+        raise AssertionError("check launches nothing")
+
     def install(self, package: Path, *, identifier: str = "") -> None:
         raise AssertionError("check installs nothing")
 

@@ -78,11 +78,47 @@ def test_the_two_packs_are_independent_classes() -> None:
     assert ShieldPack.__bases__ == (object,)
 
 
-def test_the_shield_ships_no_unverified_bloat_list() -> None:
-    """The predecessor inherited a borrowed list that mixed fabricated
-    package names with real ones. An empty list is the honest state."""
+# Disabling any of these breaks something the household relies on: SMB serving
+# backs the Kodi library, and the rest carry the remote, input and display.
+PROTECTED_PACKAGES = (
+    "com.nvidia.shield.smbserver",
+    "com.nvidia.shield.smbauth",
+    "com.nvidia.shield.nas",
+    "com.nvidia.shieldtech.hooks",
+    "com.nvidia.shieldtech.proxy",
+    "com.nvidia.shieldtech.accessoryui",
+    "com.nvidia.blakepairing",
+    "com.nvidia.shield.remote.server",
+    "com.nvidia.NvCPLSvc",
+    "com.nvidia.nvaudiosvc",
+    "com.nvidia.avsync",
+    "com.nvidia.overscancomp",
+    "com.nvidia.ota",
+    "com.nvidia.tegrazone3",
+    "com.google.android.marvin.talkback",
+    "com.google.android.webview",
+    "com.google.android.gms",
+)
+
+
+def test_the_shield_bloat_list_is_populated_from_hardware() -> None:
+    """Every entry was read off a real device with `pm list packages`. The
+    predecessor inherited a borrowed list that mixed fabricated names with
+    real ones, so the risk this guards is a list drifting back to invention."""
+    # Act
+    packages = ShieldPack().bloat_packages
+
+    # Assert
+    assert packages
+    assert all(package.count(".") >= 2 for package in packages), "package names look malformed"
+
+
+@pytest.mark.parametrize("package", PROTECTED_PACKAGES)
+def test_the_shield_bloat_list_never_disables_something_load_bearing(package: str) -> None:
+    """Disabling SMB serving would cut the Kodi library off at the knees, and
+    the remote packages would leave the box unusable from the sofa."""
     # Act / Assert
-    assert ShieldPack().bloat_packages == ()
+    assert package not in ShieldPack().bloat_packages
 
 
 def test_maintain_reports_honestly_when_nothing_is_configured(device_context: Any) -> None:
@@ -91,9 +127,12 @@ def test_maintain_reports_honestly_when_nothing_is_configured(device_context: An
     # Arrange
     transport = FakeTransport()
     context = device_context(transport, device_type="shield")
+    # Overridden rather than relying on the shipped file, which is populated:
+    # the behaviour under test is "nothing to do", not "the data file is empty".
+    pack = ShieldPack({"bloat": {}})
 
     # Act
-    result = ShieldPack().maintain(context)
+    result = pack.maintain(context)
 
     # Assert
     assert result.facts["disabled"] == 0
@@ -128,9 +167,9 @@ def test_the_same_restore_produces_different_commands_per_vendor(tmp_path: Path)
             "tar xf /sdcard/build.tar -C " + KODI_ROOT: "",
             "tar xzf /sdcard/build.tar.gz -C " + KODI_ROOT: "",
             f"mkdir -p {KODI_ROOT}": "",
-            f"ls {KODI_ROOT}/addons": "skin",
-            f"ls {KODI_ROOT}/userdata": "settings",
-            f"ls {KODI_ROOT}/media": "art",
+            f"ls -1 {KODI_ROOT}/addons 2>/dev/null | wc -l": "1",
+            f"ls -1 {KODI_ROOT}/userdata 2>/dev/null | wc -l": "1",
+            f"ls -1 {KODI_ROOT}/media 2>/dev/null | wc -l": "1",
         }
 
     fire_transport = FakeTransport(responses=_responses())

@@ -47,6 +47,8 @@ class _Pack:
             "model": runner.exec_ok("getprop ro.product.model"),
             "serial": runner.exec_ok("getprop ro.serialno"),
             "name": runner.exec_ok("settings get global device_name"),
+            "abi": runner.exec_ok("getprop ro.product.cpu.abi"),
+            "abilist": runner.exec_ok("getprop ro.product.cpu.abilist"),
         }
 
     def steps(self) -> Iterable[RegisteredStep]:
@@ -111,6 +113,23 @@ def test_a_pack_claims_a_host_it_recognizes() -> None:
     assert claim.device is not None
     assert claim.device.model == "AFTKA"
     assert claim.device.mac == "aa:bb:cc:dd:ee:ff"
+
+
+def test_a_claim_carries_the_architecture_facts_into_the_device() -> None:
+    """`_device_from` maps a fixed set of keys, so a fact a probe reports but
+    it does not name is silently dropped — which is how these two reached the
+    inventory as empty strings after the probe had read them correctly."""
+    # Arrange
+    host = Host(address="192.168.1.50", mac="aa:bb:cc:dd:ee:ff")
+    facts = {**FIRE_FACTS, "getprop ro.product.cpu.abi": "armeabi-v7a", "getprop ro.product.cpu.abilist": "armeabi-v7a,armeabi"}
+
+    # Act
+    claim = claim_host(host, [_Pack("firetv", "Amazon")], _connector({"192.168.1.50": FakeTransport(responses=facts)}))
+
+    # Assert
+    assert claim.device is not None
+    assert claim.device.abi == "armeabi-v7a"
+    assert claim.device.abilist == "armeabi-v7a,armeabi"
 
 
 def test_an_unrecognized_host_is_reported_not_dropped() -> None:

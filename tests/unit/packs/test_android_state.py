@@ -42,8 +42,8 @@ def _ok_responses(archive: str) -> dict[str, str]:
         f"tar xf {plain} -C {ROOT}": "",
         f"tar xzf {archive} -C {ROOT}": "",
         f"mkdir -p {ROOT}": "",
-        f"ls {ROOT}/addons": "addon.one",
-        f"ls {ROOT}/userdata": "guisettings.xml",
+        f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
+        f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
     }
 
 
@@ -156,7 +156,7 @@ def test_restore_verifies_the_extracted_tree(tmp_path: Path) -> None:
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1024)
     responses = _ok_responses("/sdcard/build.tar.gz")
-    responses[f"ls {ROOT}/userdata"] = ""
+    responses[f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l"] = "0"
     transport = FakeTransport(responses=responses)
     manager = AndroidStateManager(transport, FIRE_OS)
 

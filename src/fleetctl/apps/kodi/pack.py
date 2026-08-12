@@ -13,7 +13,7 @@ from ...core.errors import FleetError
 from ...core.registry import RegisteredStep
 from ...core.workflow.step import ProfileTransform
 from ...core.workflow.workflow import Workflow
-from . import base_image, caches, device_config, health, steps
+from . import base_image, caches, device_config, health, launch, steps
 from .merging import deep_merge
 from .spec import APP_ID, DEFAULT_PROFILE
 from .transforms.addons import PruneAddons
@@ -185,5 +185,6 @@ class KodiApp:
             RegisteredStep(spec=device_config.APPLY_DEVICE_CONFIG, run=device_config.apply_device_config, provider=APP_ID),
             RegisteredStep(spec=device_config.READ_DISPLAY, run=device_config.read_display, provider=APP_ID),
             RegisteredStep(spec=health.CHECK, run=health.check, provider=APP_ID),
+            RegisteredStep(spec=launch.LAUNCH, run=launch.launch, provider=APP_ID),
             RegisteredStep(spec=caches.TRIM_CACHES, run=caches.trim_caches, provider=APP_ID),
         ]

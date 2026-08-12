@@ -53,6 +53,12 @@ class _NullApps:
     def installed_version(self, identifier: str) -> str:
         raise AssertionError("this step must not query installed apps")
 
+    def installed_abi(self, identifier: str) -> str:
+        raise AssertionError("this step must not query installed apps")
+
+    def launch(self, identifier: str) -> None:
+        raise AssertionError("this step must not launch an app")
+
     def install(self, package: Path, *, identifier: str = "") -> None:
         raise AssertionError("this step must not install anything")
 
