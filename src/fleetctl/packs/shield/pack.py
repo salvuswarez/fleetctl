@@ -81,7 +81,11 @@ class ShieldPack:
     # Probes ahead of nothing in particular; both vendor packs key off
     # manufacturer, so neither can claim the other's device.
     probe_priority = 10
-    app_profiles: Mapping[str, str] = {}
+    # The gold recipe is shaped by a 1.7GB stick: a small file cache and no
+    # home-screen preloading. This device has 2.88GB, so it takes a recipe
+    # that lifts those limits. Same addons and skin — only the constraints
+    # differ. See `data/profiles/shield.yml`.
+    app_profiles: Mapping[str, str] = {"kodi": "shield"}
 
     def __init__(self, data: Mapping[str, Any] | None = None) -> None:
         self._overrides = dict(data or {})

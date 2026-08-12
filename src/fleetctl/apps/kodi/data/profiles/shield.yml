@@ -1,0 +1,58 @@
+# The Shield recipe: gold, with the limits a 1.7GB stick imposed lifted.
+#
+# Everything in `gold` still applies — same addons, same skin, same hub
+# layout, same stripped device settings. This file changes only what the
+# hardware difference justifies, so a fleet-wide change to gold still reaches
+# the Shield.
+extends: gold
+
+# VERIFIED on hardware 2026-08-12 against a SHIELD Android TV (`mdarcy`,
+# SHIELD TV Pro) running Kodi 21.3:
+#
+#   RAM        3,016,708 kB total (~2.88GB), 1.14GB available with Kodi up
+#   Panel      3840x2160, 20 modes incl. 23.976 / 24 / 25 / 50 / 59.94
+#   HDR        HdrCapabilities mSupportedHdrTypes=[2] (HDR10), 500 nits
+#   GUI        already rendering at 1920x1080 over the 4K panel
+#
+# The Fire Stick this profile's parent was captured from has 1.7GB.
+
+apply_settings:
+  settings:
+    guisettings.xml:
+      # THE change that matters. Kodi 21 Omega removed the `<cache>` block
+      # from advancedsettings.xml and moved it into the GUI, so the 150MB
+      # `<cache><memorysize>` still sitting in that file is inert — Kodi 21
+      # never reads it. The live value was `filecache.memorysize` = 32 (MB),
+      # carrying no `default` attribute, i.e. deliberately set once and then
+      # orphaned when the setting moved.
+      #
+      # Kodi reserves roughly 3x this value in RAM, so 200MB costs ~600MB of
+      # the 1.14GB measured free. That is the headroom this device has and a
+      # stick does not; do not copy this number into `gold`.
+      filecache.memorysize: "200"
+
+    addon_data/skin.arctic.fuse.3/settings.xml:
+      # Overrides gold, which disables this. Preloading every home tab's
+      # widgets at startup contributed to a low-memory kill on a 1.7GB stick —
+      # that is a constraint of the stick, not of Kodi, and it costs a
+      # noticeably slower home screen. The Shield has the headroom.
+      startup.enablehubpreloading: "true"
+
+# DELIBERATELY NOT SET, each for a reason:
+#
+#   videoscreen.10bitsurfaces — the device reports HDR10, so 10-bit output is
+#     plausibly a win, but the setting's values are not documented clearly for
+#     Android and the effect is only observable while playing HDR content.
+#     Unverified, so unset. Test it by hand before adding it here.
+#
+#   videoscreen.whitelist — currently empty, which lets Kodi use every mode
+#     the display reported. A whitelist would pin exact modes for cleaner
+#     23.976 switching, but the entries are version-specific strings that
+#     cannot be verified without watching the switch happen.
+#
+#   videoplayer.adjustrefreshrate — already 2 on the captured profile and
+#     inherited unchanged. Nothing to do.
+#
+#   audiooutput.* — gold strips these on purpose and this must not put them
+#     back. Passthrough settings describe the receiver a device is plugged
+#     into, and a build is shared by the whole fleet.

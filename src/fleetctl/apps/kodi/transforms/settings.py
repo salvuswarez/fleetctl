@@ -64,6 +64,13 @@ class ApplySettings:
                 element.set("id", setting_id)
             if (element.text or "") != value:
                 element.text = value
+                # `default="true"` asserts the value *is* Kodi's default, and
+                # Kodi is free to discard a setting marked that way on load.
+                # Leaving it produces a file that greps back exactly as
+                # intended and has no effect — invisible to every check short
+                # of launching Kodi. `device_config._apply_file` already does
+                # this; the two must not disagree.
+                element.attrib.pop("default", None)
                 changes.append(f"{relative}: {setting_id} = {value!r}")
         if changes:
             tree.write(path, encoding="utf-8", xml_declaration=True)
