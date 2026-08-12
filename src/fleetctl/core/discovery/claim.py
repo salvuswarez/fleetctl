@@ -126,6 +126,8 @@ def _device_from(facts: dict[str, str], host: Host) -> Device:
         model=facts.get("model", ""),
         serial=facts.get("serial", ""),
         os_version=facts.get("os_version", ""),
+        abi=facts.get("abi", ""),
+        abilist=facts.get("abilist", ""),
     )
 
 

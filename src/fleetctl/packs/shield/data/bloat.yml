@@ -1,21 +1,92 @@
 # NVIDIA Shield packages disabled during maintenance.
 #
-# VERIFICATION STATUS: **unverified — this list is intentionally near-empty.**
+# VERIFICATION STATUS: every package below was **read off a real SHIELD
+# Android TV** (Android 11, SHIELD Experience) with `pm list packages` on
+# 2026-08-12. None was copied from another codebase — the predecessor
+# inherited a borrowed list that mixed fabricated names with real ones, and
+# this list exists to not repeat that.
 #
-# The predecessor project inherited a bloat list from another codebase and
-# found it mixed fabricated package names with real ones. Rather than repeat
-# that, nothing is listed here until it has been confirmed against a real
-# Shield's `pm list packages` output.
+# What is verified: that each package is PRESENT on the device.
+# What is NOT verified: that disabling each one is harmless. They are grouped
+# by how confident that is, and the groups are additive — start with
+# `telemetry`, which is the safest, and widen deliberately.
 #
-# To populate it:
-#   fleetctl run shield.facts --device <id>     # confirm the pack claims it
-#   adb shell pm list packages | sort           # read what is actually there
-# Then add entries with a comment recording that they were seen on hardware.
+# `pm disable-user` is reversible: `pm enable <package>` puts one back.
 #
-# DELIBERATELY NOT CANDIDATES: the NVIDIA Games launcher and GeForce NOW are
-# the reason many people own this device; SHIELD Experience components back
-# the remote and HDMI-CEC. None of that is bloat by default.
+# DELIBERATELY NOT CANDIDATES, and why — do not add these without a reason
+# that outweighs the note:
+#   com.nvidia.tegrazone3            NVIDIA Games; a reason people buy this box
+#   com.nvidia.shield.smbserver      SMB serving, plus
+#   com.nvidia.shield.smbauth        its auth, plus
+#   com.nvidia.shield.nas            NAS integration — this household's Kodi
+#                                    library is served over SMB
+#   com.nvidia.shieldtech.hooks      remote and controller input, plus
+#   com.nvidia.shieldtech.proxy      the layers under it, plus
+#   com.nvidia.shieldtech.accessoryui
+#   com.nvidia.blakepairing          remote pairing
+#   com.nvidia.bluetooth.*           Bluetooth remote/controller pairing
+#   com.nvidia.shield.remote.server  the remote's server side
+#   com.nvidia.NvCPLSvc              display and audio control
+#   com.nvidia.nvaudiosvc            audio
+#   com.nvidia.avsync                A/V sync
+#   com.nvidia.overscancomp          overscan compensation
+#   com.nvidia.ota                   system updates
+#   com.google.android.marvin.talkback   accessibility; never disable by default
+#   com.google.android.webview       many apps render with it
+#   com.google.android.gms/gsf       Play Services; breaks most apps
 
-telemetry: []
+# Diagnostics, factory tooling and usage reporting. Nothing here is reachable
+# in normal use — the safest group, and the one to start with.
+telemetry:
+  - com.nvidia.stats
+  - com.nvidia.feedback
+  - com.nvidia.diagtools
+  - com.nvidia.tegraprofiler.security
+  - com.nvidia.factory
+  - com.nvidia.factorybundling
+  - com.nvidia.factorysyschecker
+  - com.nvidia.benchmarkblocker  # already disabled on the probed device
+  - com.nvidia.developerwidget
+  - com.nvidia.inputviewer
+  - com.google.android.feedback
 
-unused_apps: []
+# Beta-programme enrolment and OTA key combos. Disabling these does not stop
+# system updates (com.nvidia.ota is deliberately kept above).
+unused_apps:
+  - com.nvidia.shield.beta
+  - com.nvidia.shieldbeta
+  - com.nvidia.KeyComboOta
+  - com.nvidia.app.messaging  # NVIDIA promotional messaging
+
+# ---------------------------------------------------------------------------
+# CANDIDATES, DELIBERATELY NOT ACTIVE.
+#
+# `bloat_packages` flattens every list in this file, so any group added below
+# takes effect on the next `shield.maintain` for the whole fleet. These two
+# change what the box does rather than only what it reports, so they are held
+# as comments: verified present, not verified as wanted.
+#
+# To use one for a run without editing this file:
+#   fleetctl run shield.maintain --device <id> \
+#     --set bloat_packages='[com.google.android.katniss, ...]'
+#
+# voice — Google's TV search and hotword. `katniss` is also a substantial
+# memory consumer, which is why it is worth naming. Disabling it removes voice
+# search from the remote.
+#   - com.google.android.katniss
+#   - com.android.hotwordenrollment.okgoogle
+#   - com.android.hotwordenrollment.xgoogle
+#   - com.nvidia.hotwordsetup
+#
+# preloads — vendor storefront and media apps nobody chose to install. Check
+# each against what the household actually uses before enabling: this device
+# also carries deliberately-installed Netflix, Plex and YouTube, which must
+# never appear here.
+#   - air.com.vudu.air.DownloaderTablet
+#   - com.amazon.amazonvideo.livingroom.nvidia
+#   - com.google.android.play.games
+#   - com.google.android.videos
+#   - com.google.android.youtube.tvmusic
+#   - com.google.android.apps.nbu.smartconnect.tv
+#   - com.google.android.syncadapters.calendar
+#   - com.google.android.backdrop

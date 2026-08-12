@@ -138,6 +138,10 @@ class ShieldPack:
         """RETURNS: AndroidStateManager: A state manager carrying this pack's quirks."""
         return AndroidStateManager(transport, self.quirks)
 
+    def power_state(self, transport: Transport) -> str:
+        """RETURNS: str: ``awake``/``asleep``/``dozing``/``dreaming``, or ``""`` when unreadable. Satisfies the `power` capability this pack declares."""
+        return actions.power_state(transport)
+
     def state_root(self, transport: Transport, spec: AppStateSpec) -> str:
         """RETURNS: str: Where `spec`'s app keeps its state on this device."""
         return self.state_manager(transport).state_root(spec)

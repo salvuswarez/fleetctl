@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -69,6 +70,57 @@ class Toolkit:
             }
             for device in self.container.inventory.list()
         ]
+
+    def device_power(self, device_id: str) -> dict[str, Any]:
+        """Read whether one device is awake, cheaply and without recording an operation.
+
+        Deliberately not a step. This is meant to be polled on a short
+        interval, and a polled read routed through `run_step` becomes an
+        uncancellable RUNNING operation per poll, burying real work in the
+        timeline — a mistake this project has already made once.
+
+        Never raises for an unreachable device: something polling this needs
+        "not answering" as a value, not an exception. A device that is off,
+        unauthorized, or claimed by a pack with no power support all report
+        `reachable: false` with `state: ""`.
+
+        **PARAMETERS:**
+            `device_id` (str): Inventory id.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: `device`, `reachable`, `state`, and `awake`. `awake` is only ever true on a positive reading, so an unreachable device never looks awake.  <br>
+        """
+        answer: dict[str, Any] = {"device": device_id, "reachable": False, "state": "", "awake": False}
+
+        device = self.container.inventory.get(device_id)
+        if device is None or not device.type:
+            return answer
+
+        try:
+            pack = self.container.registry.device_pack(device.type)
+        except FleetError:
+            return answer
+
+        # Optional on the pack protocol, read the way the composition root
+        # reads `transport_for` and `app_profiles`: a pack that cannot answer
+        # for power simply does not offer this.
+        read = getattr(pack, "power_state", None)
+        if read is None:
+            return answer
+
+        transport = None
+        try:
+            transport = self.container.transport_for(device)
+            state = str(read(transport) or "")
+        except (FleetError, OSError):
+            LOGGER.debug("Could not read power state for %s", device_id, exc_info=True)
+            return answer
+        finally:
+            if transport is not None:
+                with suppress(Exception):
+                    transport.close()
+
+        return {"device": device_id, "reachable": bool(state), "state": state, "awake": state == "awake"}
 
     def list_steps(self) -> list[dict[str, Any]]:
         """RETURNS: list[dict[str, Any]]: Registered steps, with the effect class that decides how they are gated."""

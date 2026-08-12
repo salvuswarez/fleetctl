@@ -32,6 +32,8 @@ class Device(BaseModel):
         `model` (str): Vendor model string.  <br>
         `serial` (str): Vendor serial number.  <br>
         `os_version` (str): Operating system release string.  <br>
+        `abi` (str): The machine code this device prefers, e.g. ``arm64-v8a``. Empty when the pack does not report one.  <br>
+        `abilist` (str): Every architecture it can execute, most-preferred first, comma-separated. The authority for compatibility: a 64-bit device usually still runs 32-bit, which `abi` alone does not say.  <br>
         `status` (DeviceStatus): Whether the device can currently be acted on. Discovery sets `unauthorized` for a host that answered but refused this key.  <br>
         `tags` (list[str]): Free-form labels used for workflow targeting and policy matching.  <br>
         `vars` (dict[str, Any]): Per-app and per-device state, namespaced by app id. The kernel never interprets these.  <br>
@@ -47,6 +49,8 @@ class Device(BaseModel):
     model: str = ""
     serial: str = ""
     os_version: str = ""
+    abi: str = ""
+    abilist: str = ""
     status: DeviceStatus = DeviceStatus.OK
     tags: list[str] = Field(default_factory=list)
     vars: dict[str, Any] = Field(default_factory=dict)

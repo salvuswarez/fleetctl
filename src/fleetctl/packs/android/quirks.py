@@ -15,6 +15,7 @@ class AndroidQuirks:
         `push_via_netcat` (bool): Stream uploads to an on-device ``nc`` listener rather than using the ADB push protocol, which moves zero bytes beyond a few megabytes on some devices.  <br>
         `verify_disable_user` (bool): Confirm with ``pm list packages -d`` after disabling, because ``pm disable-user`` can fail silently for system packages from a non-root shell.  <br>
         `external_storage` (str): Path used for staging transfers.  <br>
+        `apk_staging_dir` (str): Where an APK is staged before `pm install` reads it. Not `external_storage`: from Android 11 `/sdcard` is a FUSE mount that `system_server` has no SELinux permission to read, so an install from there fails with `Can't open file` while the push itself succeeded.  <br>
         `app_data_root` (str): Where per-app external data directories live.  <br>
         `disk_headroom` (float): Multiple of an archive's size that must be free before pushing it — at peak the device holds the archive, its decompressed form, and the extracted tree.  <br>
         `min_unpack_bytes_per_s` (float): Floor throughput assumed for on-device unpacking, used to scale timeouts by archive size rather than using a flat one.  <br>
@@ -24,6 +25,9 @@ class AndroidQuirks:
     push_via_netcat: bool = False
     verify_disable_user: bool = False
     external_storage: str = "/sdcard"
+    # The canonical adb-writable staging path, readable by the installer on
+    # every Android version — unlike /sdcard, which stops working at 11.
+    apk_staging_dir: str = "/data/local/tmp"
     app_data_root: str = "/sdcard/Android/data"
     disk_headroom: float = 3.0
     min_unpack_bytes_per_s: float = 1_000_000.0
@@ -43,6 +47,7 @@ class AndroidQuirks:
             "push_via_netcat": bool,
             "verify_disable_user": bool,
             "external_storage": str,
+            "apk_staging_dir": str,
             "app_data_root": str,
             "disk_headroom": float,
             "min_unpack_bytes_per_s": float,

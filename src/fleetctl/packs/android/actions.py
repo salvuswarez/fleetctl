@@ -36,7 +36,7 @@ def read_facts(runner: CommandRunner) -> dict[str, str]:
         `runner` (CommandRunner): Connection to the device.  <br>
 
     **RETURNS:**
-        `dict[str, str]`: Any of `model`, `manufacturer`, `serial`, `os_version`, `name` that could be read. A missing key means the device did not answer, which is different from answering with an empty value.  <br>
+        `dict[str, str]`: Any of `model`, `manufacturer`, `serial`, `os_version`, `name`, `abi`, `abilist` that could be read. A missing key means the device did not answer, which is different from answering with an empty value.  <br>
     """
     probes = {
         "model": "getprop ro.product.model",
@@ -44,6 +44,14 @@ def read_facts(runner: CommandRunner) -> dict[str, str]:
         "serial": "getprop ro.serialno",
         "os_version": "getprop ro.build.version.release",
         "name": "settings get global device_name",
+        # Which machine code this device can execute. A Kodi profile carries
+        # compiled binary addons, so a build shaped on one device is only
+        # deployable to another that can run them -- a 64-bit-only Android TV
+        # cannot execute the 32-bit ARM binaries a Fire Stick capture carries.
+        # `abilist` is the authority (a 64-bit device usually still runs
+        # 32-bit); `abi` is only its preferred one.
+        "abi": "getprop ro.product.cpu.abi",
+        "abilist": "getprop ro.product.cpu.abilist",
     }
     facts: dict[str, str] = {}
     for key, command in probes.items():
@@ -139,6 +147,84 @@ def installed_version(runner: CommandRunner, package: str) -> str:
         if stripped.startswith("versionName="):
             return stripped.partition("=")[2].strip()
     return ""
+
+
+def installed_abi(runner: CommandRunner, package: str) -> str:
+    """RETURNS: str: The `primaryCpuAbi` an installed package runs as, or ``""`` if absent or not reported.
+
+    A package with no native code reports ``null`` here, which is not an
+    architecture and must not be returned as one.
+    """
+    output = runner.exec_ok(f"dumpsys package {shlex.quote(package)}", effect=Effect.READ)
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("primaryCpuAbi="):
+            value = stripped.partition("=")[2].strip()
+            return "" if value.lower() in ("", "null") else value
+    return ""
+
+
+def power_state(runner: CommandRunner) -> str:
+    """Read whether the device is awake, without waking it.
+
+    A set-top device stays on the network while asleep — it answers ping, TCP
+    and ADB throughout — so reachability says nothing about whether anyone is
+    watching it. This is the signal that does.
+
+    `grep -m1` is deliberately not used: it closes the pipe on a still-writing
+    `dumpsys`, which prints "Failed to write while dumping service power" to
+    the merged stream and makes a clean read look like a failure.
+
+    **PARAMETERS:**
+        `runner` (CommandRunner): Connection to the device.  <br>
+
+    **RETURNS:**
+        `str`: The lowercased wakefulness, one of ``awake``, ``asleep``, ``dozing``, ``dreaming``, or ``""`` when the device did not answer.  <br>
+    """
+    output = runner.exec_ok("dumpsys power | grep mWakefulness=", effect=Effect.READ)
+    for line in output.splitlines():
+        _, separator, value = line.strip().partition("mWakefulness=")
+        if separator and value.strip():
+            return value.strip().split()[0].lower()
+    return ""
+
+
+def launch_activity(runner: CommandRunner, package: str) -> str:
+    """Resolve a package's launchable activity, without knowing what the package is.
+
+    Asks the platform rather than hardcoding a component: an app pack must not
+    have to name its own activity here, and the answer differs between a TV
+    launcher entry and a phone one. Leanback is tried first because on a TV
+    that is the entry the launcher itself would use.
+
+    **PARAMETERS:**
+        `runner` (CommandRunner): Connection to the device.  <br>
+        `package` (str): Package to resolve.  <br>
+
+    **RETURNS:**
+        `str`: A ``package/activity`` component, or ``""`` when the package exposes no launchable activity.  <br>
+    """
+    for category in ("android.intent.category.LEANBACK_LAUNCHER", "android.intent.category.LAUNCHER"):
+        output = runner.exec_ok(
+            f"cmd package resolve-activity --brief -c {category} -a android.intent.action.MAIN {shlex.quote(package)}",
+            effect=Effect.READ,
+        )
+        # The component is the last line; the preceding lines are match detail.
+        for line in reversed(output.splitlines()):
+            candidate = line.strip()
+            if candidate.startswith(f"{package}/"):
+                return candidate
+    return ""
+
+
+def is_running(runner: CommandRunner, package: str) -> bool:
+    """RETURNS: bool: Whether the package currently has a process."""
+    return bool(runner.exec_ok(f"pidof {shlex.quote(package)}", effect=Effect.READ).strip())
+
+
+def start_app(runner: CommandRunner, component: str) -> None:
+    """Start an activity by its `package/activity` component."""
+    runner.exec_ok(f"am start -n {shlex.quote(component)}", effect=Effect.MUTATING)
 
 
 def stop_app(runner: CommandRunner, package: str) -> None:

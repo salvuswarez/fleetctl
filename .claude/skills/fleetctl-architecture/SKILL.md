@@ -12,7 +12,7 @@ Full design and rationale: `docs/architecture.md` (15 sections, 21 diagrams). Th
 | Ring | Knows about | May import | Contents |
 |------|-------------|------------|----------|
 | `core/` | nothing device- or app-specific | stdlib + third-party only | transport, inventory, discovery, artifacts, operations, workflow, config, observability, registry |
-| `packs/` | what a device *is* | `core/` | `android` (shared base), `firetv`, `shield`, `linux_host`, `generic_net` |
+| `packs/` | what a device *is* | `core/` | `android` and `posix` (shared bases, no entry point), `firetv`, `shield`, `linux_host`, `steamdeck` |
 | `apps/` | software *on* a device | `core/` | `kodi` |
 
 **Dependencies point inward only.** `apps/` never imports `packs/` — it declares capabilities and the engine resolves the provider. That indirection is the entire reason one Kodi build can target both a Fire Stick and a Shield.
@@ -21,13 +21,17 @@ Full design and rationale: `docs/architecture.md` (15 sections, 21 diagrams). Th
 
 | Seam | Protocol | Adapters |
 |------|----------|----------|
-| Talk to a device | `Transport` (= `Reachable` + `CommandRunner` + `FileTransfer`) | `AdbTransport`, `SshTransport`, `LocalTransport`, `NullTransport`, `FakeTransport`, `AuditingTransport` (decorator) |
+| Talk to a device | `Transport` (= `Reachable` + `CommandRunner` + `FileTransfer`) | `AdbTransport`, `SshTransport`, `FakeTransport`, `AuditingTransport` (decorator) |
 | Store artifacts | `ArtifactStore` | `SmbArtifactStore`, `LocalArtifactStore` |
-| Identify a host | `DeviceProbe` | one per device pack, ordered; `generic_net` claims last |
+| Identify a host | `DevicePack.probe` on the pack protocol — there is no separate probe seam | one per device pack, ordered by `probe_priority` (low first) |
+| Manage app state | `StateManager` | `AndroidStateManager`, `PosixStateManager` |
+| Manage applications | `AppManager` | `AndroidAppManager`, `FlatpakAppManager` |
 | Shape a profile | `ProfileTransform` | one per Kodi transform; pure |
-| Record effects | `AuditSink` | `JsonlAuditSink`, `InMemoryAuditSink` |
-| Resolve a secret | `SecretProvider` | `HaConfigEntryProvider`, `EnvProvider`, `KeyringProvider` |
-| Persist op records | `OperationSink` | Smb, Null |
+| Record effects | `AuditSink` | `JsonlAuditSink`, `InMemoryAuditSink`, `ChainedAuditWriter` (fan-out) |
+| Resolve a secret | `SecretResolver` + a provider | `EnvSecretProvider` (`core/config/secrets.py`) |
+
+**Nothing claims last.** A host no pack recognizes is claimed by no pack — there is no
+fallback. A probe that cannot identify a host returns `None`, never a partial identity.
 
 **Rule:** a seam ships with two adapters or it is hypothetical. The second is usually the test double.
 
@@ -49,21 +53,30 @@ Mislabelling a destructive step silently bypasses the policy layer. This is the 
 
 ## Dependency injection
 
-Everything a step may touch arrives in `StepContext`:
+Everything a step may touch arrives in its context. There is **no single `StepContext`** —
+there are four, and `StepSpec.scope` selects which one a step receives. The split is the
+enforcement mechanism for the non-negotiables, not a convenience:
 
 ```python
-@dataclass(frozen=True, slots=True)
-class StepContext:
-    device: Device | None
-    transport: Transport          # already an AuditingTransport
-    artifacts: ArtifactStore
-    inventory: DeviceStore
-    config: Mapping[str, Any]     # already layer-resolved
-    handle: OperationHandle
-    workspace: Path
+FleetStepContext      # scope="fleet"     artifacts, inventory, config, handle, workspace
+DeviceStepContext     # scope="device"    + device, transport, state, apps
+DiscoveryStepContext  # (discovery)       scanner, config, handle, workspace
+TransformStepContext  # scope="transform" transforms, artifacts, config, handle, workspace
 ```
 
-Deliberately absent: audit sink, logger, redactor. A step cannot emit audit records because it does not need to — the transport is already wrapped and correlation ids ride a `ContextVar`.
+Read the absences — each one is load-bearing:
+
+- `TransformStepContext` has **no transport and no device**. This is what makes "transforms
+  go in `build`, never `deploy`" structural rather than a convention someone has to remember.
+- `DeviceStepContext` has **no transform chain**, the same rule from the other side.
+- `DiscoveryStepContext` has **no transport**: discovery decides what to open a transport
+  *to*, so it cannot be handed one.
+- `DeviceStepContext.device` is `Device`, never `Device | None` — a device step always has
+  a target, so no step needs a `None` branch.
+
+`transport` is already an `AuditingTransport` when it arrives. Deliberately absent from all
+four: audit sink, logger, redactor. A step cannot emit audit records because it does not need
+to — the transport is already wrapped and correlation ids ride a `ContextVar`.
 
 **Composition roots** — the only places construction happens: `cli/bootstrap.py`, the HA integration's setup, `tests/conftest.py`.
 
@@ -77,6 +90,9 @@ Deliberately absent: audit sink, logger, redactor. A step cannot emit audit reco
 |--------|---------------|
 | names an Amazon package | `packs/firetv/data/` |
 | works around a toybox bug | `packs/firetv/` (Fire OS quirk, not Android) |
+| works around a SteamOS quirk | `packs/steamdeck/data/` (not `linux_host`, not `posix`) |
+| is ADB or SSH wire behaviour | `packs/android/` or `packs/posix/` — the shared base, not a vendor pack |
+| says which recipe a device needs | the pack's `app_profiles`, read at the composition root |
 | parses `guisettings.xml` | `apps/kodi/` |
 | retries a flaky connection | `core/transport/` as a decorator |
 | decides which device a step runs on | `core/workflow/` |
