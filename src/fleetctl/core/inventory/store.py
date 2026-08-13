@@ -82,6 +82,33 @@ class DeviceStore:
             self._save(result.devices)
             return result
 
+    def forget(self, device_id: str) -> bool:
+        """Drop one device from the inventory, persisting immediately.
+
+        Deliberately explicit rather than automatic. `reconcile` keeps a device
+        a scan did not see, because absence from one sweep is not evidence a
+        device is gone — a box that is merely off would otherwise disappear and
+        take its tags and per-app vars with it. Forgetting is therefore a
+        decision someone makes, not something a failed ping does.
+
+        A forgotten device comes back on the next scan that finds it, as a new
+        record with no tags: the identity survives in the hardware, the
+        annotations do not.
+
+        **PARAMETERS:**
+            `device_id` (str): Inventory id to drop.  <br>
+
+        **RETURNS:**
+            `bool`: Whether a device was removed. ``False`` when the id is unknown, which is not an error — the caller wanted it gone and it is.  <br>
+        """
+        with self._lock:
+            devices = self._load()
+            remaining = [device for device in devices if device.id != device_id]
+            if len(remaining) == len(devices):
+                return False
+            self._save(remaining)
+            return True
+
     def set_tag(self, device_id: str, tag: str, *, exclusive: bool = False) -> Device:
         """Add `tag` to one device, persisting immediately.
 
