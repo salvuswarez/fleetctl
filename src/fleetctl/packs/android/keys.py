@@ -28,16 +28,30 @@ class AdbKeyStore:
         self._key_dir = key_dir
         self._audit = audit
         self._signer: Any = None
+        self._fingerprint: str = ""
+        # Targets this store has already recorded a key use against. The
+        # audit answers "which key touched which device", and that answer does
+        # not change between two connections to the same device with the same
+        # key — so recording it once per target per store is the whole signal.
+        self._recorded: set[str] = set()
 
     @property
     def fingerprint(self) -> str:
-        """RETURNS: str: Short identifier for the public key, for audit records. Never the private key."""
+        """RETURNS: str: Short identifier for the public key, for audit records. Never the private key.
+
+        Cached: the key pair is loaded once per store, so re-reading and
+        re-hashing the file per connection is pure I/O for a constant answer.
+        """
+        if self._fingerprint:
+            return self._fingerprint
+
         pub_path = self._key_dir / "adbkey.pub"
         if not pub_path.is_file():
             return "unknown"
         import hashlib
 
-        return hashlib.sha256(pub_path.read_bytes()).hexdigest()[:16]
+        self._fingerprint = hashlib.sha256(pub_path.read_bytes()).hexdigest()[:16]
+        return self._fingerprint
 
     def signer(self, *, target: str = "") -> Any:
         """Return the cached signer, generating a key pair if none exists.
@@ -70,8 +84,17 @@ class AdbKeyStore:
         return PythonRSASigner(pub_path.read_text(encoding="utf-8"), key_path.read_text(encoding="utf-8"))
 
     def _record_use(self, target: str) -> None:
-        if self._audit is None:
+        """Record the first use of this key against a target, and only the first.
+
+        A polled read reconnects on every interval. Recording each one turned
+        the audit trail into 8,214 `adb.key.use` events in a day against 5
+        real ones — the record of what touched a device, buried under the act
+        of asking whether it was awake. Deduplicating keeps the security
+        signal and drops the noise.
+        """
+        if self._audit is None or target in self._recorded:
             return
+        self._recorded.add(target)
         self._audit.write(
             AuditEvent.build(
                 AuditKind.AUTH,

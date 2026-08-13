@@ -11,7 +11,7 @@ from ..cli.bootstrap import Container
 from ..core.errors import FleetError
 from ..core.observability.audit import AuditEvent, AuditKind, Outcome
 from ..core.observability.correlation import correlate
-from ..core.operations.registry import OperationStatus
+from ..core.operations.registry import OperationHandle, OperationStatus
 from ..core.policy import Verdict
 from ..core.registry import RegisteredStep
 from ..core.workflow.engine import WorkflowEngine
@@ -358,8 +358,37 @@ class Toolkit:
             raise FleetError(f"{device_id} is busy with {busy}; wait for it or cancel it before starting {step_id}")
 
         flags = dict(params or {})
-        self.container.dispatcher.submit(op_id, lambda: self._invoke(step, device_id, flags, op_id))
+        self.container.dispatcher.submit(op_id, lambda: self._invoke_tracked(step, device_id, flags, op_id))
         return {"op_id": op_id, "step": step_id, "target": device_id or "fleet", "status": OperationStatus.RUNNING.value}
+
+    def _invoke_tracked(self, step: RegisteredStep, device_id: str | None, flags: dict[str, Any], op_id: str) -> OperationStatus | None:
+        """Run a backgrounded step, guaranteeing the operation reaches a terminal status.
+
+        `_invoke` only reaches `run_step` — the thing that finishes an
+        operation — after it has resolved a transport, a pack, capabilities
+        and a state manager. Anything that raises before that point leaves the
+        operation RUNNING forever: no output, no failure, and deaf to cancel,
+        because cancellation is only observed inside the step body. An
+        unreachable device does exactly that.
+
+        The dispatcher cannot do this itself; it holds no registry.
+
+        **RETURNS:**
+            `OperationStatus | None`: The terminal status, or ``None`` when setup failed and this marked the operation failed.  <br>
+        """
+        try:
+            return self._invoke(step, device_id, flags, op_id)
+        except Exception as exc:  # noqa: BLE001 - any setup failure must still land the operation
+            LOGGER.warning("Operation %s failed before its body ran: %s", op_id, exc)
+            operations = self.container.operations
+            # `_authorize` mints the id; `run_step` is what registers the
+            # operation. Failing before that means there is no record to fail,
+            # so it has to be created here — otherwise the panel keeps showing
+            # the id `start_step` handed it, with nothing behind it.
+            handle = OperationHandle(operations, op_id) if operations.get(op_id) else operations.start(op_id, step.spec.id, device_id or "", flags)
+            handle.log(f"Error: {exc}")
+            handle.fail(str(exc))
+            return None
 
     def set_gold_device(self, device_id: str) -> dict[str, Any]:
         """Designate `device_id` as the sole device carrying the ``gold`` tag.

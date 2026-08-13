@@ -103,6 +103,14 @@ class AdbTransport:
         # leave the port briefly unusable, so probing afterwards would report
         # a device that refused the key as simply absent, at random.
         was_listening = self.is_online(timeout_s=2.0)
+        if not was_listening:
+            # Nothing is listening, so the handshake cannot succeed — and
+            # attempting it anyway blocks for the transport timeout while a
+            # queued operation sits RUNNING, producing no output and ignoring
+            # cancellation, because cancellation is only honoured between
+            # steps and this happens before the step body runs.
+            raise TransportError(f"{self._address} is not reachable on port {self._port}", target=self._address)
+
         try:
             device = AdbDeviceTcp(self._address, self._port, default_transport_timeout_s=self._shell_timeout_s)
             device.connect(rsa_keys=[self._keys.signer(target=self._address)], auth_timeout_s=10.0)
