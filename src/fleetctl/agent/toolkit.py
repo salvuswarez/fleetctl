@@ -421,6 +421,47 @@ class Toolkit:
             )
         return {"id": device.id, "tags": list(device.tags)}
 
+    def forget_device(self, device_id: str) -> dict[str, Any]:
+        """Drop a device from the inventory, so it returns only when a scan finds it again.
+
+        A scan deliberately keeps a device it did not see: absence from one
+        sweep is not evidence a device is gone, and a box that is merely off
+        would otherwise vanish along with its tags and per-app vars. Removing
+        one is therefore an explicit decision, made here.
+
+        Refused while the device has work running. A forgotten device whose
+        operation is still going would leave that operation reporting against
+        an id the inventory no longer knows.
+
+        **PARAMETERS:**
+            `device_id` (str): The device to forget.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The id, whether a record was actually removed, and the tags it carried, so a caller can say what was lost.  <br>
+
+        **RAISES:**
+            `FleetError`: If the device is busy with a running operation.  <br>
+        """
+        device = self.container.inventory.get(device_id)
+        tags = list(device.tags) if device else []
+
+        busy = self.container.operations.running_for(device_id)
+        if busy is not None:
+            raise FleetError(f"{device_id} is busy with {busy}; wait for it or cancel it before forgetting the device")
+
+        removed = self.container.inventory.forget(device_id)
+        with correlate(actor=self.actor):
+            self.container.audit.write(
+                AuditEvent.build(
+                    AuditKind.CONFIG,
+                    "inventory.forget_device",
+                    target=device_id,
+                    outcome=Outcome.OK if removed else Outcome.SKIPPED,
+                    detail={"surface": "agent", "tags": tags},
+                )
+            )
+        return {"id": device_id, "removed": removed, "tags": tags}
+
     # -- Internal ----------------------------------------------------------
 
     def _authorize(self, step_id: str, device_id: str | None, *, approve: bool) -> tuple[RegisteredStep, str]:
