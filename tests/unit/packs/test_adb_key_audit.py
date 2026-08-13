@@ -81,3 +81,20 @@ def test_a_store_with_no_audit_sink_records_nothing(tmp_path: Path) -> None:
 
     # Act / Assert
     store.signer(target="192.168.1.50")
+
+
+def test_a_second_store_on_the_same_key_dir_does_not_re_record(tmp_path: Path) -> None:
+    """The flaw the first fix missed: a pack builds a fresh store for every
+    `transport_for`, so per-instance dedup never survives a connection. Live,
+    that still wrote 194 events in two minutes."""
+    # Arrange
+    sink = InMemoryAuditSink()
+    writer = ChainedAuditWriter(sink)
+    key_dir = tmp_path / "keys"
+
+    # Act: a new store per connection, as the packs actually do.
+    for _ in range(20):
+        AdbKeyStore(key_dir, writer).signer(target="192.168.1.50")
+
+    # Assert
+    assert len(sink.read_all()) == 1

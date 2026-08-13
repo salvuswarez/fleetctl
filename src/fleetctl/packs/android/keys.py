@@ -24,16 +24,32 @@ class AdbKeyStore:
         `audit` (ChainedAuditWriter | None): Where key usage is recorded. Defaults to ``None``, meaning usage is not audited — acceptable only in tests.  <br>
     """
 
+    # Keyed by key directory, not held per instance: a pack builds a fresh
+    # store for every `transport_for`, so anything cached on `self` is thrown
+    # away between connections. Per-instance state meant the key was re-read
+    # from disk and a fresh `adb.key.use` event written on every single
+    # connect — 194 of them in the two minutes after a restart, from a poll
+    # that only asks whether a device is awake.
+    _shared: dict[str, dict[str, Any]] = {}
+
     def __init__(self, key_dir: Path, audit: ChainedAuditWriter | None = None) -> None:
         self._key_dir = key_dir
         self._audit = audit
-        self._signer: Any = None
-        self._fingerprint: str = ""
-        # Targets this store has already recorded a key use against. The
-        # audit answers "which key touched which device", and that answer does
-        # not change between two connections to the same device with the same
-        # key — so recording it once per target per store is the whole signal.
-        self._recorded: set[str] = set()
+        self._state = self._shared.setdefault(str(key_dir.resolve()), {"signer": None, "fingerprint": "", "recorded": set()})
+
+    @property
+    def _signer(self) -> Any:
+        return self._state["signer"]
+
+    @_signer.setter
+    def _signer(self, value: Any) -> None:
+        self._state["signer"] = value
+
+    @property
+    def _recorded(self) -> set[str]:
+        """RETURNS: set[str]: Targets already recorded for this key directory."""
+        recorded: set[str] = self._state["recorded"]
+        return recorded
 
     @property
     def fingerprint(self) -> str:
@@ -42,16 +58,17 @@ class AdbKeyStore:
         Cached: the key pair is loaded once per store, so re-reading and
         re-hashing the file per connection is pure I/O for a constant answer.
         """
-        if self._fingerprint:
-            return self._fingerprint
+        cached: str = self._state["fingerprint"]
+        if cached:
+            return cached
 
         pub_path = self._key_dir / "adbkey.pub"
         if not pub_path.is_file():
             return "unknown"
         import hashlib
 
-        self._fingerprint = hashlib.sha256(pub_path.read_bytes()).hexdigest()[:16]
-        return self._fingerprint
+        self._state["fingerprint"] = hashlib.sha256(pub_path.read_bytes()).hexdigest()[:16]
+        return str(self._state["fingerprint"])
 
     def signer(self, *, target: str = "") -> Any:
         """Return the cached signer, generating a key pair if none exists.
