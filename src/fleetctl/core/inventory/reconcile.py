@@ -18,11 +18,13 @@ class ReconcileResult:
         `devices` (list[Device]): The full merged fleet.  <br>
         `added` (int): How many devices were newly discovered.  <br>
         `updated` (int): How many existing devices this refreshed.  <br>
+        `collapsed` (int): How many stored records turned out to be a second copy of a device already in the list.  <br>
     """
 
     devices: list[Device]
     added: int
     updated: int
+    collapsed: int = 0
 
 
 def _matches(existing: Device, found: Device) -> bool:
@@ -31,6 +33,65 @@ def _matches(existing: Device, found: Device) -> bool:
     if existing.serial and found.serial:
         return existing.serial == found.serial
     return bool(existing.address) and existing.address == found.address
+
+
+def _is_duplicate(keeper: Device, other: Device) -> bool:
+    # An id is unique within the inventory by definition, so a repeated one is
+    # a duplicate even when no identity field can prove it.
+    return keeper.id == other.id or _matches(keeper, other)
+
+
+def _fold(keeper: Device, duplicate: Device) -> Device:
+    """Fold a second record for the same hardware into the one being kept.
+
+    Unlike `merge_device`, neither side is fresher than the other: both are
+    stored records. The keeper wins every contested field, and the duplicate
+    contributes only what the keeper lacks — including tags, which are
+    hand-maintained and would otherwise be silently thrown away.
+
+    **PARAMETERS:**
+        `keeper` (Device): The record that stays, and whose id survives.  <br>
+        `duplicate` (Device): The second record for the same device.  <br>
+
+    **RETURNS:**
+        `Device`: The keeper, enriched with whatever only the duplicate knew.  <br>
+    """
+    merged = keeper.model_dump(mode="json")
+    for key, value in duplicate.model_dump(mode="json").items():
+        if key == "id" or value in ("", None, [], {}):
+            continue
+        if key == "tags":
+            merged["tags"] = [*keeper.tags, *(tag for tag in duplicate.tags if tag not in keeper.tags)]
+        elif key == "vars":
+            merged["vars"] = {**duplicate.vars, **keeper.vars}
+        elif merged[key] in ("", None, [], {}):
+            merged[key] = value
+    return Device.model_validate(merged)
+
+
+def collapse(devices: list[Device]) -> tuple[list[Device], int]:
+    """Fold every repeated device in a stored fleet into its first record.
+
+    Without this a duplicate is unremovable: discovery matches the first
+    record, updates it, and writes both back, so every scan preserves the
+    copy — and undoes a manual deletion of it.
+
+    **PARAMETERS:**
+        `devices` (list[Device]): The stored fleet, duplicates and all.  <br>
+
+    **RETURNS:**
+        `tuple[list[Device], int]`: The deduplicated fleet in its original order, and how many records were folded away.  <br>
+    """
+    kept: list[Device] = []
+    folded = 0
+    for device in devices:
+        index = next((position for position, keeper in enumerate(kept) if _is_duplicate(keeper, device)), None)
+        if index is None:
+            kept.append(device)
+        else:
+            kept[index] = _fold(kept[index], device)
+            folded += 1
+    return kept, folded
 
 
 def merge_device(existing: Device, found: Device) -> Device:
@@ -53,16 +114,16 @@ def merge_device(existing: Device, found: Device) -> Device:
 
 
 def reconcile(existing: list[Device], discovered: list[Device]) -> ReconcileResult:
-    """Merge discovery results into the known fleet.
+    """Merge discovery results into the known fleet, deduplicating it first.
 
     **PARAMETERS:**
         `existing` (list[Device]): The stored fleet.  <br>
         `discovered` (list[Device]): What a scan found.  <br>
 
     **RETURNS:**
-        `ReconcileResult`: The merged fleet plus added/updated counts. Devices that were not seen by this scan are retained unchanged — absence from a scan is not evidence a device is gone.  <br>
+        `ReconcileResult`: The merged fleet plus added/updated/collapsed counts. Devices that were not seen by this scan are retained unchanged — absence from a scan is not evidence a device is gone.  <br>
     """
-    merged = list(existing)
+    merged, collapsed = collapse(existing)
     added = 0
     updated = 0
 
@@ -75,4 +136,8 @@ def reconcile(existing: list[Device], discovered: list[Device]) -> ReconcileResu
             merged[index] = merge_device(merged[index], found)
             updated += 1
 
-    return ReconcileResult(devices=merged, added=added, updated=updated)
+    # A second pass: a probe can hand a record the MAC that reveals it to be
+    # the same device as another, which was not visible before the merge.
+    merged, folded_after = collapse(merged)
+
+    return ReconcileResult(devices=merged, added=added, updated=updated, collapsed=collapsed + folded_after)
