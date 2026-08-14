@@ -28,10 +28,15 @@ class ReconcileResult:
 
 
 def _matches(existing: Device, found: Device) -> bool:
-    if existing.mac and found.mac:
-        return existing.mac.lower() == found.mac.lower()
+    if existing.mac and found.mac and existing.mac.lower() == found.mac.lower():
+        return True
+    # A MAC identifies an interface, the serial identifies the box: a device
+    # that answered over ethernet once and wifi the next time reports two
+    # MACs, and treating that as two devices is how a duplicate is born.
     if existing.serial and found.serial:
         return existing.serial == found.serial
+    if existing.mac and found.mac:
+        return False
     return bool(existing.address) and existing.address == found.address
 
 
