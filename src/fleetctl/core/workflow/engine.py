@@ -8,11 +8,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
 
-from ..observability.audit import AuditEvent, AuditKind, ChainedAuditWriter, Outcome
-from ..observability.correlation import correlate
-from ..operations.registry import OperationStatus
-from .plan import Plan, PlannedStep, PlannedTask
-from .workflow import OnError
+from fleetctl.core.observability.audit import AuditEvent, AuditKind, ChainedAuditWriter, Outcome
+from fleetctl.core.observability.correlation import correlate
+from fleetctl.core.operations.registry import OperationStatus
+from fleetctl.core.workflow.plan import Plan, PlannedStep, PlannedTask
+from fleetctl.core.workflow.workflow import OnError
 
 LOGGER = logging.getLogger(__name__)
 

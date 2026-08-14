@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ....core.errors import FleetError
+from fleetctl.core.errors import FleetError
 
 LOGGER = logging.getLogger(__name__)
 

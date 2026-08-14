@@ -7,11 +7,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
-from ..errors import DeviceUnauthorizedError, TransportError
-from ..inventory.device import Device, DeviceStatus
-from ..registry import DevicePack
-from ..transport.base import Transport
-from .sweep import Host
+from fleetctl.core.discovery.sweep import Host
+from fleetctl.core.errors import DeviceUnauthorizedError, TransportError
+from fleetctl.core.inventory.device import Device, DeviceStatus
+from fleetctl.core.registry import DevicePack
+from fleetctl.core.transport.base import Transport
 
 LOGGER = logging.getLogger(__name__)
 

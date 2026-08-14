@@ -7,11 +7,11 @@ import posixpath
 import shlex
 from pathlib import Path
 
-from ...core.effects import Effect
-from ...core.errors import TransportError
-from ...core.transport.base import Transport
-from . import actions
-from .quirks import AndroidQuirks
+from fleetctl.core.effects import Effect
+from fleetctl.core.errors import TransportError
+from fleetctl.core.transport.base import Transport
+from fleetctl.packs.android import actions
+from fleetctl.packs.android.quirks import AndroidQuirks
 
 LOGGER = logging.getLogger(__name__)
 

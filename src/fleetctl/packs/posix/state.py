@@ -7,12 +7,12 @@ import posixpath
 import shlex
 from pathlib import Path
 
-from ...core.effects import Effect
-from ...core.errors import FleetError, TransportError
-from ...core.state import AppStateSpec
-from ...core.transport.base import Transport
-from . import actions
-from .quirks import PosixQuirks
+from fleetctl.core.effects import Effect
+from fleetctl.core.errors import FleetError, TransportError
+from fleetctl.core.state import AppStateSpec
+from fleetctl.core.transport.base import Transport
+from fleetctl.packs.posix import actions
+from fleetctl.packs.posix.quirks import PosixQuirks
 
 LOGGER = logging.getLogger(__name__)
 

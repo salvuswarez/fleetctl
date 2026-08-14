@@ -6,7 +6,7 @@ import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable
 
-from ..observability.correlation import correlate
+from fleetctl.core.observability.correlation import correlate
 
 LOGGER = logging.getLogger(__name__)
 

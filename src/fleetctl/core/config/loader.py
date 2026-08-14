@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from ..errors import ConfigError
-from .secrets import SecretRef
+from fleetctl.core.config.secrets import SecretRef
+from fleetctl.core.errors import ConfigError
 
 
 class FleetLoader(yaml.SafeLoader):

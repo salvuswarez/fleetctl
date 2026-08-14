@@ -10,23 +10,23 @@ from typing import Any
 import click
 import yaml
 
-from .._version import get_version
-from ..core.artifacts.ref import ArtifactRef
-from ..core.config.layering import for_device
-from ..core.discovery.scan import Scanner, ScanOutcome
-from ..core.errors import FleetError
-from ..core.inventory.device import Device
-from ..core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
-from ..core.observability.correlation import CorrelationFilter, correlate
-from ..core.operations.registry import OperationStatus
-from ..core.policy import Verdict
-from ..core.registry import RegisteredStep
-from ..core.transport.base import Transport
-from ..core.workflow.engine import WorkflowEngine
-from ..core.workflow.plan import build_plan
-from ..core.workflow.runner import check_capabilities, run_step
-from ..core.workflow.step import DeviceStepContext, DiscoveryStepContext, FleetStepContext, StepResult, TransformStepContext
-from .bootstrap import Container, build_container
+from fleetctl._version import get_version
+from fleetctl.cli.bootstrap import Container, build_container
+from fleetctl.core.artifacts.ref import ArtifactRef
+from fleetctl.core.config.layering import for_device
+from fleetctl.core.discovery.scan import Scanner, ScanOutcome
+from fleetctl.core.errors import FleetError
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.observability.audit import AuditEvent, AuditKind, Outcome, verify_chain
+from fleetctl.core.observability.correlation import CorrelationFilter, correlate
+from fleetctl.core.operations.registry import OperationStatus
+from fleetctl.core.policy import Verdict
+from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.transport.base import Transport
+from fleetctl.core.workflow.engine import WorkflowEngine
+from fleetctl.core.workflow.plan import build_plan
+from fleetctl.core.workflow.runner import check_capabilities, run_step
+from fleetctl.core.workflow.step import DeviceStepContext, DiscoveryStepContext, FleetStepContext, StepResult, TransformStepContext
 
 LOGGER = logging.getLogger(__name__)
 
@@ -188,6 +188,7 @@ def _run_device_step(container: Container, step: RegisteredStep, device_id: str 
         app_manager = container.apps_for(device, transport)
 
         def body(handle: Any, workspace: Path) -> StepResult:
+            """RETURNS: StepResult: What the step reported, run inside `run_step`'s envelope."""
             return step.run(
                 DeviceStepContext(
                     device=device,
@@ -605,7 +606,7 @@ def mcp_serve(ctx: click.Context, actor: str) -> None:
     """Serve the agent toolkit over MCP on stdio."""
     options = ctx.obj or {}
     try:
-        from ..mcp.server import serve
+        from fleetctl.mcp.server import serve
     except ImportError as exc:  # pragma: no cover - depends on an optional extra
         raise click.ClickException("MCP support is optional: pip install 'fleetctl[mcp]'") from exc
     try:

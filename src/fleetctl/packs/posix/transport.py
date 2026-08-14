@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from ...core.config.secrets import Secret
-from ...core.effects import Capability, Effect
-from ...core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
+from fleetctl.core.config.secrets import Secret
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +61,11 @@ def _reject_unknown_host(paramiko_module: Any) -> Any:
 
     class _Policy(paramiko_module.MissingHostKeyPolicy):  # type: ignore[misc]
         def missing_host_key(self, client: Any, hostname: str, key: Any) -> None:
+            """Refuse a host whose key is not already pinned.
+
+            **RAISES:**
+                `UnknownHostKey`: Always. A distinct error type on purpose — a transport that reports "credential refused" and "host not in known_hosts" identically lets discovery read a stranger as a fleet device.  <br>
+            """
             raise UnknownHostKey(hostname)
 
     return _Policy()

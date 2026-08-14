@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
-from ..effects import Capability, Effect
-from ..errors import CommandFailedError, UnsupportedCapabilityError
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.errors import CommandFailedError, UnsupportedCapabilityError
 
 ALL_CAPABILITIES: frozenset[Capability] = frozenset(Capability)
 

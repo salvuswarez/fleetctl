@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
 
-from ..errors import OperationCancelled
+from fleetctl.core.errors import OperationCancelled
 
 _MAX_OPERATIONS = 500
 
@@ -111,7 +111,11 @@ class OperationHandle:
 
 
 class OperationRegistry:
-    """In-memory operation table with one owning lock and bounded retention."""
+    """In-memory operation table with one owning lock and bounded retention.
+
+    **PARAMETERS:**
+        `max_operations` (int): How many finished operations to keep before the oldest are dropped. Defaults to the module's `_MAX_OPERATIONS`; a long-lived host such as the Home Assistant integration would otherwise grow without bound.  <br>
+    """
 
     def __init__(self, max_operations: int = _MAX_OPERATIONS) -> None:
         self._lock = threading.Lock()

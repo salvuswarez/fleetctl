@@ -9,17 +9,17 @@ from typing import Any, Mapping
 
 import yaml
 
-from ...core.effects import Capability, Effect
-from ...core.inventory.device import Device
-from ...core.registry import RegisteredStep
-from ...core.state import AppStateSpec
-from ...core.transport.base import CommandRunner, Transport
-from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
-from ..posix import actions
-from ..posix.appmgr import FlatpakAppManager
-from ..posix.quirks import PosixQuirks
-from ..posix.state import PosixStateManager
-from ..posix.transport import SshSettings, SshTransport
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.state import AppStateSpec
+from fleetctl.core.transport.base import CommandRunner, Transport
+from fleetctl.core.workflow.step import DeviceStepContext, StepResult, StepSpec
+from fleetctl.packs.posix import actions
+from fleetctl.packs.posix.appmgr import FlatpakAppManager
+from fleetctl.packs.posix.quirks import PosixQuirks
+from fleetctl.packs.posix.state import PosixStateManager
+from fleetctl.packs.posix.transport import SshSettings, SshTransport
 
 LOGGER = logging.getLogger(__name__)
 

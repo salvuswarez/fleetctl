@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, TypeVar
 
-from ..config.secrets import Secret
-from ..errors import ArtifactError
-from .ref import ArtifactRef
-from .store import ArtifactInfo
+from fleetctl.core.artifacts.ref import ArtifactRef
+from fleetctl.core.artifacts.store import ArtifactInfo
+from fleetctl.core.config.secrets import Secret
+from fleetctl.core.errors import ArtifactError
 
 LOGGER = logging.getLogger(__name__)
 

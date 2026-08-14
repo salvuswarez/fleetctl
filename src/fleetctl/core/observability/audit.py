@@ -12,9 +12,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol
 
-from ..effects import Effect
-from .correlation import current
-from .redact import Redactor
+from fleetctl.core.effects import Effect
+from fleetctl.core.observability.correlation import current
+from fleetctl.core.observability.redact import Redactor
 
 LOGGER = logging.getLogger(__name__)
 
@@ -137,7 +137,11 @@ class AuditSink(Protocol):
 
 
 class InMemoryAuditSink:
-    """Audit sink that keeps records in a list. For tests and dry runs."""
+    """Audit sink that keeps records in a list. For tests and dry runs.
+
+    The second adapter behind the audit seam, which is what makes it a seam
+    rather than one implementation with an interface drawn around it.
+    """
 
     def __init__(self) -> None:
         self._events: list[AuditEvent] = []

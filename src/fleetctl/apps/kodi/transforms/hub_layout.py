@@ -12,8 +12,8 @@ from typing import Any, Mapping, Sequence
 
 import yaml
 
-from ....core.errors import FleetError
-from ..merging import deep_merge
+from fleetctl.apps.kodi.merging import deep_merge
+from fleetctl.core.errors import FleetError
 
 LOGGER = logging.getLogger(__name__)
 

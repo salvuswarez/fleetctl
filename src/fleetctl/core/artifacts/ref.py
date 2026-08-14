@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..errors import ArtifactError
+from fleetctl.core.errors import ArtifactError
 
 # Leading dot allowed so a capture can mirror an on-device dotted directory
 # name. `..` is rejected explicitly below rather than by the character class,

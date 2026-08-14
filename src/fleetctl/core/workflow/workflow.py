@@ -8,9 +8,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ..config.loader import load_yaml_file, load_yaml_text
-from ..errors import ConfigError
-from ..inventory.device import Device
+from fleetctl.core.config.loader import load_yaml_file, load_yaml_text
+from fleetctl.core.errors import ConfigError
+from fleetctl.core.inventory.device import Device
 
 
 class OnError(str, Enum):

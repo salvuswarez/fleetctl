@@ -7,9 +7,9 @@ import posixpath
 import shlex
 from typing import Iterable
 
-from ...core.effects import Effect
-from ...core.errors import FleetError
-from ...core.transport.base import CommandRunner
+from fleetctl.core.effects import Effect
+from fleetctl.core.errors import FleetError
+from fleetctl.core.transport.base import CommandRunner
 
 LOGGER = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Mapping
 
-from ....core.errors import FleetError
+from fleetctl.core.errors import FleetError
 
 LOGGER = logging.getLogger(__name__)
 

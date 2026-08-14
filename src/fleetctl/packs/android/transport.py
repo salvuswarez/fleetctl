@@ -12,9 +12,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ...core.effects import Capability, Effect
-from ...core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
-from .keys import AdbKeyStore
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
+from fleetctl.packs.android.keys import AdbKeyStore
 
 LOGGER = logging.getLogger(__name__)
 
@@ -277,7 +277,14 @@ class AdbTransport:
 
 
 class _NetcatListener:
-    """Holds `nc -l` running on the device for the lifetime of one upload."""
+    """Holds `nc -l` running on the device for the lifetime of one upload.
+
+    **PARAMETERS:**
+        `address` (str): Device address, dialled again on its own connection — the listener's command blocks for the whole transfer, so it cannot share the caller's.  <br>
+        `keys` (AdbKeyStore): Shared signer cache, so the second connection presents the same authorized identity.  <br>
+        `port` (int): ADB port.  <br>
+        `remote_path` (str): Where the listener writes what it receives.  <br>
+    """
 
     def __init__(self, address: str, keys: AdbKeyStore, port: int, remote_path: str) -> None:
         self._address = address

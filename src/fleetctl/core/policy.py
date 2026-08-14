@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Mapping, Sequence
 
-from .effects import Effect
-from .errors import ConfigError
-from .inventory.device import Device
+from fleetctl.core.effects import Effect
+from fleetctl.core.errors import ConfigError
+from fleetctl.core.inventory.device import Device
 
 
 class Verdict(str, Enum):

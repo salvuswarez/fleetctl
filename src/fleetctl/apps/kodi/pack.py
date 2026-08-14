@@ -9,21 +9,21 @@ from typing import Any, Mapping
 
 import yaml
 
-from ...core.errors import FleetError
-from ...core.registry import RegisteredStep
-from ...core.workflow.step import ProfileTransform
-from ...core.workflow.workflow import Workflow
-from . import base_image, caches, device_config, health, launch, steps
-from .merging import deep_merge
-from .spec import APP_ID, DEFAULT_PROFILE
-from .transforms.addons import PruneAddons
-from .transforms.advanced import RemoveThumbnailSubstitution
-from .transforms.device_settings import DEVICE_SETTINGS, StripDeviceSettings
-from .transforms.files import ShipFiles
-from .transforms.hub_layout import DEFAULT_LAYOUT, ApplyHubLayout
-from .transforms.settings import ApplySettings
-from .transforms.sources import AddVideoSources
-from .transforms.view_types import ApplyViewTypes
+from fleetctl.apps.kodi import base_image, caches, device_config, health, launch, steps
+from fleetctl.apps.kodi.merging import deep_merge
+from fleetctl.apps.kodi.spec import APP_ID, DEFAULT_PROFILE
+from fleetctl.apps.kodi.transforms.addons import PruneAddons
+from fleetctl.apps.kodi.transforms.advanced import RemoveThumbnailSubstitution
+from fleetctl.apps.kodi.transforms.device_settings import DEVICE_SETTINGS, StripDeviceSettings
+from fleetctl.apps.kodi.transforms.files import ShipFiles
+from fleetctl.apps.kodi.transforms.hub_layout import DEFAULT_LAYOUT, ApplyHubLayout
+from fleetctl.apps.kodi.transforms.settings import ApplySettings
+from fleetctl.apps.kodi.transforms.sources import AddVideoSources
+from fleetctl.apps.kodi.transforms.view_types import ApplyViewTypes
+from fleetctl.core.errors import FleetError
+from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.workflow.step import ProfileTransform
+from fleetctl.core.workflow.workflow import Workflow
 
 LOGGER = logging.getLogger(__name__)
 

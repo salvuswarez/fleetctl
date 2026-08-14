@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Protocol, runtime_checkable
 
-from ..errors import ArtifactError
-from .ref import ArtifactRef
+from fleetctl.core.artifacts.ref import ArtifactRef
+from fleetctl.core.errors import ArtifactError
 
 
 @dataclass(frozen=True, slots=True)

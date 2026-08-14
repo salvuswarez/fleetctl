@@ -220,3 +220,150 @@ def test_every_source_package_is_tracked_by_git() -> None:
     # Assert
     ignored = [line for line in result.stdout.splitlines() if line.strip()]
     assert ignored == [], "these source files are excluded by .gitignore:\n" + "\n".join(ignored)
+
+
+# ------------------------------------------------------------------ imports
+
+
+def test_no_module_imports_a_sibling_relatively() -> None:
+    """Intra-package imports are absolute, so a reader can see the ring.
+
+    Both styles are PEP 8-conformant — it recommends absolute and permits
+    explicit relative — so this is a house rule, not a correctness one, and it
+    exists for one reason: `from ...core.effects import Effect` requires
+    counting dots against the importing file's own depth to learn which ring is
+    being reached into. `from fleetctl.core.effects import Effect` says it.
+
+    The ring rule above is the highest-consequence invariant here and is
+    checked by reading imports; making every one of them state its ring
+    outright is what keeps a violation visible to a person, not only to a test.
+    """
+    # Arrange / Act
+    offenders: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level:
+                dots = "." * node.level
+                offenders.append(f"{path.relative_to(SRC.parents[1])}:{node.lineno}: from {dots}{node.module or ''} import ...")
+
+    # Assert
+    assert offenders == [], "rewrite these as absolute `from fleetctl...` imports:\n" + "\n".join(offenders)
+
+
+# --------------------------------------------------------------- docstrings
+
+
+def _owner_map(tree: ast.Module) -> dict[ast.AST, ast.AST]:
+    """RETURNS: dict[ast.AST, ast.AST]: Each node mapped to its parent, so a method can find its class."""
+    owners: dict[ast.AST, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            owners[child] = parent
+    return owners
+
+
+def _takes_arguments(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """RETURNS: bool: Whether this definition accepts anything beyond `self`/`cls`."""
+    args = node.args
+    positional = [*args.posonlyargs, *args.args]
+    return bool(positional[1:] or args.kwonlyargs or args.vararg or args.kwarg)
+
+
+def _needs_own_docstring(node: ast.AST, owners: dict[ast.AST, ast.AST]) -> bool:
+    """Decide whether this definition must carry a docstring of its own.
+
+    Encodes the exemptions the `py-docstring` convention already grants, so the
+    check enforces the standard rather than a stricter invention of its own:
+
+    - a private helper (`_name`) may be self-evident and is exempt;
+    - a `__init__` is covered by its class docstring's `PARAMETERS` section,
+      which is where the convention puts constructor arguments — and one that
+      takes nothing but `self` has no arguments to document anywhere;
+    - other dunders implement a protocol whose meaning is fixed by the language.
+
+    **PARAMETERS:**
+        `node` (ast.AST): The definition being judged.  <br>
+        `owners` (dict[ast.AST, ast.AST]): Parent map from `_owner_map`.  <br>
+
+    **RETURNS:**
+        `bool`: Whether a missing docstring here is a real gap.  <br>
+    """
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return False
+    name = node.name
+    owner = owners.get(node)
+
+    if name == "__init__":
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not _takes_arguments(node):
+            return False
+        # Otherwise covered only if the class actually documents its arguments.
+        # A bare class docstring leaves the constructor undocumented either way.
+        return not (isinstance(owner, ast.ClassDef) and "PARAMETERS" in (ast.get_docstring(owner) or ""))
+    if name.startswith("__") and name.endswith("__"):
+        return False
+    if name.startswith("_"):
+        return False
+    # A closure is an implementation detail of the function that defines it.
+    return not isinstance(owner, (ast.FunctionDef, ast.AsyncFunctionDef))
+
+
+def test_every_public_definition_carries_a_docstring() -> None:
+    """Nothing else in the gate checks this, which is why it drifted.
+
+    black, isort, mypy and pytest are all silent about documentation, so the
+    convention was enforced by whoever happened to be reading. Six definitions
+    had gone undocumented by the time anyone counted.
+    """
+    # Arrange / Act
+    missing: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        owners = _owner_map(tree)
+        relative = path.relative_to(SRC.parents[1])
+        if ast.get_docstring(tree) is None:
+            missing.append(f"{relative}:1: module")
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            if _needs_own_docstring(node, owners) and ast.get_docstring(node) is None:
+                kind = "class" if isinstance(node, ast.ClassDef) else "function"
+                missing.append(f"{relative}:{node.lineno}: {kind} {node.name}")
+
+    # Assert
+    assert missing == [], "these need a docstring:\n" + "\n".join(missing)
+
+
+def test_a_docstring_that_documents_arguments_or_a_return_uses_the_house_sections() -> None:
+    """The format is load-bearing, not cosmetic.
+
+    A docstring that describes arguments in prose reads fine and cannot be
+    scanned for the thing this project actually needs from it — which parameter
+    means what, and what a caller gets back. Anything mentioning parameters or
+    a return value must say so under the `PARAMETERS:` / `RETURNS:` / `RAISES:`
+    headers, so a reader looking for one knows where it is.
+
+    Checked by shape, not by parsing every signature: a docstring using the
+    lowercase or non-bold spellings is the drift worth catching, since it looks
+    right and does not match.
+    """
+    # Arrange
+    wrong_case = ("Parameters:", "Returns:", "Raises:", "Args:", "Arguments:", "Yields:")
+
+    # Act
+    offenders: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        relative = path.relative_to(SRC.parents[1])
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            doc = ast.get_docstring(node)
+            if not doc:
+                continue
+            for spelling in wrong_case:
+                if spelling in doc:
+                    offenders.append(f"{relative}:{node.lineno}: {node.name} uses {spelling!r}, not {spelling.upper()!r}")
+
+    # Assert
+    assert offenders == [], "these docstrings use a section header this project does not:\n" + "\n".join(offenders)

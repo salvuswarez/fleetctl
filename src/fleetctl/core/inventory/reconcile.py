@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .device import Device
+from fleetctl.core.inventory.device import Device
 
 # Never touched by discovery: hand-maintained, or owned by an app pack.
 _PRESERVED_FIELDS = ("tags", "vars")

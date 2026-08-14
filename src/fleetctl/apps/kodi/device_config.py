@@ -9,10 +9,10 @@ import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import Any, Mapping
 
-from ...core.effects import Capability, Effect
-from ...core.errors import FleetError
-from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
-from .spec import APP_ID, state_spec
+from fleetctl.apps.kodi.spec import APP_ID, state_spec
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.errors import FleetError
+from fleetctl.core.workflow.step import DeviceStepContext, StepResult, StepSpec
 
 LOGGER = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import stat
 from pathlib import Path
 from typing import Any
 
-from ...core.observability.audit import AuditEvent, AuditKind, ChainedAuditWriter
+from fleetctl.core.observability.audit import AuditEvent, AuditKind, ChainedAuditWriter
 
 LOGGER = logging.getLogger(__name__)
 

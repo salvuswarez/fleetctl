@@ -8,14 +8,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from ...core.artifacts.ref import ArtifactRef
-from ...core.artifacts.store import require_kind
-from ...core.effects import Capability, Effect
-from ...core.errors import FleetError
-from ...core.state import AppStateSpec
-from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec, TransformStepContext
-from . import abi
-from .spec import APP_ID, DEFAULT_PROFILE, PROFILE_MEMBERS, state_spec
+from fleetctl.apps.kodi import abi
+from fleetctl.apps.kodi.spec import APP_ID, DEFAULT_PROFILE, PROFILE_MEMBERS, state_spec
+from fleetctl.core.artifacts.ref import ArtifactRef
+from fleetctl.core.artifacts.store import require_kind
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.errors import FleetError
+from fleetctl.core.state import AppStateSpec
+from fleetctl.core.workflow.step import DeviceStepContext, StepResult, StepSpec, TransformStepContext
 
 LOGGER = logging.getLogger(__name__)
 
