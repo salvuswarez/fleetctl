@@ -18,18 +18,22 @@ backend infrastructure on the router:
 
 **Why this matters:** a Kodi symptom that looks like a device/config/deploy bug ("watchedlist won't
 sync", "library is empty", "can't connect") is very often this shared infrastructure being down, not
-anything a fleet-management tool did. Confirmed via a real outage (2026-07-30, Asus/Merlin router):
-`/opt` is a symlink into a ramdisk (`/tmp/opt`) that a firmware update wiped, along with the
-`/jffs/scripts/post-mount` script that normally relinks it and starts Entware at boot — so the outage
-looked like "MariaDB is broken" when it was actually "the symlink target never got recreated after a
-reboot." A reboot alone would **not** have fixed it; the broken state was the post-reboot steady
-state.
+anything a fleet-management tool did. Confirmed via a real outage (2026-07-30, Asus GT-AXE11000 running
+Merlin firmware): `/opt` is a symlink into a ramdisk (`/tmp/opt`) that a firmware update wiped, along
+with the `/jffs/scripts/post-mount` script that normally relinks it and starts Entware at boot — so the
+outage looked like "MariaDB is broken" when it was actually "the symlink target never got recreated
+after a reboot." A reboot alone would **not** have fixed it; the broken state was the post-reboot
+steady state.
 
-**Two gotchas worth knowing if debugging this again:**
+**Three gotchas worth knowing if debugging this again:**
 1. `S70mysqld` redirects all output to `/dev/null` — a failed start produces no visible error and
    `status` just says "not running." Run the daemon binary directly, without the redirect, to see why.
 2. The sticks run an always-on VPN tunnel — testing connectivity *from* a stick can't distinguish
    "server down" from "device can't route there." Test from a machine that isn't behind that tunnel.
+3. `post-mount` only runs at all if JFFS custom scripts are enabled, and a Merlin firmware update has
+   been observed to silently reset that toggle. Check `nvram get jffs2_scripts` (should be `1`) before
+   assuming the symlink itself is the whole story — if it's `0`, re-enable in the GUI (Administration →
+   System) and reboot, or fire `/jffs/scripts/post-mount` by hand once.
 
 **How to apply:** before debugging a Kodi library/watchedlist symptom as a fleetctl or deploy-pipeline
 issue, TCP-test the MariaDB and SMB ports on the router directly. Kodi retries roughly a dozen schema
