@@ -33,6 +33,26 @@ _RETRIES = 2
 # NtStatus.STATUS_SHARING_VIOLATION. Compared numerically so smbprotocol stays
 # a lazy import, as everywhere else in this module.
 _SHARING_VIOLATION = 0xC0000043
+
+# Statuses that mean "the session you are holding no longer exists" — the
+# server has torn it down and every handle under it is void, so the only way
+# forward is to reconnect and try once more.
+#
+# These arrive as `smbprotocol.exceptions.SMBOSError`, which subclasses
+# OSError, NOT ConnectionError — so classifying a stale session by exception
+# type misses them entirely and reports a router that merely idled out as a
+# permanent failure. Observed on this fleet: `kodi.fetch_base` spends a minute
+# downloading from the mirror, and the router-hosted stack has dropped the
+# session by the time the upload starts.
+_SESSION_GONE = frozenset(
+    {
+        0xC0000203,  # STATUS_USER_SESSION_DELETED
+        0xC000035C,  # STATUS_NETWORK_SESSION_EXPIRED
+        0xC000020C,  # STATUS_CONNECTION_DISCONNECTED
+        0xC000020D,  # STATUS_CONNECTION_RESET
+        0xC00000B0,  # STATUS_PIPE_DISCONNECTED
+    }
+)
 _CONTENTION_BACKOFF_S = 0.15
 # Payloads land under this suffix and are renamed into place once whole, so a
 # transfer cut off mid-flight leaves nothing that reads as a finished artifact.
@@ -304,6 +324,28 @@ def _is_contended(exc: BaseException) -> bool:
 
 
 def _is_transient(exc: BaseException) -> bool:
-    """RETURNS: bool: Whether an SMB error looks like a stale session rather than a real fault."""
+    """Decide whether an SMB error is a dead session rather than a real fault.
+
+    The NtStatus check is first and is the load-bearing one. An expired
+    session surfaces as `SMBOSError`, which subclasses **OSError, not
+    ConnectionError**, and whose type name contains neither "ConnectionClosed"
+    nor "Disconnect" — so the type-based tests below never saw it, and a
+    router that had simply idled the session out was reported as a permanent
+    failure with no reconnect attempted. That is what broke `kodi.fetch_base`:
+    the mirror download takes long enough that the session is routinely gone
+    before the upload begins, and the listing before it reported a full share
+    as empty for the same reason.
+
+    The type-based tests are kept underneath because a socket that dies
+    mid-transfer raises before any NtStatus is parsed.
+
+    **PARAMETERS:**
+        `exc` (BaseException): The failure to classify.  <br>
+
+    **RETURNS:**
+        `bool`: Whether reconnecting and retrying is worth a try.  <br>
+    """
+    if getattr(exc, "ntstatus", None) in _SESSION_GONE:
+        return True
     name = type(exc).__name__
     return isinstance(exc, (ConnectionError, BrokenPipeError, TimeoutError)) or "ConnectionClosed" in name or "Disconnect" in name

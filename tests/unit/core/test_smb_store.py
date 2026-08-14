@@ -77,9 +77,47 @@ def test_storing_a_missing_file_fails_before_touching_the_network(tmp_path: Path
         store.put(tmp_path / "absent.tar.gz", ArtifactRef(kind="builds", name="b.tar.gz"))
 
 
+class _SmbOSError(OSError):
+    """Shaped like `smbprotocol.exceptions.SMBOSError`.
+
+    The two properties that matter, and that a hand-rolled double gets wrong:
+    it subclasses **OSError, not ConnectionError**, and it carries the NtStatus
+    on an `ntstatus` attribute. Scripted from the failure the live share
+    actually returned on 2026-08-14, not from an assumed shape --
+
+        SMBOSError: [Error 0] [NtStatus 0xc0000203] Unknown NtStatus error
+        returned 'STATUS_USER_SESSION_DELETED'
+
+    **PARAMETERS:**
+        `ntstatus` (int): The status the server returned.  <br>
+        `message` (str): Text of the error.  <br>
+    """
+
+    def __init__(self, ntstatus: int, message: str) -> None:
+        super().__init__(message)
+        self.ntstatus = ntstatus
+
+
 @pytest.mark.parametrize(
     ("exc", "transient"),
-    [(ConnectionError("reset"), True), (BrokenPipeError(), True), (TimeoutError(), True), (ValueError("bad"), False)],
+    [
+        (ConnectionError("reset"), True),
+        (BrokenPipeError(), True),
+        (TimeoutError(), True),
+        (ValueError("bad"), False),
+        # The regression. An idled-out session on the router-hosted share
+        # arrives as an OSError whose type name matches none of the string
+        # tests, so classifying by exception type reported a reconnectable
+        # session as a permanent upload failure -- which is what broke
+        # `kodi.fetch_base`, whose mirror download lasts long enough for the
+        # session to lapse before the upload starts.
+        (_SmbOSError(0xC0000203, "STATUS_USER_SESSION_DELETED"), True),
+        (_SmbOSError(0xC000035C, "STATUS_NETWORK_SESSION_EXPIRED"), True),
+        (_SmbOSError(0xC000020D, "STATUS_CONNECTION_RESET"), True),
+        # Still permanent: a real refusal must not be retried into a loop.
+        (_SmbOSError(0xC0000022, "STATUS_ACCESS_DENIED"), False),
+        (_SmbOSError(0xC0000043, "STATUS_SHARING_VIOLATION"), False),
+    ],
 )
 def test_only_connection_faults_are_retried(exc: BaseException, transient: bool) -> None:
     """A stale session deserves a reconnect; a real fault should surface."""
@@ -125,7 +163,8 @@ def test_a_local_root_is_resolved_under_home(tmp_path: Path) -> None:
 class _FakeSmb:
     """In-memory stand-in for smbclient, keyed by UNC path."""
 
-    def __init__(self, *, fail_times: int = 0) -> None:
+    def __init__(self, *, fail_times: int = 0, fail_with: BaseException | None = None) -> None:
+        self.fail_with = fail_with
         self.files: dict[str, bytes] = {}
         self.opens: list[tuple[str, str, str | None]] = []
         self.renames: list[tuple[str, str]] = []
@@ -146,7 +185,7 @@ class _FakeSmb:
     def listdir(self, path: str) -> list[str]:
         if self.fail_times:
             self.fail_times -= 1
-            raise ConnectionError("session went stale")
+            raise self.fail_with or ConnectionError("session went stale")
         prefix = path + "\\"
         return [name[len(prefix) :] for name in self.files if name.startswith(prefix)]
 
@@ -298,6 +337,28 @@ def test_a_stale_session_is_retried_once(monkeypatch: pytest.MonkeyPatch) -> Non
 
     # Assert
     assert fake.resets == 1
+
+
+def test_a_deleted_session_reconnects_rather_than_reporting_an_empty_share(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The regression, end to end through `list`.
+
+    Before the NtStatus check, this surfaced twice over in one operation: the
+    listing swallowed it and reported a full share as empty, and the upload
+    that followed failed outright. Both were one dead session that a single
+    reconnect would have fixed.
+    """
+    # Arrange
+    fake = _FakeSmb(fail_times=1, fail_with=_SmbOSError(0xC0000203, "STATUS_USER_SESSION_DELETED"))
+    # Matches `_path()`: \\<host>\<share>\<root>\<kind>\<name>
+    fake.files[r"\\h\s\fleetctl\builds\b.tar.gz"] = b"payload"
+    monkeypatch.setitem(__import__("sys").modules, "smbclient", fake)
+
+    # Act
+    found = _configured().list("builds")
+
+    # Assert
+    assert fake.resets == 1
+    assert [info.ref.name for info in found] == ["b.tar.gz"]
 
 
 def test_listing_an_absent_kind_is_empty_not_an_error(smb: _FakeSmb) -> None:
