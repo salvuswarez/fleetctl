@@ -56,6 +56,37 @@ def test_matching_falls_back_to_serial_then_address() -> None:
     assert result.devices[0].address == "192.168.1.90"
 
 
+def test_a_second_interface_does_not_become_a_second_device() -> None:
+    """How the live duplicate was born: a Shield reported its ethernet MAC on
+    one scan and its wifi MAC on the next. A MAC identifies an interface; the
+    serial identifies the box, and it wins when the two disagree."""
+    # Arrange
+    existing = [_device(mac="aa:bb:cc:dd:ee:ff", serial="SER123")]
+    discovered = [_device(id="x", mac="aa:bb:cc:dd:ee:aa", serial="SER123", address="192.168.1.58")]
+
+    # Act
+    result = reconcile(existing, discovered)
+
+    # Assert
+    assert len(result.devices) == 1
+    assert result.devices[0].address == "192.168.1.58"
+    assert result.devices[0].mac == "aa:bb:cc:dd:ee:aa"
+
+
+def test_different_macs_with_nothing_to_appeal_to_stay_separate() -> None:
+    """Two boxes at one address over time is the ordinary case for a reused
+    DHCP lease — without a serial there is no evidence they are one device."""
+    # Arrange
+    existing = [_device(mac="aa:bb:cc:dd:ee:ff", serial="")]
+    discovered = [_device(id="x", mac="aa:bb:cc:dd:ee:aa", serial="")]
+
+    # Act
+    result = reconcile(existing, discovered)
+
+    # Assert
+    assert len(result.devices) == 2
+
+
 def test_a_partial_probe_does_not_blank_stored_fields() -> None:
     """A sleeping or half-probed device keeps what was already known."""
     # Arrange
