@@ -4,7 +4,7 @@ description: Proactively dispatch for work in `src/fleetctl/packs/` or `src/flee
 tools: [Read, Glob, Grep, Bash, Edit, Write]
 model: sonnet
 memory: project
-skills: [pack-authoring, adb-device-ops, fleetctl-architecture, build-stages]
+skills: [pack-authoring, adb-device-ops, kodi-app-ops, fleetctl-architecture, build-stages]
 maxTurns: 25
 effort: high
 color: orange

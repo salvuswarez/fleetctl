@@ -41,6 +41,38 @@ fallback. A probe that cannot identify a host returns `None`, never a partial id
 
 A pack declares which it supports; a step declares which it requires; the engine checks at **plan time**, before touching anything.
 
+The nine split into two kinds, and the difference decides **who may answer for them**:
+
+| Kind | Verbs | Authority |
+|---|---|---|
+| **Wire** | `reach` `facts` `exec` `files` `power` | the transport performs them directly |
+| **Derived** | `state` `apps` `settings` `cleanup` | a pack's managers build them on the wire verbs |
+
+`WIRE_CAPABILITIES` in `core/effects.py` names the first set. This stayed invisible while every
+transport served exactly one pack, and broke the moment `SshTransport` served two: `kodi.capture` on
+a Steam Deck was refused for "unsupported capabilities: state" even though the pack supplies a state
+manager. The check is now `transport.capabilities() | (provided_by_pack - WIRE_CAPABILITIES)` — a pack
+adds only what it implements and can never claim `exec` on a dead connection.
+
+## Protection is anchored on inventory tags
+
+The policy layer can mark a device protected against named steps, but it is **off by default**. Do
+not protect a device by editing `fleet.yml`: the Home Assistant integration is a separate composition
+root with its own `config_dir`, and it **regenerates** its `fleet.yml` from the config entry on every
+setup, so a hand-added block is gone on the next reload. That is deliberate — the config entry is the
+source of truth so an options-flow edit takes effect without hand-editing YAML.
+
+Tag the device instead. `PROTECTED_TAGS` turns tags into `policy.protected` rules on every setup:
+`gold` denies `kodi.deploy` and `*.maintain` while still allowing `kodi.capture` — capturing *from*
+the gold source is the entire point — and `protected` denies everything. Tags are the right anchor
+because `inventory/devices.yml` is the one file a reload leaves alone.
+
+The gold source is the device the whole capture → build → deploy pipeline depends on: break it with
+an unproven change and every future capture inherits the breakage. Encode a fix as a transform or
+recipe entry, test-deploy it to a disposable device, and only then consider touching the source. This
+is a sensible default for an unproven change, **not** a claim that the capture source is permanently
+off-limits.
+
 ## Effect classes
 
 | Class | Examples | Policy consequence |

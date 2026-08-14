@@ -4,7 +4,7 @@ Plugin-based fleet management for home devices — Fire TV sticks, NVIDIA Shield
 
 **Pre-alpha.** Built in stages; nothing manages a real device yet. See `.claude/skills/build-stages/SKILL.md` for what is in scope right now, and refuse to build ahead of the current stage.
 
-See `.claude/` for the deep reference: agents (`core-kernel-specialist`, `pack-author`), skills (architecture, build stages, pack authoring, ADB device ops), commands (`/gate`, `/stage`, `/pack-new`, `/ring-check`), and rules per ring. Full design rationale: `docs/architecture.md`.
+See `.claude/` for the deep reference: agents (`core-kernel-specialist`, `pack-author`), skills (architecture, build stages, pack authoring, ADB device ops, Kodi app ops, live device runs), commands (`/gate`, `/stage`, `/pack-new`, `/ring-check`), and rules per ring. Full design rationale: `docs/architecture.md`.
 
 ## Setup
 
