@@ -10,8 +10,11 @@ so the CLI cannot resolve an inventory or an artifact store. This skill is how
 to reach a real device anyway: construct the pieces by hand and call the
 **shipped** code path, so a live run exercises what production runs.
 
-Scripts go in `.claude/temp/` (gitignored). Anything that proves reusable
-belongs back in this skill.
+Throwaway scripts go in `.claude/temp/` (gitignored). Anything that proves
+reusable belongs back in this skill, under `scripts/` — see below. That
+directory is **tracked**, so a script moving out of `.claude/temp/` must lose
+every real device id, address and credential on the way: take them as
+arguments.
 
 ## The rule these runs exist to enforce
 
@@ -154,6 +157,24 @@ A live script is not exempt. Reads pass `Effect.READ`; anything that writes is
 `MUTATING`; anything that replaces or deletes is `DESTRUCTIVE`. A read-only
 probe whose commands are unlabelled is indistinguishable from a change in the
 audit trail.
+
+## Scripts that earned their keep
+
+Run from the repo root, so `config/` and `.env` resolve:
+
+| Script | Answers |
+|---|---|
+| `scripts/shield_abi_probe.py <address>` | Does `ShieldPack.probe` claim this box off real `getprop`? What ABI is the hardware vs the installed Kodi, is the profile root reachable, and which addons carry binaries? All `Effect.READ`. |
+| `scripts/shield_deploy_readiness.py <device-id>` | Is the *installed Kodi process* 32- or 64-bit, and is the state root actually writable? Reads the device from the gitignored inventory. |
+
+Two traps these encode, worth keeping even if the scripts rot:
+
+- **Both pin `KEY_DIR` to `~/.fleetctl/keys`** to match `cli/bootstrap.py`. A
+  script with its own key directory presents a *different ADB identity*, and
+  the authorization you tapped on-screen does not carry over.
+- **Never substring-match a path against `ls` output** to test existence — the
+  failure message *contains* the path, so the probe reads as success when it
+  failed. Echo a sentinel (`&& echo FLEETCTL_OK`) instead.
 
 ## Related
 
