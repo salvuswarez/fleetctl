@@ -8,6 +8,7 @@ presence of behaviour.
 
 from __future__ import annotations
 
+import posixpath
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from fleetctl.apps.kodi import steps as kodi_steps
 from fleetctl.apps.kodi.spec import state_spec
 from fleetctl.core.effects import Capability
 from fleetctl.core.transport.fake import FakeTransport
+from fleetctl.packs.android.quirks import AndroidQuirks
 from fleetctl.packs.android.state import AndroidStateManager
 from fleetctl.packs.firetv.pack import FireTvPack
 from fleetctl.packs.shield.pack import ShieldPack
@@ -59,15 +61,32 @@ def test_neither_vendor_pack_claims_the_others_device() -> None:
 
 
 def test_the_shield_does_not_inherit_fire_os_quirks() -> None:
-    """These are Amazon's bugs. Inheriting them would cost the Shield a
-    two-step tar and a netcat upload it may not need."""
+    """Amazon's own bugs stay Amazon's — each ruled out on this hardware.
+
+    `split_gzip` is deliberately not in this list. It looked like a Fire OS
+    quirk and is in fact toybox's, which both vendors ship; see the sibling
+    test below.
+    """
     # Act
     quirks = ShieldPack().quirks
 
     # Assert
-    assert quirks.split_gzip is False
     assert quirks.push_via_netcat is False
     assert quirks.verify_disable_user is False
+
+
+def test_the_shield_splits_gzip_because_its_toybox_truncates_on_create() -> None:
+    """Measured 2026-08-14: `tar czf` exits 0 and yields a short gzip stream.
+
+    The truncated archive's md5 matched the device's byte for byte, so the
+    loss happens at creation, not in transit. Deploy never noticed because it
+    only ever *extracts* — which is exactly why this shipped for months.
+    """
+    # Act
+    quirks = ShieldPack().quirks
+
+    # Assert
+    assert quirks.split_gzip is True
 
 
 def test_the_two_packs_are_independent_classes() -> None:
@@ -153,9 +172,14 @@ def test_the_same_kodi_spec_resolves_on_both_device_types() -> None:
     assert fire_root == shield_root == KODI_ROOT
 
 
-def test_the_same_restore_produces_different_commands_per_vendor(tmp_path: Path) -> None:
+def test_the_same_restore_produces_different_commands_per_quirk(tmp_path: Path) -> None:
     """The whole design in one assertion: identical app-level intent, and the
-    archive strategy differs because the *pack* said so."""
+    archive strategy differs because the *pack's data* said so.
+
+    Contrasted against stock-Android defaults rather than against the Fire TV
+    pack. Both shipped vendors now set `split_gzip`, so pinning this to the
+    two of them would assert nothing the moment they agree — and they do.
+    """
     # Arrange
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1024)
@@ -172,17 +196,43 @@ def test_the_same_restore_produces_different_commands_per_vendor(tmp_path: Path)
             f"ls -1 {KODI_ROOT}/media 2>/dev/null | wc -l": "1",
         }
 
-    fire_transport = FakeTransport(responses=_responses())
+    stock_transport = FakeTransport(responses=_responses())
     shield_transport = FakeTransport(responses=_responses())
 
     # Act
-    AndroidStateManager(fire_transport, FireTvPack().quirks).restore(spec, archive)
+    AndroidStateManager(stock_transport, AndroidQuirks()).restore(spec, archive)
     AndroidStateManager(shield_transport, ShieldPack().quirks).restore(spec, archive)
 
     # Assert
-    assert any(command.startswith("gzip -d") for command in fire_transport.commands())
-    assert not [command for command in shield_transport.commands() if command.startswith("gzip -d")]
-    assert any(command.startswith("tar xzf") for command in shield_transport.commands())
+    assert any(command.startswith("tar xzf") for command in stock_transport.commands())
+    assert not [command for command in stock_transport.commands() if command.startswith("gzip -d")]
+    assert any(command.startswith("gzip -d") for command in shield_transport.commands())
+
+
+def test_a_shield_capture_never_asks_toybox_to_compress_while_it_tars(tmp_path: Path) -> None:
+    """The regression this pack shipped with: `tar czf` truncates here.
+
+    Asserted on the command actually issued, because the symptom is a tar that
+    exits 0 — nothing downstream of the archive can tell the two apart until a
+    full read fails.
+    """
+    # Arrange
+    transport = FakeTransport(
+        responses={
+            f"tar cf /sdcard/capture.tar -C {posixpath.dirname(KODI_ROOT)} .kodi": "",
+            "gzip /sdcard/capture.tar": "",
+            "/sdcard/capture.tar.gz": "archive bytes",
+        }
+    )
+
+    # Act
+    AndroidStateManager(transport, ShieldPack().quirks).snapshot(state_spec(), tmp_path / "capture.tar.gz")
+
+    # Assert
+    issued = transport.commands()
+    assert not [command for command in issued if command.startswith("tar czf")]
+    assert any(command.startswith("tar cf") for command in issued)
+    assert any(command.startswith("gzip ") for command in issued)
 
 
 def test_adding_the_shield_required_no_change_in_the_kodi_app_pack() -> None:

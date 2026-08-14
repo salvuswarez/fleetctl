@@ -1,12 +1,27 @@
 # NVIDIA Shield deviations from stock Android.
 #
 # VERIFICATION STATUS: confirmed on hardware 2026-08-12 (SHIELD Android TV,
-# Android 11, Kodi 21.3). Every value below is a stock-Android default — the
-# Fire OS workarounds are Amazon's bugs and are correctly not inherited.
+# Android 11, Kodi 21.3), amended 2026-08-14 — see `split_gzip`.
 #
-# Notably NOT set, each now measured rather than assumed:
-#   split_gzip        — `tar xzf` extracts correctly here; a 160MB build
-#                       restored in one step with all 9,437 files present.
+# toybox's `tar -z` truncates on CREATE here, exactly as it does on Fire OS.
+# This is not Amazon's bug after all; it is toybox's, and both vendors ship it.
+# Measured 2026-08-14 over the live Kodi profile:
+#
+#   tar czf          311,943,168 bytes, exit 0 — 12,263 members then `short read`
+#   tar cf + gzip    311,970,606 bytes, exit 0 — 12,896 members, read end to end
+#
+# The pull is not the culprit and was ruled out rather than assumed: the
+# truncated file's md5 matched the device's byte for byte and still failed a
+# full read, so the loss is baked in before anything crosses the wire.
+#
+# This quirk was previously OFF, on the evidence that `tar xzf` restored a
+# 160MB build correctly. That reasoning is the trap worth naming: EXTRACT
+# working is not evidence CREATE works, and `split_gzip` governs both. A
+# restore decompresses an archive gzipped on the host; only a capture asks
+# this device's toybox to produce one. Deploy therefore passed for months
+# while every capture came back short.
+#
+# Notably NOT set, each measured rather than assumed:
 #   push_via_netcat   — the ADB push protocol moved a 160MB build and a 64MB
 #                       APK intact.
 #   verify_disable_user — VERIFIED HONEST: 15 packages disabled, and all 15
@@ -21,6 +36,9 @@
 #   - the `tar` here rejects PAX extended headers, so a build archive must be
 #     written as GNU (see `_pack_flat`) or extraction aborts partway through
 #     the first member on any path over 100 characters.
+
+# Create as `tar` then a separate `gzip`; extract as `gzip -d` then `tar`.
+split_gzip: true
 
 external_storage: /sdcard
 app_data_root: /sdcard/Android/data
