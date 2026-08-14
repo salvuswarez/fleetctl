@@ -159,14 +159,35 @@ def test_a_recipe_with_nothing_configured_yields_only_the_always_on_transforms()
     assert [transform.name for transform in transforms] == ["prune_addons", "strip_device_settings", "apply_settings"]
 
 
-def test_the_firetv_pack_registers_exactly_its_maintain_step() -> None:
+def test_the_firetv_pack_registers_its_steps_under_its_own_id() -> None:
+    """Every step a pack registers is namespaced to it, including the ones
+    whose implementation is shared with the other Android pack."""
     # Act
     steps = list(FireTvPack().steps())
 
     # Assert
-    assert [step.spec.id for step in steps] == ["firetv.maintain", "firetv.check"]
-    assert steps[0].spec.effect is Effect.DESTRUCTIVE
-    assert steps[1].spec.effect is Effect.READ
+    assert [step.spec.id for step in steps] == [
+        "firetv.maintain",
+        "firetv.check",
+        "firetv.capture_state",
+        "firetv.restore_state",
+    ]
+    assert all(step.provider == "firetv" for step in steps)
+
+
+def test_each_firetv_step_declares_the_effect_its_gating_depends_on() -> None:
+    """A mislabelled destructive step bypasses approval silently, so the
+    classes are asserted individually rather than by position."""
+    # Act
+    effects = {step.spec.id: step.spec.effect for step in FireTvPack().steps()}
+
+    # Assert
+    assert effects["firetv.maintain"] is Effect.DESTRUCTIVE
+    assert effects["firetv.check"] is Effect.READ
+    # Reads settings, reads the package list, pulls files. Changes nothing.
+    assert effects["firetv.capture_state"] is Effect.READ
+    # Rewrites system settings and reinstalls packages over what is there.
+    assert effects["firetv.restore_state"] is Effect.DESTRUCTIVE
 
 
 @pytest.fixture

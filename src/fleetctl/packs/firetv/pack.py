@@ -10,18 +10,19 @@ from typing import Any, Mapping
 
 import yaml
 
-from ...core.effects import Capability, Effect
-from ...core.inventory.device import Device
-from ...core.registry import RegisteredStep
-from ...core.state import AppStateSpec
-from ...core.transport.base import CommandRunner, Transport
-from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
-from ..android import actions
-from ..android.appmgr import AndroidAppManager
-from ..android.keys import AdbKeyStore
-from ..android.quirks import AndroidQuirks
-from ..android.state import AndroidStateManager
-from ..android.transport import AdbTransport
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.state import AppStateSpec
+from fleetctl.core.transport.base import CommandRunner, Transport
+from fleetctl.core.workflow.step import DeviceStepContext, StepResult, StepSpec
+from fleetctl.packs.android import actions, devicesteps
+from fleetctl.packs.android.appmgr import AndroidAppManager
+from fleetctl.packs.android.devicestate import AndroidDeviceStateManager, DeviceStatePolicy
+from fleetctl.packs.android.keys import AdbKeyStore
+from fleetctl.packs.android.quirks import AndroidQuirks
+from fleetctl.packs.android.state import AndroidStateManager
+from fleetctl.packs.android.transport import AdbTransport
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +60,11 @@ CHECK = StepSpec(
     requires=frozenset({Capability.EXEC, Capability.FACTS}),
     scope="device",
 )
+
+# What the device *is*, as opposed to what an app on it keeps. Shared with
+# every Android pack: `settings` and `pm` are the platform's, not Amazon's.
+CAPTURE_STATE = devicesteps.capture_spec(PACK_ID)
+RESTORE_STATE = devicesteps.restore_spec(PACK_ID)
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -106,6 +112,8 @@ class FireTvPack:
         return [
             RegisteredStep(spec=MAINTAIN, run=self.maintain, provider=PACK_ID),
             RegisteredStep(spec=CHECK, run=self.check, provider=PACK_ID),
+            RegisteredStep(spec=CAPTURE_STATE, run=self.capture_state, provider=PACK_ID),
+            RegisteredStep(spec=RESTORE_STATE, run=self.restore_state, provider=PACK_ID),
         ]
 
     def probe(self, runner: CommandRunner) -> dict[str, str] | None:
@@ -147,6 +155,16 @@ class FireTvPack:
         """RETURNS: AndroidStateManager: A state manager carrying this pack's quirks."""
         return AndroidStateManager(transport, self.quirks)
 
+    @cached_property
+    def device_state_policy(self) -> DeviceStatePolicy:
+        """RETURNS: DeviceStatePolicy: What a snapshot of this device may carry and replay. Overridable per pack, though nothing here is vendor-specific yet."""
+        override = self._overrides.get("device_state")
+        return DeviceStatePolicy.from_mapping(override) if isinstance(override, dict) else DeviceStatePolicy.shipped()
+
+    def device_state_manager(self, transport: Transport) -> AndroidDeviceStateManager:
+        """RETURNS: AndroidDeviceStateManager: A device-state manager carrying this pack's quirks and policy."""
+        return AndroidDeviceStateManager(transport, self.quirks, self.device_state_policy)
+
     def power_state(self, transport: Transport) -> str:
         """RETURNS: str: ``awake``/``asleep``/``dozing``/``dreaming``, or ``""`` when unreadable. Satisfies the `power` capability this pack declares."""
         return actions.power_state(transport)
@@ -165,6 +183,22 @@ class FireTvPack:
         detail = ", ".join(f"{key}={value}" for key, value in sorted(facts.items()))
         context.handle.log(detail or "device answered nothing")
         return StepResult(summary=f"{context.device.id}: {detail or 'no response'}", facts=dict(facts))
+
+    def capture_state(self, context: DeviceStepContext) -> StepResult:
+        """Capture this device's settings, packages and APKs.
+
+        **RETURNS:**
+            `StepResult`: Carries the published snapshot under the ``device_state`` artifact role.  <br>
+        """
+        return devicesteps.capture_state(self.device_state_manager(context.transport), context)
+
+    def restore_state(self, context: DeviceStepContext) -> StepResult:
+        """Rewrite this device's settings and reinstall its packages from a snapshot.
+
+        **RETURNS:**
+            `StepResult`: What was applied, skipped and refused.  <br>
+        """
+        return devicesteps.restore_state(self.device_state_manager(context.transport), context)
 
     def maintain(self, context: DeviceStepContext) -> StepResult:
         """Disable bloatware, apply performance settings, and trim caches.
