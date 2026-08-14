@@ -14,6 +14,7 @@
 - [Borrowed package lists are untrustworthy](gotcha_unverified_package_lists.md) — a prior list contained fabricated entries
 - [Textures13.db survives a Thumbnails prune](gotcha_kodi_texture_index_survives_thumbnail_prune.md) — dangling texture index, a compounding OOM cause
 - [Inventory IPs drift from DHCP reassignment](gotcha_inventory_ip_drift_from_dhcp.md) — verify live before trusting a stored IP
+- [One box reports two MACs](gotcha_one_box_reports_two_macs.md) — ethernet vs wifi made the Shield two records; a serial outranks a changed MAC
 - [Arctic Fuse caches compiled shortcut XML](gotcha_arctic_fuse_compiled_shortcut_cache.md) — a hub-layout deploy can look like a no-op until that cache is cleared and Kodi restarts
 
 ## Gotchas discovered in fleetctl itself
