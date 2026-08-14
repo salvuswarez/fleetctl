@@ -429,25 +429,22 @@ class Toolkit:
         would otherwise vanish along with its tags and per-app vars. Removing
         one is therefore an explicit decision, made here.
 
-        Refused while the device has work running. A forgotten device whose
-        operation is still going would leave that operation reporting against
-        an id the inventory no longer knows.
+        Work running against the device is cancelled first, not treated as a
+        refusal: a device holding a stuck operation is precisely the one
+        someone is trying to get rid of. Cancellation is cooperative, so the
+        work unwinds at its next step boundary rather than being abandoned
+        mid-transfer, and it stops before it can act on an id the inventory
+        no longer knows.
 
         **PARAMETERS:**
             `device_id` (str): The device to forget.  <br>
 
         **RETURNS:**
-            `dict[str, Any]`: The id, whether a record was actually removed, and the tags it carried, so a caller can say what was lost.  <br>
-
-        **RAISES:**
-            `FleetError`: If the device is busy with a running operation.  <br>
+            `dict[str, Any]`: The id, whether a record was actually removed, the tags it carried so a caller can say what was lost, and any operations cancelled on the way out.  <br>
         """
         device = self.container.inventory.get(device_id)
         tags = list(device.tags) if device else []
-
-        busy = self.container.operations.running_for(device_id)
-        if busy is not None:
-            raise FleetError(f"{device_id} is busy with {busy}; wait for it or cancel it before forgetting the device")
+        cancelled = self._cancel_work_against(device_id)
 
         removed = self.container.inventory.forget(device_id)
         with correlate(actor=self.actor):
@@ -457,12 +454,25 @@ class Toolkit:
                     "inventory.forget_device",
                     target=device_id,
                     outcome=Outcome.OK if removed else Outcome.SKIPPED,
-                    detail={"surface": "agent", "tags": tags},
+                    detail={"surface": "agent", "tags": tags, "cancelled": cancelled},
                 )
             )
-        return {"id": device_id, "removed": removed, "tags": tags}
+        return {"id": device_id, "removed": removed, "tags": tags, "cancelled": cancelled}
 
     # -- Internal ----------------------------------------------------------
+
+    def _cancel_work_against(self, device_id: str) -> list[str]:
+        """Ask every operation running against one device to stop.
+
+        **PARAMETERS:**
+            `device_id` (str): The device whose work should wind down.  <br>
+
+        **RETURNS:**
+            `list[str]`: Ids of the operations asked to cancel.  <br>
+        """
+        snapshots = self.container.operations.all_snapshots().items()
+        running = [op_id for op_id, snapshot in snapshots if snapshot["target"] == device_id and snapshot["status"] == OperationStatus.RUNNING.value]
+        return [op_id for op_id in running if self.container.operations.request_cancel(op_id)]
 
     def _authorize(self, step_id: str, device_id: str | None, *, approve: bool) -> tuple[RegisteredStep, str]:
         """Resolve a step, check it is allowed, and mint its operation id.
