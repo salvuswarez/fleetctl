@@ -53,4 +53,7 @@ Config files hold secret **references** (`!ref env:NAME`), never values — reso
 
 ## Predecessor
 
-`firestick_manager` (sibling directory) keeps running and keeps serving the Home Assistant integration until the S7 cutover. It is the source of truth for **hardware behaviour**, not architecture — see its entry in the project memory (untracked, local to this working copy) for what to port and what is stale.
+`firestick_manager` was the predecessor and the source of truth for **hardware behaviour**, not
+architecture. **Retired 2026-08-06 (S7 cutover)** — the repo no longer runs and is no longer a sibling
+directory; see `reference_predecessor_firestick_manager.md` in the project memory for what was ported
+and what was deliberately left behind.

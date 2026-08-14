@@ -1,50 +1,73 @@
-# fleetctl fleet config. Copy to fleet.yml and fill in.
-# Holds `!ref` pointers, never secret values -> safe to share.
+# Copy to config/fleet.yml and edit. The real file is gitignored.
+#
+# This file holds secret *references*, never values. `!ref env:NAME` resolves
+# at the edge from the environment (or the repo-root .env, which fleetctl loads
+# before resolving). A fleet.yml must stay safe to paste into a bug report.
+#
+# Every block here is optional. With none of them, fleetctl uses a local
+# artifact store under ~/.fleetctl/artifacts and a permissive policy.
 
+# --- Artifacts --------------------------------------------------------------
+# Where captures and builds live. Omit the `smb` block entirely to use the
+# local store; an incomplete smb block logs a warning and falls back to local
+# rather than failing at startup.
 artifacts:
-  # SMB share, matching the predecessor's layout. Drop this block to keep
-  # artifacts local under ~/.fleetctl/artifacts.
   smb:
-    host: 192.168.1.50
-    share: Kodi
+    host: nas.example.lan
+    share: media
     root: fleetctl
     user: !ref env:SMB_USER
     password: !ref env:SMB_PASS
+  # Used when smb is absent or incomplete. Relative paths resolve under --home.
+  local_root: artifacts
 
-# Fleet-wide SSH identity, used by every pack whose transport is SSH.
-#
-# A scan probes hosts that are not in the inventory yet, so there is no device
-# record to read a credential from — without this an SSH probe has nothing to
-# authenticate with. A device can override any of these under `vars.ssh`.
-ssh:
-  user: deck
-  key_path: ~/.ssh/id_ed25519
-  # Or a password instead of a key. Hold it as a reference, never a value.
-  # password: !ref env:FLEETCTL_SSH_PASS
-  #
-  # Unknown host keys are rejected rather than trusted on first use, so a host
-  # must be in this file before it can be reached.
-  known_hosts: ~/.fleetctl/known_hosts
-
+# --- Observability ----------------------------------------------------------
 observability:
-  # Relative paths resolve under ~/.fleetctl, not the working directory.
+  # Relative resolves under --home (default ~/.fleetctl).
   audit_dir: audit
 
-# Optional. Absent -> permissive, everything allowed.
+# --- SSH defaults -----------------------------------------------------------
+# Fleet-wide defaults for posix-family packs (linux_host, steamdeck). A device's
+# own `vars.ssh` overrides these. Irrelevant to ADB devices, which need only the
+# key directory the composition root supplies.
+ssh:
+  user: deck
+  password: !ref env:FLEETCTL_DECK_PASS
+  # SshTransport uses RejectPolicy — an unknown host key fails by design.
+  known_hosts: ~/.fleetctl/known_hosts
+
+# --- Policy -----------------------------------------------------------------
+# Omit this block entirely and every actor may do everything. Note that once a
+# `policy:` block exists, an actor with no matching rule is DENIED, not
+# defaulted — no rule means no grant.
 policy:
+  defaults:
+    # Blast-radius cap per run; 0 means unlimited.
+    max_devices_per_run: 0
+
+  # Devices named steps must never touch, checked before actor rules.
+  protected:
+    - match:
+        tags: [gold]
+      deny: ["kodi.deploy", "*.maintain"]
+      reason: >
+        The gold capture source. Experimenting here costs the reference
+        profile the whole fleet is built from.
+
+    # A device whose pack has not been verified against real hardware yet.
+    - match:
+        ids: [example-unverified]
+      deny: ["kodi.deploy"]
+      reason: Build profile not yet confirmed against this hardware.
+
   actors:
+    # First match wins, so order matters: put specific patterns above globs.
     "cli:*":
       allow: ["*"]
-    "ha:*":
-      allow: ["*"]
-      confirm: [destructive]
+
     "mcp:*":
       allow: ["*"]
-      confirm: [mutating, destructive]
-      max_devices: 3
-
-  # Devices named here are off-limits for the listed steps, regardless of actor.
-  # protected:
-  #   - match: {tags: [reference]}
-  #     deny: ["kodi.deploy"]
-  #     reason: Prove the change on a spare first.
+      deny: ["*.reboot"]
+      # Effect classes needing explicit approval: read / mutating / destructive.
+      confirm: [destructive]
+      max_devices: 2

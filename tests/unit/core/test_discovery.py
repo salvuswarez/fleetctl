@@ -315,8 +315,8 @@ def test_a_ping_that_cannot_run_drops_the_host_rather_than_the_sweep(monkeypatch
 @pytest.mark.parametrize(
     ("output", "expected"),
     [
-        ("Reply from 192.168.50.12: bytes=32 time=1ms TTL=64", True),
-        ("Reply from 192.168.50.12: Destination host unreachable.", False),
+        ("Reply from 192.168.1.50: bytes=32 time=1ms TTL=64", True),
+        ("Reply from 192.168.1.50: Destination host unreachable.", False),
         ("Request timed out.", False),
         ("Packets: Sent = 1, Received = 0, Lost = 1 (100% loss),", False),
     ],

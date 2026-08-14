@@ -1,22 +1,53 @@
-# Written by `fleetctl scan`. Hand-edit tags/name/vars freely -- a scan
-# updates only what it observed and never touches tags or vars.
+# Copy to config/inventory/devices.yml and edit. The real file is gitignored,
+# because an inventory is real device data by definition.
+#
+# `fleetctl scan` writes this file itself — hand-editing is for setting tags
+# and per-device vars, which a scan never touches. Only `id` is required;
+# everything else a probe fills in on first contact.
+#
+# Addresses below are placeholders. Never commit a real one.
+
 devices:
   - id: living-room-stick
-    type: firetv
+    type: firetv                  # which pack claims it; a scan sets this
     address: 192.168.1.50
     mac: aa:bb:cc:dd:ee:ff
     name: Living Room
     model: AFTKA
+    serial: EXAMPLESERIAL1
     os_version: "9"
-    status: ok
-    tags: [kodi]
+    status: ok                    # ok | unauthorized
+    # Tags drive workflow targeting AND policy matching. `kodi` is what makes
+    # kodi-refresh and kodi-deploy-all reach a device — treat adding it as
+    # arming deployment, not as labelling.
+    tags: [kodi, living-room]
+    # Namespaced per app id. The kernel never interprets these; `kodi.
+    # apply_device_config` reads vars.kodi after a deploy, because a build is
+    # one artifact for the whole fleet and anything per-device is overwritten.
     vars:
       kodi:
-        # Reapplied after every deploy -- the shared build overwrites it.
         display:
           resolution_index: 18
-          overscan: {left: 0, top: 0, right: 1920, bottom: 1080}
-        # Per-device setting overrides, userdata-relative.
-        settings:
-          guisettings.xml:
-            audiooutput.channels: "1"
+
+  - id: den-shield
+    type: shield
+    address: 192.168.1.51
+    name: Den Shield
+    tags: [kodi]
+
+  # The capture source. Tagged `gold` so the policy block can protect it.
+  - id: gold-stick
+    type: firetv
+    address: 192.168.1.52
+    name: Gold Reference
+    tags: [kodi, gold]
+
+  # A posix device overriding the fleet-wide ssh defaults from fleet.yml.
+  - id: steam-deck
+    type: steamdeck
+    address: 192.168.1.53
+    name: Steam Deck
+    tags: [kodi]
+    vars:
+      ssh:
+        user: deck
