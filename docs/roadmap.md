@@ -9,7 +9,7 @@ This page tracks the same table as `.claude/skills/build-stages/SKILL.md` and `a
 
 <blockquote style="border-left: 4px solid #7ab9d5; background-color: rgba(122, 185, 213, 0.08); padding: 14px 18px; margin: 16px 0; border-radius: 10px;">
 
-**Status:** S0–S6 are done. S7 (Home Assistant cutover) and S8 have not started — both are covered below.
+**Status:** S0–S7 are done — the Home Assistant cutover landed 2026-08-06 and `firestick_manager` is retired. S8 is in progress with only its SSH/`posix` slice landed.
 
 </blockquote>
 
@@ -42,8 +42,8 @@ flowchart LR
 | **S4** | Policy + audit hardening | `Policy`, effect classification on every step, protected-device rules, blast-radius cap, hash chain + `audit verify` | A device can be made structurally undeployable-to via a `protected:` config rule, with no code change | **Done** |
 | **S5** | Shield Pro | `packs/shield`; whatever quirks turn out to be Fire-OS-only get pushed down into `packs/firetv` | Same Kodi build deploys to a Stick and a Shield from one workflow | **Done** |
 | **S6** | MCP adapter | stdio server; tools from the step/workflow registry; resources for inventory/builds/audit; approval flow | Agent completes a full `kodi-refresh` with per-step approval, fully audited | **Done** |
-| **S7** | HA cutover | HA integration repinned to `fleetctl`; becomes actor `ha:*`; services regenerated from the registry; panel + automations updated | Live panel runs on `fleetctl`; `firestick_manager` archived | **In progress** — backend swap done (commit `406ccea` in `ha-cyberpunk`, local only, not pushed/deployed): `__init__.py`/`ws_api.py` rewritten against `Toolkit`, `manifest.json` repinned to `fleetctl@v0.1.0`, one-time device migration, `ha:*` policy kept single-click (no `confirm:`). Not yet done: real HA smoke test, the `list_backups`/gold-image panel UX gap (see commit message), PAT rotation |
-| **S8** | Later | `packs/linux_host` + SSH transport; HTTP API if a consumer appears; `fleet.lock` | — | Not started |
+| **S7** | HA cutover | HA integration repinned to `fleetctl`; becomes actor `ha:*`; services regenerated from the registry; panel + automations updated | Live panel runs on `fleetctl`; `firestick_manager` archived | **Done (2026-08-06).** Live panel runs on `fleetctl` and `firestick_manager` is retired. Panel parity was the cutover gate; [`ha-parity.md`](ha-parity.md) is the audited mapping, and the enumerate-every-consumer-call rule survives it. The integration is a **separate composition root** with its own config dir, so device protection is anchored on inventory tags rather than its regenerated `fleet.yml`. Still outstanding from this stage: the PAT embedded in `ha-cyberpunk`'s `origin` remote is unrotated |
+| **S8** | Later | `packs/linux_host` + SSH transport; HTTP API if a consumer appears; `fleet.lock` | — | **In progress — SSH slice only.** `packs/posix`, `packs/linux_host` and `packs/steamdeck` landed; capture, build and deploy are hardware-proven against a Steam Deck. The HTTP API and `fleet.lock` have not started, and `linux_host` remains unverified against a plain Linux box |
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Ordering Constraints</h2>
 
@@ -72,12 +72,23 @@ These are hard-won operational details, not architecture — they moved into the
 
 Full detail and citations for each of these: `.claude/skills/adb-device-ops/SKILL.md` and `architecture.md` §14.
 
+### Known defects, open
+
+Recorded here so they are not rediscovered. None is a blocker; each is a thing the gate currently
+reports as fine and is not.
+
+| Defect | Why it survives the gate |
+|---|---|
+| `test_git_shows_no_core_or_kodi_changes_in_the_shield_commit` (`tests/unit/packs/test_shield_seam.py`) runs `git` from `src/` instead of the repo root, so it has **never checked anything** | It passes vacuously — a green test asserting nothing looks identical to a green test asserting something |
+| `apply_overscan` (`apps/kodi/device_config.py`) has **no production caller** | It is defined and unit-tested, so coverage and typing are satisfied. The `overscan` key in `vars.kodi.display` is read and validated and then never applied — the config promises behaviour that does not run |
+| CI's `build` job runs `uv build` but never installs or imports the wheel | v0.1.0 shipped uninstallable through a fully green gate. Building is now checked; *installability* still is not, and the local loop never builds one at all |
+
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Where to Read Next</h2>
 
 - What S1's core kernel and S4's policy layer actually look like: [`safety.md`](safety.md), [`observability.md`](observability.md)
 - How to add a pack: [`pack-authoring.md`](pack-authoring.md)
 - Every command that exists today: [`cli-reference.md`](cli-reference.md)
-- What's left before S7 can start: [`ha-parity.md`](ha-parity.md)
+- The audited panel-parity mapping from the S7 cutover: [`ha-parity.md`](ha-parity.md)
 - The full rationale behind every decision this roadmap encodes: [`architecture.md`](architecture.md) §14–§15
 
 <br/><br/>
@@ -131,7 +142,7 @@ Full detail and citations for each of these: `.claude/skills/adb-device-ops/SKIL
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
 
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
+- S0&ndash;S7 done &middot; S8 in progress (SSH slice only)
 
 </td>
 </tr>

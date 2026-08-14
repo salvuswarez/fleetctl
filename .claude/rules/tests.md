@@ -12,3 +12,6 @@ paths: ["tests/**"]
 6. **No real device data in fixtures** — `192.168.1.50`, `aa:bb:cc:dd:ee:ff`, invented device names.
 7. **Test names state the behaviour** — `test_probe_returns_none_when_model_is_empty`, not `test_probe_2`.
 8. **Parametrize instead of looping** — a failing case should name itself in the report.
+9. **Every test file lives under `tests/unit/`**, never directly in `tests/`.
+10. **Script a double from output actually observed on hardware**, never from an assumed CLI. A `FakeTransport` scripted from a guess keeps the suite green while the device answers something else — that is how a missing `hostname` binary and an unsupported `--show-version` flag both shipped.
+11. **A test that cannot fail is worse than no test.** One in this repo runs `git` from the wrong directory and has never checked anything while passing. When a test guards something expensive, prove it fails when the guarded property is broken.

@@ -7,6 +7,27 @@ description: ADB behaviour against real Android TV hardware — connection lifec
 
 `fleetctl` uses **pure-Python ADB** (`adb-shell`), not the `adb` binary — no external tool on PATH, and it works identically inside a Home Assistant container. All of this lands behind `AdbTransport` (S1/S2); nothing above the transport seam should know any of it.
 
+## A command that fails is indistinguishable from one that worked
+
+Read this first. Every other trap on this page is a symptom of it.
+
+`AdbTransport.exec` (`packs/android/transport.py`) calls `adb_shell`'s `shell()` and returns its output. It raises only when the **call** throws — a dropped connection, a timeout. It never sees the command's exit status, because `shell()` does not return one.
+
+Observed on hardware: `pm install` printed a Java stack trace and exited **255**, and `kodi.install_base` reported "Kodi 21.3 installed" for a device with no Kodi on it.
+
+**The obvious verification does not work either.** stderr is merged into stdout, so `exec_ok("ls <path>")` tested for empty output answers `ls: ... No such file or directory` — non-empty, and therefore read as proof the directory exists. `AndroidStateManager._verify` had exactly that bug and passed a restore in which two of three members were absent.
+
+So, after any operation that matters:
+
+```sh
+ls -1 <path> 2>/dev/null | wc -l      # require a non-zero count
+<command> && echo FLEETCTL_OK          # require the sentinel
+```
+
+Never substring-match a path against output that might be an error message *containing* that path. Never treat "returned without raising" as evidence of anything.
+
+Fixing `exec` to append `; echo __EXIT__$?` and parse it would remove the root cause and let several per-vendor `verify_*` quirks retire. It is **not attempted** — it changes every Android call path at once.
+
 ## Connection lifecycle
 
 | Fact | Consequence |
@@ -48,6 +69,19 @@ gzip -d archive.tar.gz                  &&  tar xf archive.tar -C <dest>
 
 This is a **Fire OS vendor quirk**, not an Android fact — it belongs to `packs/firetv`, and the Shield must not inherit it untested.
 
+### Write GNU tar, never PAX
+
+A Kodi profile routinely exceeds tar's 100-character name field — addon `__pycache__` trees reach 165. Python's `tarfile` encodes that overflow as **PAX extended headers** by default, and the `tar` on a set-top Android device reads **GNU** long names but not PAX. Given a PAX archive it truncates the name mid-path and dies:
+
+```
+tar: can't remove: addons/.../baseitem_factories/__p: Is a directory
+tar: bad header
+```
+
+The damage is partial and quiet: extraction aborts inside the first member, so `addons/` exists with a plausible-looking subset while `userdata/` and `media/` never appear. An identical 133-character path extracts under GNU and fails under PAX on the same device, same command.
+
+`_pack_flat` in `apps/kodi/steps.py` passes `format=tarfile.GNU_FORMAT`, and a test asserts no member carries `pax_headers`. Any new code writing an archive destined for a device must do the same. Unlike `tar -z` truncation this is **not** a vendor quirk — it is every busybox/toybox `tar` — so it belongs in the shared build path, not in a pack.
+
 ## Package management
 
 ```sh
@@ -57,7 +91,37 @@ pm trim-caches 16G
 pm install -r <apk>
 ```
 
-**`pm disable-user` silently no-ops on old Fire OS.** On Fire OS 5.x (1st-gen stick hardware) it is blocked for many system packages from a non-root shell and fails without a useful error. It works on Fire OS 7.x. Always verify with `pm list packages -d` rather than assuming success — and never report a debloat as successful without that check.
+**`pm disable-user` silently no-ops on old Fire OS.** On Fire OS 5.x (1st-gen stick hardware) it is blocked for many system packages from a non-root shell and fails without a useful error. It works on Fire OS 7.x. Always verify with `pm list packages -d` rather than assuming success — and never report a debloat as successful without that check. (Re-reading state is how *any* Android device confirms *any* command; Fire OS is just where it first bit.)
+
+**Stage APKs in `/data/local/tmp`, never `/sdcard`.** From Android 11 `/sdcard` is a FUSE mount that `system_server` — which performs the install — has no SELinux permission to read:
+
+```
+avc: denied { read } ... tcontext=u:object_r:fuse:s0
+Error: Unable to open file: /sdcard/kodi.apk
+Consider using a file under /data/local/tmp/
+```
+
+The push succeeds, so every byte arrives and only the install fails. `AndroidQuirks.apk_staging_dir` defaults to `/data/local/tmp`, which is adb-writable and installer-readable on **every** Android version — a universal default, not a per-vendor override. `AndroidAppManager.install` re-reads the package list afterwards and raises when the package is absent, because the install command cannot be trusted to report failure.
+
+Note `/data/local/tmp` is on the data partition, so a large APK consumes space `free_bytes(external_storage)` does not describe.
+
+## Power state: a sleeping box stays on the network
+
+After `KEYCODE_SLEEP`, ping, TCP/5555 and ADB all keep answering while `mWakefulness` reads `Asleep`. A ping-based or `device_tracker`-based trigger therefore **never transitions**, and an automation built on one looks correct and silently never fires. Read `mWakefulness` explicitly — `Toolkit.device_power` parses `dumpsys power | grep mWakefulness=` in `packs/android/actions.py`.
+
+**There are four wakefulness states, not two.** `Dreaming` means the screensaver is up: the device is on and may already be playing something. An automation firing on every `off → on` also fires when a screensaver exits, yanking the foreground away from whatever was playing. Condition on the specific transition (`from_state.attributes.power_state == 'asleep'`), never on truthiness.
+
+This is the **opposite** failure from a Steam Deck, where wifi power-save drops TCP while ICMP keeps answering. Two platforms, two inferences — which is exactly why neither should be guessed.
+
+## What ADB cannot do
+
+Both of these report success and change nothing — instances of the exit-status problem above.
+
+**A launcher can be installed but not selected.** `cmd package set-home-activity` prints `Success` and leaves HOME unchanged; `cmd role add-role-holder ... android.app.role.HOME` errors on nothing and changes nothing, with or without `--user 0`. This is Android behaving correctly — silently reassigning HOME from a debug shell is launcher-hijack, so the role system requires on-device consent, and vendor firmware pins it further. `cmd role` has no `get-role-holders` on these builds, so the role cannot even be read back: press HOME and check `dumpsys activity activities | grep mResumedActivity`. If you ever clear the HOME role, re-add a known-good launcher **in the same command chain** — a dropped connection between clear and add leaves the device at `FallbackHome`. A launcher's own prefs live in `/data/data/<pkg>/shared_prefs/`, `Permission denied` for uid 2000, so in-launcher settings are not configurable either.
+
+**Kodi cannot be made to start at boot.** Its only exported activity is `org.xbmc.kodi/.Splash` with `DEFAULT` and `BROWSABLE` and **no `HOME` category**; only `com.google.android.tvlauncher` and `com.android.tv.settings` answer a HOME intent query; and `secure boot_to_app`, `global boot_to_app` and `secure default_home` all return `null` — the platform exposes no such key. Third-party autostart APKs are a dead category by platform design (Android 10 restricts background activity starts, and TV builds are stricter still). Do not promise autostart as a fleetctl feature.
+
+ADB itself is **not** subject to that restriction, which is why `kodi.launch` works — `am start` from an adb shell is not a background app start. The supported path is an external trigger calling `kodi.launch`, which resolves the activity generically (`cmd package resolve-activity --brief`, leanback category first) and then verifies with `pidof`, because `am start` reports failure on stdout where the command layer cannot see it.
 
 ## Discovery
 
@@ -83,6 +147,13 @@ Ping-sweep notes: send **2 packets, not 1** — a single dropped ICMP packet on 
 | Auth times out on a known-good device | wrong key identity | check which key store the consumer uses |
 | Command truncated on a big directory | default 10s timeout | pass an explicit, size-scaled timeout |
 | Deploy fails mid-extract, no space | no pre-flight check | check free space for archive + extracted + headroom |
+| Step reports success, nothing changed | exit status invisible | re-read state; require a count or a sentinel |
+| `addons/` partly extracted, `userdata/` absent | PAX archive from Python `tarfile` | `format=tarfile.GNU_FORMAT` |
+| Push succeeds, install does nothing | APK staged on `/sdcard` (FUSE) | stage in `/data/local/tmp` |
+| Wake automation never fires | box answers the network while asleep | read `mWakefulness`, not reachability |
+| Launcher installed but never active | HOME role needs on-device consent | not automatable; verify with `mResumedActivity` |
+
+One open case, **not root-caused**: a Fire TV stick stopped answering ADB immediately after a successful deploy — ping fine, 5555 open, only the handshake timing out — while a sibling stick on the same key answered instantly, which rules out the key store. The deploy itself landed and runs correctly; access did not recover in that session. It matters because `kodi-deploy-all` and `kodi-refresh` both run `kodi.apply_device_config` right after `kodi.deploy` against the same device. If a device shows this exact signature, check whether it has re-authorized before running anything else against it, and treat a second prompt reappearing as its own investigation rather than something already understood.
 
 ## Never
 

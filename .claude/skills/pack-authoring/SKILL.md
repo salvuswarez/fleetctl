@@ -94,11 +94,40 @@ The reason is concrete: `pm disable-user` silently no-ops on Fire OS 5.x, and to
 - [ ] Tests run against `FakeTransport` with canned command output
 - [ ] Docs state what was verified on real hardware vs. inferred
 
+## Remote commands: what a green test cannot see
+
+A `FakeTransport` is scripted, so it cannot tell you that the string you sent was wrong — only that
+your parser handles the string you *expected*. Three failures live entirely in that gap, and all
+three present as "the step said it worked and nothing changed".
+
+- **A quoted `~` is a literal directory.** Quoting arguments is right — an unquoted path with a space
+  deletes two directories — but it also stops the remote shell expanding `~`. `rm -rf '~/.cache/fleetctl'`
+  targets a directory that does not exist, and `rm -rf` on a missing path exits 0. The same bite hit
+  `df -k '~/...'`. `packs/posix/actions.py:expand_home()` resolves it via `echo $HOME` and **raises**
+  when the home directory cannot be read, rather than acting on a path that is still wrong;
+  `remove_paths` and `PosixStateManager` both go through it. Any `~`-relative value from a data file
+  must be expanded before it reaches a quoted command, and tests must assert on the *expanded* path.
+- **`pgrep -f <pattern>` matches its own shell.** `sh -c "pgrep -c -f kodi.bin"` contains the pattern,
+  so the count is at least 1 whether or not the app is running — a false "still running", not an
+  obvious error. Use the bracket trick (`'[k]odi.bin'`) or match the executable exactly (`pgrep -x`).
+  This matters for any step that must confirm an app is stopped before editing its config, since Kodi
+  rewrites `guisettings.xml` on exit and would genuinely clobber the edit. `flatpak ps` is not a
+  substitute — it lists only what flatpak is tracking, so an app launched from a Steam shortcut is
+  invisible to it.
+- **A command that fails can read as one that worked.** The full version of this, and the verification
+  patterns that survive it, are in `adb-device-ops`. `exec_ok` returning `""` on the POSIX side is the
+  same shape: "the command does not exist" and "the answer is genuinely absent" arrive identically.
+
+**Script a test double from output actually observed on the hardware**, never from an assumed CLI.
+That is the only thing that catches any of the above.
+
 ## Common mistakes
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Step runs against a device that can't support it | capability over-declared | declare only what's implemented |
+| Space-reclaiming step frees nothing | `~` quoted into a literal path | `expand_home()` before quoting |
+| App "still running" after a stop | bare `pgrep -f` matched itself | `pgrep -x`, or the `[k]` bracket trick |
 | Agent runs a wipe without approval | effect class defaulted or wrong | mark it `DESTRUCTIVE` |
 | Shield inherits a Fire OS workaround | subclassed a vendor pack | compose `packs/android` instead |
 | A second vendor needs a code change | package list hardcoded | move it to `data/*.yml` |
