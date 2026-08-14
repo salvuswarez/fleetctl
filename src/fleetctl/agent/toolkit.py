@@ -7,17 +7,23 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from ..cli.bootstrap import Container
-from ..core.errors import FleetError
-from ..core.observability.audit import AuditEvent, AuditKind, Outcome
-from ..core.observability.correlation import correlate
-from ..core.operations.registry import OperationHandle, OperationStatus
-from ..core.policy import Verdict
-from ..core.registry import RegisteredStep
-from ..core.workflow.engine import WorkflowEngine
-from ..core.workflow.plan import Plan, PlannedTask, build_plan
+from fleetctl.cli.bootstrap import Container
+from fleetctl.core.errors import FleetError
+from fleetctl.core.inventory.device import normalize_tag
+from fleetctl.core.observability.audit import AuditEvent, AuditKind, Outcome
+from fleetctl.core.observability.correlation import correlate
+from fleetctl.core.operations.registry import OperationHandle, OperationStatus
+from fleetctl.core.policy import Verdict
+from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.workflow.engine import WorkflowEngine
+from fleetctl.core.workflow.plan import Plan, PlannedTask, build_plan
 
 LOGGER = logging.getLogger(__name__)
+
+# Tags that name a single canonical device rather than a group. Setting one
+# clears it everywhere else, whichever verb is used — `kodi-capture-gold`
+# targets `tags: [gold]` and a second gold device would silently double it.
+EXCLUSIVE_TAGS: frozenset[str] = frozenset({"gold"})
 
 
 class ApprovalRequired(FleetError):
@@ -390,14 +396,96 @@ class Toolkit:
             handle.fail(str(exc))
             return None
 
+    def set_tag(self, device_id: str, tag: str) -> dict[str, Any]:
+        """Add a tag to a device.
+
+        Tags are how a device opts into workflows (`targets: {tags: [kodi]}`)
+        and into protection rules, and discovery never assigns one — so a
+        device found by a scan is invisible to every tag-targeted workflow
+        until something calls this. That is what this exists for.
+
+        Exclusivity is a property of the tag, not of the caller: `gold` names
+        a single canonical device, and letting a generic tag verb create a
+        second one would leave `kodi-capture-gold` capturing from two sources
+        with no way to say which build came from where.
+
+        **PARAMETERS:**
+            `device_id` (str): The device to tag.  <br>
+            `tag` (str): Tag to add, normalized before it is stored.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The device's id and its tags after the change.  <br>
+
+        **RAISES:**
+            `FleetError`: If `device_id` is not in the inventory.  <br>
+            `ConfigError`: If `tag` is not a usable tag.  <br>
+        """
+        return self._apply_tag(device_id, tag, action="inventory.set_tag")
+
+    def clear_tag(self, device_id: str, tag: str) -> dict[str, Any]:
+        """Remove a tag from a device.
+
+        **PARAMETERS:**
+            `device_id` (str): The device to untag.  <br>
+            `tag` (str): Tag to remove.  <br>
+
+        **RETURNS:**
+            `dict[str, Any]`: The device's id and its tags after the change.  <br>
+
+        **RAISES:**
+            `FleetError`: If `device_id` is not in the inventory.  <br>
+            `ConfigError`: If `tag` is not a usable tag.  <br>
+        """
+        folded = normalize_tag(tag)
+        device = self.container.inventory.clear_tag(device_id, folded)
+        self._record_tag_change("inventory.clear_tag", device_id, folded)
+        return {"id": device.id, "tags": list(device.tags)}
+
+    def _apply_tag(self, device_id: str, tag: str, *, action: str) -> dict[str, Any]:
+        """Add a tag and audit it under `action`.
+
+        `action` is a parameter because the audit trail is durable: entries
+        written before `set_tag` existed say `inventory.set_gold_device`, and
+        rewriting what that verb records now would split one history in two
+        for anyone reading it back.
+
+        **RETURNS:**
+            `dict[str, Any]`: The device's id and its tags after the change.  <br>
+        """
+        folded = normalize_tag(tag)
+        device = self.container.inventory.set_tag(device_id, folded, exclusive=folded in EXCLUSIVE_TAGS)
+        self._record_tag_change(action, device_id, folded)
+        return {"id": device.id, "tags": list(device.tags)}
+
+    def _record_tag_change(self, action: str, device_id: str, tag: str) -> None:
+        """Audit a tag change, because a tag decides what may reach a device.
+
+        `policy.protected` matches on tags, so removing one can be the act
+        that makes a device reachable — which belongs in the durable record
+        alongside the operations it then permits.
+        """
+        with correlate(actor=self.actor):
+            self.container.audit.write(
+                AuditEvent.build(
+                    AuditKind.CONFIG,
+                    action,
+                    target=device_id,
+                    outcome=Outcome.OK,
+                    detail={"surface": "agent", "tag": tag},
+                )
+            )
+
     def set_gold_device(self, device_id: str) -> dict[str, Any]:
         """Designate `device_id` as the sole device carrying the ``gold`` tag.
 
         Which device is "gold" — the reference capture source — is picked at
         any time, not fixed in config: a caller (a panel button, an agent)
-        may retarget it on the fly. Exclusive, so exactly one device carries
-        the tag at once, matching what `kodi-capture-gold`'s `targets:
-        {tags: [gold]}` expects.
+        may retarget it on the fly.
+
+        Kept as its own verb because the panel has a dedicated button for it,
+        but it is `set_tag("gold")` and nothing more. Exclusivity lives in
+        `EXCLUSIVE_TAGS` rather than in this method, so the generic verb
+        cannot be used to create a second gold device behind its back.
 
         **PARAMETERS:**
             `device_id` (str): The device to designate.  <br>
@@ -408,18 +496,7 @@ class Toolkit:
         **RAISES:**
             `FleetError`: If `device_id` is not in the inventory.  <br>
         """
-        device = self.container.inventory.set_tag(device_id, "gold", exclusive=True)
-        with correlate(actor=self.actor):
-            self.container.audit.write(
-                AuditEvent.build(
-                    AuditKind.CONFIG,
-                    "inventory.set_gold_device",
-                    target=device_id,
-                    outcome=Outcome.OK,
-                    detail={"surface": "agent"},
-                )
-            )
-        return {"id": device.id, "tags": list(device.tags)}
+        return self._apply_tag(device_id, "gold", action="inventory.set_gold_device")
 
     def forget_device(self, device_id: str) -> dict[str, Any]:
         """Drop a device from the inventory, so it returns only when a scan finds it again.
@@ -512,7 +589,7 @@ class Toolkit:
         """
         import click  # noqa: PLC0415 - only needed to unwrap the CLI's own error type
 
-        from ..cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
+        from fleetctl.cli.main import _run_device_step, _run_fleet_step  # noqa: PLC0415 - avoids a cycle at import time
 
         try:
             if step.spec.scope == "device":
@@ -535,7 +612,7 @@ class Toolkit:
         )
 
     def _execute(self, plan: Plan) -> dict[str, Any]:
-        from ..cli.main import _task_runner  # noqa: PLC0415 - avoids a cycle at import time
+        from fleetctl.cli.main import _task_runner  # noqa: PLC0415 - avoids a cycle at import time
 
         engine = WorkflowEngine(_task_runner(self.container), self.container.audit, actor=self.actor)
         report = engine.run(plan)

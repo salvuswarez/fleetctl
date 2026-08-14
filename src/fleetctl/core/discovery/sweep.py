@@ -10,7 +10,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-from ..errors import ConfigError
+from fleetctl.core.errors import ConfigError
 
 LOGGER = logging.getLogger(__name__)
 

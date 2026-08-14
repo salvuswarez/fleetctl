@@ -6,19 +6,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Protocol
 
-from ..appmgr import AppManager
-from ..artifacts.ref import ArtifactRef
-from ..artifacts.store import ArtifactStore
-from ..effects import Capability, Effect
-from ..inventory.device import Device
-from ..inventory.store import DeviceStore
-from ..operations.registry import OperationHandle
-from ..state import StateManager
-from ..transport.base import Transport
+from fleetctl.core.appmgr import AppManager
+from fleetctl.core.artifacts.ref import ArtifactRef
+from fleetctl.core.artifacts.store import ArtifactStore
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.inventory.store import DeviceStore
+from fleetctl.core.operations.registry import OperationHandle
+from fleetctl.core.state import StateManager
+from fleetctl.core.transport.base import Transport
 
 if TYPE_CHECKING:
     # Runtime import would close the loop step -> scan -> claim -> registry -> step.
-    from ..discovery.scan import Scanner
+    from fleetctl.core.discovery.scan import Scanner
 
 
 @dataclass(frozen=True, slots=True)

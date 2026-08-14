@@ -43,6 +43,12 @@ uv run pytest --cov=src --cov-report=term-missing
 
 CI runs exactly this on Python 3.12 and 3.13. `/gate` does it and fixes what it finds.
 
+`tests/unit/test_architecture.py` carries the checks no formatter or type checker makes, so they
+fail the gate rather than a review: the inward-only ring rule, **absolute intra-package imports**
+(`from fleetctl.core...`, never `from ...core...`), and **docstring coverage** with this project's
+`**PARAMETERS:**` / `**RETURNS:**` / `**RAISES:**` headers. See `.claude/rules/style.md` for the
+exemptions and the reasoning.
+
 ## Memory is local; the repo gets artifacts
 
 `.claude/memory/` is gitignored and stays that way. It is a curation surface an agent writes to

@@ -7,9 +7,9 @@ import shlex
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
-from ...core.effects import Effect
-from ...core.transport.base import CommandRunner
-from .quirks import AndroidQuirks
+from fleetctl.core.effects import Effect
+from fleetctl.core.transport.base import CommandRunner
+from fleetctl.packs.android.quirks import AndroidQuirks
 
 LOGGER = logging.getLogger(__name__)
 

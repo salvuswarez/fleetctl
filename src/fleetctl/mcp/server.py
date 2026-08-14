@@ -8,9 +8,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..agent.toolkit import ApprovalRequired, PolicyDenied, Toolkit
-from ..cli.bootstrap import build_container
-from ..core.errors import FleetError
+from fleetctl.agent.toolkit import ApprovalRequired, PolicyDenied, Toolkit
+from fleetctl.cli.bootstrap import build_container
+from fleetctl.core.errors import FleetError
 
 LOGGER = logging.getLogger(__name__)
 

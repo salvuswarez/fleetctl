@@ -16,7 +16,7 @@ from fleetctl.agent.toolkit import ApprovalRequired, PolicyDenied, Toolkit
 from fleetctl.cli.bootstrap import build_container
 from fleetctl.core.artifacts.ref import ArtifactRef
 from fleetctl.core.effects import Capability, Effect
-from fleetctl.core.errors import FleetError
+from fleetctl.core.errors import ConfigError, FleetError
 from fleetctl.core.inventory.device import Device, DeviceStatus
 from fleetctl.core.observability.audit import AuditKind, Outcome
 from fleetctl.core.registry import RegisteredStep, Registry
@@ -609,6 +609,93 @@ def test_set_gold_device_is_audited(tmp_path: Path) -> None:
     assert len(events) == 1
     assert events[0].target == "stub-1"
     assert events[0].outcome is Outcome.OK
+
+
+def test_set_tag_lets_a_scanned_device_opt_into_tag_targeted_workflows(tmp_path: Path) -> None:
+    """Discovery assigns no tags, so without this a scanned device is invisible
+    to every workflow whose `targets` name one."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    result = toolkit.set_tag("stub-1", "kodi")
+
+    # Assert
+    assert sorted(result["tags"]) == ["kodi", "managed"]
+    assert toolkit.container.inventory.select(tags=["kodi"])
+
+
+def test_clear_tag_removes_only_the_named_tag(tmp_path: Path) -> None:
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+    toolkit.set_tag("stub-1", "kodi")
+
+    # Act
+    result = toolkit.clear_tag("stub-1", "kodi")
+
+    # Assert
+    assert result["tags"] == ["managed"]
+
+
+def test_clearing_a_tag_a_device_does_not_carry_is_not_an_error(tmp_path: Path) -> None:
+    """The caller wanted it gone and it is."""
+    # Act
+    result = _toolkit(tmp_path, PERMISSIVE).clear_tag("stub-1", "absent")
+
+    # Assert
+    assert result["tags"] == ["managed"]
+
+
+@pytest.mark.parametrize("typed", ["KODI", "  kodi  ", "Kodi"])
+def test_a_tag_is_normalized_before_it_is_stored(tmp_path: Path, typed: str) -> None:
+    """Workflow targeting, policy matching and `select` all compare literally,
+    so an unfolded tag would match nothing and look like it had been set."""
+    # Act
+    result = _toolkit(tmp_path, PERMISSIVE).set_tag("stub-1", typed)
+
+    # Assert
+    assert "kodi" in result["tags"]
+
+
+@pytest.mark.parametrize("typed", ["", "   ", "has space", "-leading", "sym$bol", "x" * 33])
+def test_an_unusable_tag_is_refused(tmp_path: Path, typed: str) -> None:
+    # Act / Assert
+    with pytest.raises(ConfigError):
+        _toolkit(tmp_path, PERMISSIVE).set_tag("stub-1", typed)
+
+
+def test_the_generic_tag_verb_cannot_create_a_second_gold_device(tmp_path: Path) -> None:
+    """`kodi-capture-gold` targets `tags: [gold]`. Two gold devices would make
+    it capture from both, with nothing on the build to say which is which."""
+    # Arrange
+    devices = (
+        "devices:\n"
+        "  - id: stub-1\n    type: stub\n    address: 192.168.1.50\n    tags: [managed]\n"
+        "  - id: stub-2\n    type: stub\n    address: 192.168.1.51\n    tags: []\n"
+    )
+    toolkit = _toolkit(tmp_path, PERMISSIVE, devices=devices)
+    toolkit.set_gold_device("stub-1")
+
+    # Act
+    toolkit.set_tag("stub-2", "gold")
+
+    # Assert
+    assert [device.id for device in toolkit.container.inventory.select(tags=["gold"])] == ["stub-2"]
+
+
+def test_a_tag_change_is_audited_because_it_can_change_what_may_reach_a_device(tmp_path: Path) -> None:
+    """`policy.protected` matches on tags, so clearing one can be the act that
+    unlocks a device."""
+    # Arrange
+    toolkit = _toolkit(tmp_path, PERMISSIVE)
+
+    # Act
+    toolkit.set_tag("stub-1", "kodi")
+    toolkit.clear_tag("stub-1", "kodi")
+
+    # Assert
+    actions = [event.action for event in toolkit.container.audit.records() if event.action.startswith("inventory.")]
+    assert actions == ["inventory.set_tag", "inventory.clear_tag"]
 
 
 def test_the_cli_error_type_never_reaches_a_toolkit_caller(tmp_path: Path) -> None:

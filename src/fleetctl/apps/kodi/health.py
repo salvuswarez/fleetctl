@@ -7,9 +7,9 @@ import posixpath
 import re
 import shlex
 
-from ...core.effects import Capability, Effect
-from ...core.workflow.step import DeviceStepContext, StepResult, StepSpec
-from .spec import state_spec
+from fleetctl.apps.kodi.spec import state_spec
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.workflow.step import DeviceStepContext, StepResult, StepSpec
 
 LOGGER = logging.getLogger(__name__)
 

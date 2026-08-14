@@ -6,13 +6,13 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from ..effects import WIRE_CAPABILITIES, Capability, missing_capabilities
-from ..errors import FleetError, OperationCancelled
-from ..observability.correlation import correlate
-from ..operations.registry import OperationHandle, OperationRegistry, OperationStatus
-from ..operations.workspace import workspace
-from ..transport.base import Transport
-from .step import StepResult, StepSpec
+from fleetctl.core.effects import WIRE_CAPABILITIES, Capability, missing_capabilities
+from fleetctl.core.errors import FleetError, OperationCancelled
+from fleetctl.core.observability.correlation import correlate
+from fleetctl.core.operations.registry import OperationHandle, OperationRegistry, OperationStatus
+from fleetctl.core.operations.workspace import workspace
+from fleetctl.core.transport.base import Transport
+from fleetctl.core.workflow.step import StepResult, StepSpec
 
 LOGGER = logging.getLogger(__name__)
 

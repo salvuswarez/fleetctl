@@ -1,0 +1,54 @@
+# What an Android device-state snapshot carries, and what it must never write back.
+#
+# VERIFICATION STATUS: surveyed on a SHIELD Android TV (Android 11) on
+# 2026-08-14. Counts observed there: global 170 keys, system 71, secure 105;
+# 138 packages, 9 third-party, 17 disabled.
+#
+# This is platform knowledge, not vendor knowledge — `android_id` is Android's
+# notion of identity regardless of who built the box — so it lives with the
+# shared base rather than in `firetv/` or `shield/`.
+
+# The `settings` namespaces to read. `secure` is included because it holds
+# accessibility, input-method and launcher state a rebuild genuinely needs;
+# it is also where every device identifier lives, hence `never_capture`.
+capture_namespaces:
+  - global
+  - system
+  - secure
+
+# Read but never written to the artifact. These identify the *hardware*, and a
+# snapshot is a thing that gets copied between devices and pasted into bug
+# reports — an identifier that survives that is a leak, not a setting.
+#
+# fnmatch patterns, matched against `<namespace>.<key>`.
+never_capture:
+  - secure.android_id
+  - secure.bluetooth_address
+  - secure.advertising_id
+  - "*.*serial*"
+  - "*.*imei*"
+  - "*.*_token*"
+  - "*.*account*"
+  - "*.*_id_secret*"
+
+# Captured for reference but never replayed by a restore. Each of these
+# describes a moment in a device's life rather than a preference, and writing
+# one onto a rebuilt box asserts something untrue about it — a provisioning
+# flag replayed onto a half-set-up device skips the rest of setup.
+never_restore:
+  - global.device_provisioned
+  - secure.user_setup_complete
+  - "*.Phenotype_*"          # Google's flag delivery; refreshed from the server
+  - "*._boot_*"              # per-boot snapshots, meaningless on another boot
+  - "*.*boot_count*"
+  - global.adb_enabled       # revoking this mid-restore severs the connection
+  - global.development_settings_enabled
+
+# Packages never reinstalled from a snapshot even when the archive carries
+# them. A system package's APK lives under /system and `pm install` cannot
+# put it back there; attempting it produces a second, unprivileged copy.
+never_install:
+  - android
+  - com.android.*
+  - com.google.android.gms
+  - com.google.android.gsf

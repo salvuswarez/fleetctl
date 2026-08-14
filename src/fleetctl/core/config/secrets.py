@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
-from ..errors import SecretResolutionError
+from fleetctl.core.errors import SecretResolutionError
 
 _REF_PATTERN = re.compile(r"^!ref\s+(?P<scheme>[a-z][a-z0-9_-]*):(?P<locator>.+)$", re.IGNORECASE)
 

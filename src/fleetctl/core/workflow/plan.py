@@ -7,12 +7,12 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
-from ..effects import Effect, missing_capabilities
-from ..errors import FleetError
-from ..inventory.device import Device
-from ..policy import Policy, Verdict, permissive
-from ..registry import Registry
-from .workflow import OnError, Workflow, WorkflowStep
+from fleetctl.core.effects import Effect, missing_capabilities
+from fleetctl.core.errors import FleetError
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.policy import Policy, Verdict, permissive
+from fleetctl.core.registry import Registry
+from fleetctl.core.workflow.workflow import OnError, Workflow, WorkflowStep
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Protocol
 
-from .errors import FleetError
+from fleetctl.core.errors import FleetError
 
 
 @dataclass(frozen=True, slots=True)

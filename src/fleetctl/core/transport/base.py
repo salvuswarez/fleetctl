@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ..effects import Capability, Effect
+from fleetctl.core.effects import Capability, Effect
 
 
 @runtime_checkable

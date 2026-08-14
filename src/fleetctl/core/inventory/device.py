@@ -2,10 +2,46 @@
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from fleetctl.core.errors import ConfigError
+
+# A tag is matched literally by workflow `targets`, by `policy.protected`, and
+# by `DeviceStore.select`. None of those normalize, so `Kodi` and `kodi` would
+# be two different tags and only one of them would ever match anything.
+_TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+MAX_TAG_LENGTH = 32
+
+
+def normalize_tag(tag: str) -> str:
+    """Fold a user-supplied tag into the one form everything matches on.
+
+    Free text reaches this from a panel's tag field, and every consumer
+    compares tags literally — so normalizing at the single write path is what
+    keeps `Kodi`, ` kodi ` and `kodi` from becoming three tags that each match
+    a different subset of the fleet, or nothing at all.
+
+    **PARAMETERS:**
+        `tag` (str): The tag as typed.  <br>
+
+    **RETURNS:**
+        `str`: Lowercased and trimmed.  <br>
+
+    **RAISES:**
+        `ConfigError`: If the result is empty, too long, or carries characters that would not survive a round trip through YAML and workflow matching.  <br>
+    """
+    folded = tag.strip().lower()
+    if not folded:
+        raise ConfigError("A tag cannot be empty")
+    if len(folded) > MAX_TAG_LENGTH:
+        raise ConfigError(f"Tag {folded!r} is longer than {MAX_TAG_LENGTH} characters")
+    if not _TAG_PATTERN.match(folded):
+        raise ConfigError(f"Tag {folded!r} must start with a letter or digit and use only letters, digits, dot, dash or underscore")
+    return folded
 
 
 class DeviceStatus(str, Enum):

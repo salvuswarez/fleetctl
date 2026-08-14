@@ -245,3 +245,57 @@ def test_set_tag_on_an_unknown_device_is_refused(tmp_path: Path) -> None:
     # Act / Assert
     with pytest.raises(FleetError):
         store.set_tag("nope", "gold")
+
+
+def test_clear_tag_removes_it_from_the_named_device_only(tmp_path: Path) -> None:
+    # Arrange
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device(id="a", tags=["kodi", "gold"]), _device(id="b", address="192.168.1.51", tags=["kodi"])])
+
+    # Act
+    updated = store.clear_tag("a", "gold")
+
+    # Assert
+    b = store.get("b")
+    assert updated.tags == ["kodi"]
+    assert b is not None and b.tags == ["kodi"]
+
+
+def test_clear_tag_is_idempotent(tmp_path: Path) -> None:
+    """The caller wanted the tag gone; it already is."""
+    # Arrange
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device(tags=["kodi"])])
+
+    # Act
+    updated = store.clear_tag("stick-1", "gold")
+
+    # Assert
+    assert updated.tags == ["kodi"]
+
+
+def test_clear_tag_leaves_per_app_vars_alone(tmp_path: Path) -> None:
+    """Untagging is the reversible alternative to forgetting a device, which
+    discards its `vars` as well."""
+    # Arrange
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device(tags=["kodi"], vars={"kodi": {"display": {"resolution_index": 18}}})])
+
+    # Act
+    updated = store.clear_tag("stick-1", "kodi")
+
+    # Assert
+    assert updated.tags == []
+    assert updated.vars == {"kodi": {"display": {"resolution_index": 18}}}
+
+
+def test_clear_tag_on_an_unknown_device_is_refused(tmp_path: Path) -> None:
+    # Arrange
+    from fleetctl.core.errors import FleetError
+
+    store = DeviceStore(tmp_path / "devices.yml")
+    store.save([_device()])
+
+    # Act / Assert
+    with pytest.raises(FleetError):
+        store.clear_tag("nope", "kodi")

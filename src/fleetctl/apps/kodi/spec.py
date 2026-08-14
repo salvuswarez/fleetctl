@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...core.state import AppStateSpec
+from fleetctl.core.state import AppStateSpec
 
 APP_ID = "kodi"
 

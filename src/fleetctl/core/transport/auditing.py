@@ -6,10 +6,10 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from ..effects import Capability, Effect
-from ..errors import TransportError
-from ..observability.audit import AuditEvent, AuditKind, ChainedAuditWriter, Outcome
-from .base import Transport
+from fleetctl.core.effects import Capability, Effect
+from fleetctl.core.errors import TransportError
+from fleetctl.core.observability.audit import AuditEvent, AuditKind, ChainedAuditWriter, Outcome
+from fleetctl.core.transport.base import Transport
 
 
 class AuditingTransport:

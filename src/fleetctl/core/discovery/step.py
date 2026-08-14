@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from ..effects import Effect
-from ..errors import FleetError
-from ..registry import RegisteredStep
-from ..workflow.step import DiscoveryStepContext, StepResult, StepSpec
+from fleetctl.core.effects import Effect
+from fleetctl.core.errors import FleetError
+from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.workflow.step import DiscoveryStepContext, StepResult, StepSpec
 
 LOGGER = logging.getLogger(__name__)
 

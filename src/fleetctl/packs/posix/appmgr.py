@@ -11,9 +11,9 @@ import logging
 import shlex
 from pathlib import Path
 
-from ...core.effects import Effect
-from ...core.errors import FleetError
-from ...core.transport.base import Transport
+from fleetctl.core.effects import Effect
+from fleetctl.core.errors import FleetError
+from fleetctl.core.transport.base import Transport
 
 LOGGER = logging.getLogger(__name__)
 

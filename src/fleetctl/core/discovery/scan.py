@@ -6,14 +6,14 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Sequence
 
-from ..errors import FleetError
-from ..inventory.store import DeviceStore
-from ..transport.base import Transport
-from .claim import Claim, claim_hosts
-from .sweep import Host, Sweeper
+from fleetctl.core.discovery.claim import Claim, claim_hosts
+from fleetctl.core.discovery.sweep import Host, Sweeper
+from fleetctl.core.errors import FleetError
+from fleetctl.core.inventory.store import DeviceStore
+from fleetctl.core.transport.base import Transport
 
 if TYPE_CHECKING:
-    from ..registry import DevicePack
+    from fleetctl.core.registry import DevicePack
 
 LOGGER = logging.getLogger(__name__)
 

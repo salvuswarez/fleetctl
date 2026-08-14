@@ -11,10 +11,10 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..config.loader import load_yaml_text
-from ..errors import ConfigError, FleetError
-from .device import Device
-from .reconcile import ReconcileResult, reconcile
+from fleetctl.core.config.loader import load_yaml_text
+from fleetctl.core.errors import ConfigError, FleetError
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.inventory.reconcile import ReconcileResult, reconcile
 
 LOGGER = logging.getLogger(__name__)
 
@@ -141,6 +141,46 @@ class DeviceStore:
                     result = device
                 elif exclusive and tag in device.tags:
                     device = device.model_copy(update={"tags": [existing for existing in device.tags if existing != tag]})
+                updated.append(device)
+
+            self._save(updated)
+            assert result is not None
+            return result
+
+    def clear_tag(self, device_id: str, tag: str) -> Device:
+        """Remove `tag` from one device, persisting immediately.
+
+        The counterpart to `set_tag`, and required for the same reason it is:
+        a tag is the only device annotation a scan never overwrites, so it is
+        also the only one nothing else can undo. Without this, a tag applied
+        by a UI action could be removed only by editing the inventory file or
+        by forgetting the device — which discards its `vars` as well.
+
+        Removing a tag a device does not carry is not an error: the caller
+        wanted it gone and it is.
+
+        **PARAMETERS:**
+            `device_id` (str): The device to untag.  <br>
+            `tag` (str): Tag to remove.  <br>
+
+        **RETURNS:**
+            `Device`: The updated device.  <br>
+
+        **RAISES:**
+            `FleetError`: If `device_id` is not in the inventory.  <br>
+        """
+        with self._lock:
+            devices = self._load()
+            if not any(device.id == device_id for device in devices):
+                raise FleetError(f"Unknown device: {device_id}")
+
+            updated: builtins.list[Device] = []
+            result: Device | None = None
+            for device in devices:
+                if device.id == device_id:
+                    if tag in device.tags:
+                        device = device.model_copy(update={"tags": [existing for existing in device.tags if existing != tag]})
+                    result = device
                 updated.append(device)
 
             self._save(updated)

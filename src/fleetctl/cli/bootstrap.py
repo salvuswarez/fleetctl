@@ -9,26 +9,26 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from ..core.appmgr import AppManager
-from ..core.artifacts.smb import SmbArtifactStore, SmbSettings
-from ..core.artifacts.store import ArtifactStore, LocalArtifactStore
-from ..core.config.dotenv import load_dotenv
-from ..core.config.loader import load_yaml_file
-from ..core.config.secrets import EnvSecretProvider, SecretResolver
-from ..core.discovery.step import SCAN
-from ..core.discovery.step import steps as discovery_steps
-from ..core.errors import FleetError, TransportError
-from ..core.inventory.device import Device
-from ..core.inventory.store import DeviceStore
-from ..core.observability.audit import ChainedAuditWriter, JsonlAuditSink
-from ..core.operations.dispatcher import Dispatcher
-from ..core.operations.registry import OperationRegistry
-from ..core.policy import Policy, load_policy
-from ..core.registry import Registry, discover
-from ..core.state import StateManager
-from ..core.transport.auditing import AuditingTransport
-from ..core.transport.base import Transport
-from ..core.workflow.workflow import Workflow, builtin_workflows, load_workflows
+from fleetctl.core.appmgr import AppManager
+from fleetctl.core.artifacts.smb import SmbArtifactStore, SmbSettings
+from fleetctl.core.artifacts.store import ArtifactStore, LocalArtifactStore
+from fleetctl.core.config.dotenv import load_dotenv
+from fleetctl.core.config.loader import load_yaml_file
+from fleetctl.core.config.secrets import EnvSecretProvider, SecretResolver
+from fleetctl.core.discovery.step import SCAN
+from fleetctl.core.discovery.step import steps as discovery_steps
+from fleetctl.core.errors import FleetError, TransportError
+from fleetctl.core.inventory.device import Device
+from fleetctl.core.inventory.store import DeviceStore
+from fleetctl.core.observability.audit import ChainedAuditWriter, JsonlAuditSink
+from fleetctl.core.operations.dispatcher import Dispatcher
+from fleetctl.core.operations.registry import OperationRegistry
+from fleetctl.core.policy import Policy, load_policy
+from fleetctl.core.registry import Registry, discover
+from fleetctl.core.state import StateManager
+from fleetctl.core.transport.auditing import AuditingTransport
+from fleetctl.core.transport.base import Transport
+from fleetctl.core.workflow.workflow import Workflow, builtin_workflows, load_workflows
 
 LOGGER = logging.getLogger(__name__)
 

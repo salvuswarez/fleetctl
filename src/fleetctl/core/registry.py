@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from importlib import metadata
 from typing import Any, Callable, Iterable, Mapping, Protocol, runtime_checkable
 
-from .effects import Capability
-from .errors import FleetError
-from .transport.base import CommandRunner
-from .workflow.step import StepResult, StepSpec
+from fleetctl.core.effects import Capability
+from fleetctl.core.errors import FleetError
+from fleetctl.core.transport.base import CommandRunner
+from fleetctl.core.workflow.step import StepResult, StepSpec
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,7 +72,12 @@ class AppPack(Protocol):
 
 
 class Registry:
-    """Everything discovered: device packs, app packs, and their steps."""
+    """Everything discovered: device packs, app packs, and their steps.
+
+    Takes no arguments: a registry starts empty and is filled by `discover()`
+    or, in a test, by registering packs directly. That is what lets the suite
+    build a fleet with one stub pack and no entry points installed.
+    """
 
     def __init__(self) -> None:
         self._device_packs: dict[str, DevicePack] = {}
