@@ -592,6 +592,8 @@ def _report_scan(container: Container, outcome: ScanOutcome) -> None:
         return
 
     click.echo(f"\nAdded {outcome.added}, updated {outcome.updated}, {outcome.total} device(s) total.")
+    if outcome.collapsed:
+        click.echo(f"Collapsed {outcome.collapsed} duplicate record(s) into a device already known.")
     click.echo(f"Inventory: {container.inventory_path}")
     click.echo("Edit that file directly to set tags, names, or per-app vars — a scan never overwrites them.")
 

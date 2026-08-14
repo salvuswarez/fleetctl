@@ -30,6 +30,7 @@ class ScanOutcome:
         `claims` (tuple[Claim, ...]): One per host that answered, in sweep order.  <br>
         `added` (int): Devices new to the inventory.  <br>
         `updated` (int): Existing devices whose details changed.  <br>
+        `collapsed` (int): Stored records folded into a device already in the inventory. Explains a total that fell without anything being forgotten.  <br>
         `total` (int): Devices in the inventory afterwards.  <br>
         `written` (bool): Whether the inventory was written; false for a dry run.  <br>
     """
@@ -38,6 +39,7 @@ class ScanOutcome:
     claims: tuple[Claim, ...] = ()
     added: int = 0
     updated: int = 0
+    collapsed: int = 0
     total: int = 0
     written: bool = False
 
@@ -72,7 +74,8 @@ class ScanOutcome:
             return f"{self.responded} host(s) answered on {self.subnet}; none were recognized"
         if not self.written:
             return f"{len(self.recordable)} device(s) found on {self.subnet}; inventory not written"
-        return f"{len(self.recordable)} device(s) on {self.subnet}: {self.added} added, {self.updated} updated"
+        line = f"{len(self.recordable)} device(s) on {self.subnet}: {self.added} added, {self.updated} updated"
+        return f"{line}, {self.collapsed} duplicate(s) collapsed" if self.collapsed else line
 
     def facts(self) -> dict[str, object]:
         """RETURNS: dict[str, object]: The scan as structured values for a caller that is not a terminal."""
@@ -84,6 +87,7 @@ class ScanOutcome:
             "unrecognized": len(self.unrecognized),
             "added": self.added,
             "updated": self.updated,
+            "collapsed": self.collapsed,
             "total": self.total,
             "written": self.written,
         }
@@ -141,11 +145,14 @@ class Scanner:
         devices = [claim.device for claim in outcome.recordable if claim.device is not None]
         result = self.inventory.reconcile(devices)
         note(f"{result.added} added, {result.updated} updated")
+        if result.collapsed:
+            note(f"{result.collapsed} duplicate record(s) collapsed")
         return ScanOutcome(
             subnet=subnet,
             claims=claims,
             added=result.added,
             updated=result.updated,
+            collapsed=result.collapsed,
             total=len(result.devices),
             written=True,
         )
