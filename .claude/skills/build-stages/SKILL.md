@@ -43,8 +43,23 @@ declines `ID=steamos` rather than applying its writable-root defaults.
 against a plain Linux box.
 
 Capture, build, deploy, per-device config, maintenance and cache trimming all
-run against the Deck. What that took is in
-`project_steamdeck_kodi_pack_plan.md`.
+run against the Deck, in both directions, on real hardware (2026-08-06,
+SteamOS 3.8.24). Three facts from that run are worth carrying:
+
+- **The Flatpak state root has no `.kodi` subdirectory.** Kodi's profile
+  members sit directly in `~/.var/app/{identifier}/data`. The guess that it
+  mirrored Android's `.kodi` was wrong, and would have written a profile into a
+  directory Kodi does not read. This is why `AppStateSpec` carries
+  `app_roots: Mapping[str, str]` per platform — android maps to `.kodi`, linux
+  to `""`, and an absent entry legitimately means "no subdirectory".
+- **A Deck needs `writable_root: false` and `use_sudo: false`.** `/` is
+  read-only and `sudo -n` fails, so `linux_host` declines `ID=steamos` outright
+  rather than applying its writable-root defaults.
+- **The `gold` build carries exactly three compiled objects, all ELF ARM
+  32-bit** — `inputstream.adaptive`, `inputstream.rtmp`, `pvr.iptvsimple`.
+  Nothing else is architecture-specific. Deploying `gold` verbatim to an x86_64
+  Deck would shadow the Flatpak's own working engines with unloadable ARM ones,
+  which is what `deck.yml` (`extends: gold`) exists to prune.
 
 ## Six decisions that were open before S1 — five now settled
 
@@ -56,7 +71,7 @@ Full detail in `docs/architecture.md` §14 ("Open before S1").
 | 2 | Split `StepContext` by step kind | ✅ `FleetStepContext` / `DeviceStepContext` / `TransformStepContext` |
 | 3 | The app↔pack contract | ✅ `state` is the deep verb — the pack owns paths, archives, staging and free space; an app pack issues no transfer command |
 | 4 | Config layering earlier than S3 | ✅ landed in S1 (`core/config/layering.py`) |
-| 5 | Enforce the ring rule in CI | ✅ `tests/test_architecture.py`, part of the gate |
+| 5 | Enforce the ring rule in CI | ✅ `tests/unit/test_architecture.py`, part of the gate |
 | 6 | `Step` returns `StepResult` | ✅ carries `summary`, `artifacts`, `facts` |
 
 All six are settled. Decision 3 resolved in favour of the deep `state` verb: an app declares an `AppStateSpec` (its platform identifiers, state subdirectory, members, exclusions) and the device pack resolves the path, builds the archive with whatever tooling actually works on that hardware, checks headroom, and verifies the result. This is what keeps `apps/kodi` from encoding the toybox `tar -z` quirk that a Shield must not inherit.
@@ -81,7 +96,7 @@ The architecture doc describes the destination. The stage table describes what i
 
 ## Carried forward from `firestick_manager`
 
-Hard-won behaviour that must survive the port intact (S2/S5). Each has a memory entry:
+Hard-won behaviour that must survive the port intact (S2/S5):
 
 | Behaviour | Lands in |
 |-----------|----------|
@@ -91,5 +106,5 @@ Hard-won behaviour that must survive the port intact (S2/S5). Each has a memory 
 | Single-archive transfer, never per-file sync | `apps/kodi` deploy |
 | Size-scaled timeouts for transfer and unpack | `AdbTransport` |
 | Working cancellation, debounced flush, restart handling | `core/operations` |
-| MAC → serial → IP reconciliation; only overwrite on a real value | `core/inventory` |
+| Serial → MAC → address reconciliation; only overwrite on a real value | `core/inventory` |
 | Device protection (situational, not a standing rule) | `core/policy`, as opt-in config |

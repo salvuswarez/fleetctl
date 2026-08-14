@@ -107,7 +107,7 @@ uv run fleetctl run firetv.check --device living-room-stick
 uv run pytest
 ```
 
-500 tests, weighted toward the failure modes that bit the predecessor project on real hardware (see `.claude/memory/gotcha_*`). For coverage:
+500 tests, weighted toward the failure modes that bit the predecessor project on real hardware. For coverage:
 
 <div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
@@ -171,7 +171,7 @@ fleetctl/
 │   ├── observability.md      # diagnostics / timeline / audit
 │   ├── roadmap.md            # S0–S8 stages, exit criteria, current status
 │   └── ha-parity.md          # every Home Assistant panel command mapped to its fleetctl equivalent
-├── .claude/                  # agents, skills, commands, project memory
+├── .claude/                  # agents, skills, commands, per-ring rules
 ├── pyproject.toml
 ├── CLAUDE.md
 ├── README.md

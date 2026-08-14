@@ -1625,9 +1625,9 @@ reason to skip MCP — it's the reason the policy layer must exist *before*
 MCP does.
 
 **The standing rule this codebase already has** is the sharpest example.
-From project memory: the gold source device *"should only be deployed to
-once we know everything is perfect. cant mess that one up."* Today that
-rule lives in a memory file and in your head. It is enforced by nobody. An
+The gold source device *"should only be deployed to once we know everything
+is perfect. cant mess that one up."* Today that rule lives in a note and in
+your head. It is enforced by nobody. An
 agent with a `kodi_deploy` tool and a device list will not know it exists.
 
 So it becomes **declarative policy**, enforced in the engine for every
@@ -1916,8 +1916,11 @@ These are hard-won and must survive the port intact — they're the reason
 - **Size-scaled timeouts** for transfer and on-device unpack.
 - **`OperationRegistry`'s** working cancellation, debounced flush, and
   restart handling — port as-is.
-- **`_merge.reconcile`'s** MAC → serial → IP matching and its
-  "only overwrite when the probe returned something" rule.
+- **`_merge.reconcile`'s** identity matching and its "only overwrite when the
+  probe returned something" rule — but with the precedence corrected. A MAC
+  identifies an interface, not a box, so a **serial outranks a disagreeing
+  MAC**; a device reached over ethernet once and wifi the next time reports
+  two MACs and must not become two records.
 - **The gold-device rule** — but as enforced policy (S4), not a memory file.
 
 <br/>

@@ -67,7 +67,7 @@ These are hard-won operational details, not architecture — they moved into the
 | Single-archive transfer, never per-file sync | `apps/kodi` deploy step (S2) |
 | Size-scaled timeouts for transfer and on-device unpack | `AdbTransport` (S1/S2) |
 | `OperationRegistry`'s working cancellation, one-per-device guard, restart handling | `core/operations` (S1), ported and extended |
-| MAC → serial → IP reconciliation; only overwrite a field when the probe returned something | `core/inventory`, `core/discovery` (S1) |
+| Reconciliation that only overwrites a field when the probe returned something. The precedence was **corrected** on the way in: a serial now outranks a disagreeing MAC, because a MAC identifies an interface and one box with ethernet and wifi reports two | `core/inventory`, `core/discovery` (S1) |
 | The gold-device rule | `core/policy` (S4) — as enforced config, not a memory file |
 
 Full detail and citations for each of these: `.claude/skills/adb-device-ops/SKILL.md` and `architecture.md` §14.
