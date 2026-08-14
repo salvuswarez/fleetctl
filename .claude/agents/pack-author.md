@@ -1,7 +1,7 @@
 ---
 name: pack-author
 description: Proactively dispatch for work in `src/fleetctl/packs/` or `src/fleetctl/apps/` — adding a device type, adding an application, writing probes, declaring capabilities and effect classes, or moving hardcoded lists into pack data files. Use when the task mentions Fire TV, Shield, Kodi, bloat lists, or device discovery.
-tools: [read, glob, grep, bash, edit]
+tools: [Read, Glob, Grep, Bash, Edit, Write]
 model: sonnet
 memory: project
 skills: [pack-authoring, adb-device-ops, fleetctl-architecture, build-stages]

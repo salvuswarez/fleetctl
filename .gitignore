@@ -48,10 +48,12 @@ htmlcov/
 !.claude/commands/
 !.claude/rules/
 !.claude/skills/
-# Architecture decisions and hard-won gotchas: worth as much to the next
-# person as the code. Kept free of real device data like everything else.
-!.claude/memory/
 !.claude/settings.json
+# .claude/memory/ is deliberately NOT whitelisted. It is a local curation
+# surface an agent writes to unsupervised, so tracking it would put an
+# unreviewed write target inside the commit surface. Durable knowledge earns
+# its way into the repo by being written into a skill, rule, command, agent
+# or CLAUDE.md — never by committing the memory file itself.
 
 # --- OS / editor ------------------------------------------------------------
 .DS_Store

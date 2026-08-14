@@ -176,11 +176,30 @@ Two traps these encode, worth keeping even if the scripts rot:
   failure message *contains* the path, so the probe reads as success when it
   failed. Echo a sentinel (`&& echo FLEETCTL_OK`) instead.
 
+## What a live run has caught that the unit suite cannot
+
+Every one of these was green in the fake-backed tests and wrong on hardware.
+
+- **`exec_ok` returns `""` on failure**, so "the command does not exist" and
+  "the fact is genuinely absent" are the same observation. It bit twice in one
+  SteamOS session: `hostname` is not installed (exit 127 — read the name with
+  `uname -n`, which is POSIX and was already being called), and
+  `flatpak info --show-version` prints nothing on the Flatpak SteamOS ships —
+  so an installed Kodi reported as not installed. Parse a command's *normal*
+  output over a convenience flag, and prefer POSIX-guaranteed binaries in any
+  probe sweeping hosts of unknown provenance.
+- **Never script a test double from an assumed CLI.** Script it from output
+  actually observed on the hardware — that is the only thing that would have
+  caught either of the above.
+- **"Responds to ping" is not "reachable".** A Steam Deck's wifi powersave
+  drops TCP while ICMP keeps answering, so a device can look alive and refuse
+  every connection.
+- **A stored address is a lease, not an identity.** Re-run discovery rather
+  than hand-editing an IP, and verify with a live probe before capturing or
+  deploying.
+
 ## Related
 
 - `.claude/skills/adb-device-ops/SKILL.md` — the same territory for ADB.
 - `.claude/skills/pack-authoring/SKILL.md` — where findings become pack data.
-- Project memory: `gotcha_steamos_ships_no_hostname_binary`,
-  `gotcha_flatpak_show_version_unsupported`,
-  `gotcha_steam_deck_wifi_powersave_drops_tcp`,
-  `project_steamdeck_kodi_pack_plan`.
+- `.claude/skills/build-stages/SKILL.md` — what the Deck run settled.

@@ -1,7 +1,7 @@
 ---
 name: core-kernel-specialist
 description: Proactively dispatch for work inside `src/fleetctl/core/` — transport, artifacts, inventory, discovery, operations, workflow engine, config layering, observability. Use when adding or changing a seam, wiring dependency injection, or reviewing whether something violated the inward-only dependency rule.
-tools: [read, glob, grep, bash, edit]
+tools: [Read, Glob, Grep, Bash, Edit, Write]
 model: sonnet
 memory: project
 skills: [fleetctl-architecture, build-stages, adb-device-ops]
