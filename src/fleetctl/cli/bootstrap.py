@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import getpass
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -28,6 +28,7 @@ from fleetctl.core.registry import Registry, discover
 from fleetctl.core.state import StateManager
 from fleetctl.core.transport.auditing import AuditingTransport
 from fleetctl.core.transport.base import Transport
+from fleetctl.core.transport.exclusion import DeviceBusyError, DeviceLocks, ExclusiveTransport
 from fleetctl.core.workflow.workflow import Workflow, builtin_workflows, load_workflows
 
 LOGGER = logging.getLogger(__name__)
@@ -61,6 +62,10 @@ class Container:
     home: Path
     actor: str
     config_dir: Path
+    # Not a constructor argument: exclusion is per-process bookkeeping, not
+    # configuration, and every transport in one process must consult the same
+    # registry for it to mean anything.
+    device_locks: DeviceLocks = field(default_factory=DeviceLocks)
 
     @cached_property
     def dispatcher(self) -> Dispatcher:
@@ -156,23 +161,42 @@ class Container:
 
         return _connect
 
-    def transport_for(self, device: Device) -> Transport:
-        """Open an audited transport to a device.
+    def transport_for(self, device: Device, *, wait: bool = True) -> Transport:
+        """Open an audited transport to a device, exclusive for its lifetime.
+
+        Only one transport per device exists at a time. A frequently-polled
+        read must not open a second connection while an operation is streaming
+        an archive off the same box — that reset real captures mid-transfer,
+        and no thread or lifecycle change prevents it, only arbitration.
 
         **PARAMETERS:**
             `device` (Device): The target.  <br>
+            `wait` (bool): Block until the device is free. Pass ``False`` from a polled read, which should skip a busy device rather than queue behind a capture. Defaults to ``True``.  <br>
 
         **RETURNS:**
-            `Transport`: A connected, audited transport. Close it when done.  <br>
+            `Transport`: A connected, audited transport holding the device lock. Closing it releases the lock, so a caller that never closes blocks every later one.  <br>
 
         **RAISES:**
+            `DeviceBusyError`: If `wait` is ``False`` and the device is in use.  <br>
             `FleetError`: If the device's pack is unknown or provides no transport.  <br>
         """
         pack = self.registry.device_pack(device.type)
         factory = getattr(pack, "transport_for", None)
         if factory is None:
             raise FleetError(f"Device pack {device.type!r} provides no transport")
-        return AuditingTransport(factory(device, self.transport_settings(device)), self.audit)
+
+        # Acquired before the factory runs: opening the connection is itself
+        # the contended act, so a lock taken afterwards would guard nothing.
+        target = device.address or device.id
+        lock = self.device_locks.for_target(target)
+        if not lock.acquire(blocking=wait):
+            raise DeviceBusyError(target)
+        try:
+            inner = factory(device, self.transport_settings(device))
+        except BaseException:
+            lock.release()
+            raise
+        return ExclusiveTransport(AuditingTransport(inner, self.audit), lock.release)
 
     def apps_for(self, device: Device, transport: Transport) -> AppManager:
         """RETURNS: AppManager: The device pack's application manager for this device.
