@@ -195,9 +195,12 @@ class AdbTransport:
         # and a reader that stalls long enough gets its connection reset by the
         # device. Writing straight through also leaves the partial file behind
         # when a pull fails, which is the only way to see how far it got.
+        # The destination is passed as a *path*, not an open handle: `pull`
+        # picks its opener with `_open_bytesio if isinstance(local_path,
+        # BytesIO) else open`, so a handle is fed to `open()` and raises
+        # TypeError before a byte moves.
         try:
-            with local_path.open("wb") as sink:
-                self._require_device().pull(remote_path, sink, transport_timeout_s=timeout, read_timeout_s=timeout)
+            self._require_device().pull(remote_path, str(local_path), transport_timeout_s=timeout, read_timeout_s=timeout)
         except Exception as exc:
             landed = local_path.stat().st_size if local_path.exists() else 0
             raise TransportError(

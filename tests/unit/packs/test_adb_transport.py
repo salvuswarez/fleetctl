@@ -8,10 +8,13 @@ that a dropped connection is never reported as an empty success.
 from __future__ import annotations
 
 import hashlib
+import os
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import pytest
+from adb_shell.adb_device import _open_bytesio
 
 from fleetctl.core.effects import Capability, Effect
 from fleetctl.core.errors import CommandFailedError, TransportError
@@ -40,11 +43,25 @@ class _StubDevice:
             raise OSError("connection reset")
         return self.responses.get(command, "")
 
-    def pull(self, remote: str, buffer: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+    def pull(self, remote: str, local_path: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+        """Mirror `adb_shell.AdbDevice.pull`, including what it refuses.
+
+        The real method chooses its opener with `_open_bytesio if
+        isinstance(local_path, BytesIO) else open`, so it takes a BytesIO or a
+        path and **opens the destination itself**. An already-open handle goes
+        to `open()` and raises TypeError before a byte moves. A stub that
+        accepted anything with `.write()` let exactly that ship.
+        """
         self.pull_timeouts.append(transport_timeout_s)
-        if remote in self.fail:
-            raise OSError("pull failed")
-        buffer.write(self.responses.get(remote, "").encode("utf-8"))
+        if not isinstance(local_path, (str, bytes, os.PathLike, BytesIO)):
+            raise TypeError(f"expected str, bytes or os.PathLike object, not {type(local_path).__name__}")
+        # Annotated loose because the real line is exactly this shape: the
+        # opener differs per branch and only one of them takes a path.
+        opener: Any = _open_bytesio if isinstance(local_path, BytesIO) else open
+        with opener(local_path, "wb") as stream:
+            if remote in self.fail:
+                raise OSError("pull failed")
+            stream.write(self.responses.get(remote, "").encode("utf-8"))
 
     def push(self, local: str, remote: str, transport_timeout_s: float = 0) -> None:
         self.pushed.append((local, remote))
@@ -146,9 +163,12 @@ def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path) -> No
 
     # Arrange — writes some bytes, then the connection drops.
     class _DiesMidPull(_StubDevice):
-        def pull(self, remote: str, buffer: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
-            buffer.write(b"partial payload")
-            raise ConnectionResetError(104, "Connection reset by peer")
+        def pull(self, remote: str, local_path: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+            # Raised inside the `with`, as a real reset would be: the file is
+            # closed on the way out and keeps whatever had been written.
+            with open(local_path, "wb") as stream:
+                stream.write(b"partial payload")
+                raise ConnectionResetError(104, "Connection reset by peer")
 
     destination = tmp_path / "out" / "big.tar.gz"
     transport = _transport(tmp_path, _DiesMidPull())
@@ -160,6 +180,28 @@ def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path) -> No
     # Assert
     assert caught.value.target == "192.168.1.50"
     assert destination.read_bytes() == b"partial payload"
+
+
+def test_get_hands_pull_a_path_not_an_open_handle(tmp_path: Path) -> None:
+    """`adb_shell.pull` opens the destination itself, so an already-open handle
+    reaches `open()` and dies with TypeError before a byte moves. That shipped
+    once: the stub accepted anything with `.write()` while the real library
+    type-checks, so the suite stayed green and every capture failed."""
+    # Arrange
+    seen: list[object] = []
+
+    class _RecordsDestination(_StubDevice):
+        def pull(self, remote: str, local_path: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+            seen.append(local_path)
+            super().pull(remote, local_path, transport_timeout_s, read_timeout_s)
+
+    transport = _transport(tmp_path, _RecordsDestination(responses={"/sdcard/a.xml": "<a/>"}))
+
+    # Act
+    transport.get("/sdcard/a.xml", tmp_path / "a.xml")
+
+    # Assert
+    assert seen and isinstance(seen[0], (str, bytes, os.PathLike))
 
 
 def test_the_pull_timeout_scales_with_the_file_size(tmp_path: Path) -> None:
