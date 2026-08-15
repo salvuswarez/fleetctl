@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from fleetctl.core.effects import Capability, Effect
-from fleetctl.core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
+from fleetctl.core.errors import CommandFailedError, ConfigError, DeviceUnauthorizedError, TransportError
 from fleetctl.packs.posix.transport import SshSettings, SshTransport
 
 
@@ -328,3 +328,61 @@ def test_a_refused_credential_is_still_reported_as_unauthorized(monkeypatch: pyt
     # Act / Assert
     with pytest.raises(DeviceUnauthorizedError):
         transport.connect()
+
+
+@pytest.mark.parametrize("key", ["key_path", "known_hosts"])
+def test_a_relative_path_is_rejected_at_config_load(key: str) -> None:
+    """Nothing here can say what a relative path is relative *to* — the CWD
+    belongs to whoever launched the process. A relative `known_hosts` reached a
+    live fleet through the HA options form and failed as a bare
+    `FileNotFoundError`, which read as the device being unreachable."""
+    # Act / Assert
+    with pytest.raises(ConfigError, match="must be an absolute path") as caught:
+        SshSettings.from_mapping({"user": "ops", key: ".ssh/deploy_key"})
+
+    assert caught.value.key == f"ssh.{key}"
+
+
+@pytest.mark.parametrize("key", ["key_path", "known_hosts"])
+def test_an_absolute_path_survives_config_load(key: str) -> None:
+    # Act
+    settings = SshSettings.from_mapping({"user": "ops", key: "/keys/thing"})
+
+    # Assert
+    assert getattr(settings, key) == Path("/keys/thing")
+
+
+def test_a_home_relative_path_is_expanded_not_rejected() -> None:
+    """`~` has an unambiguous meaning, so it is expanded rather than refused."""
+    # Act
+    settings = SshSettings.from_mapping({"user": "ops", "known_hosts": "~/.ssh/known_hosts"})
+
+    # Assert
+    assert settings.known_hosts is not None
+    assert settings.known_hosts.is_absolute()
+    assert "~" not in str(settings.known_hosts)
+
+
+@pytest.mark.parametrize("key", ["key_path", "known_hosts"])
+def test_an_unset_path_stays_none(key: str) -> None:
+    """Blank is how a deployment asks for the default, so it must not raise."""
+    # Act
+    settings = SshSettings.from_mapping({"user": "ops", key: ""})
+
+    # Assert
+    assert getattr(settings, key) is None
+
+
+def test_an_unreadable_known_hosts_file_is_reported_as_a_transport_error(tmp_path: Path) -> None:
+    """`load_host_keys` raises before `connect` is ever called. Unguarded, that
+    escaped as a bare `FileNotFoundError` — an exception type no caller of this
+    method is written to expect."""
+    # Arrange
+    missing = tmp_path / "nonexistent" / "known_hosts"
+    transport = SshTransport("192.168.1.70", SshSettings(user="ops", known_hosts=missing))
+
+    # Act / Assert
+    with pytest.raises(TransportError, match="Could not read known_hosts") as caught:
+        transport.connect()
+
+    assert caught.value.target == "192.168.1.70"

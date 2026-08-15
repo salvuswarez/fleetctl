@@ -165,7 +165,7 @@ Closed for fleet-wide content — both wired into `apps/kodi/pack.py`'s chain:
 | Transform | Module | Driven by |
 |---|---|---|
 | `ShipFiles` | `apps/kodi/transforms/files.py` | the recipe's `shipped.files` |
-| `AddVideoSources` | `apps/kodi/transforms/sources.py` | the recipe's `video_sources.sources`, merged into the captured `sources.xml` |
+| `AddVideoSources` | `apps/kodi/transforms/sources.py` | the recipe's `add_video_sources.sources`, merged into the captured `sources.xml` |
 
 **Still open: genuinely per-device files.** There is no mechanism, and the hazard is unchanged —
 hand-placed files live under the state root, which `restore` replaces **wholesale**. Anything put on a
@@ -200,6 +200,32 @@ debugging the pipeline. Three traps when it is down:
    a firmware update has been seen to silently reset. Check that the toggle is on before concluding
    the symlink is the whole story. A reboot alone does not fix either; the broken state is the
    post-reboot steady state.
+4. **An SMB logon failure is usually a missing account, not a service fault.** The router's Samba
+   accounts live in the `acc_list` nvram variable, and nvram is persisted to a small UBI volume
+   (`/data`, mtd `data`). When that volume runs out of spare erase blocks — check
+   `/sys/class/ubi/ubi1/{bad_peb_count,reserved_for_bad}`; `reserved_for_bad = 0` with a nonzero bad
+   count is terminal — UBIFS remounts it read-only, every `nvram commit` fails with
+   `wlcsm_nvram_commit: could not open nvram file`, and a JFFS restore can silently empty `acc_list`.
+   The tell is an inconsistent nvram: `acc_num` and `acc_webdavproxy` still name the account while
+   `acc_list` is zero bytes, so the web UI *lists* the account but refuses to edit it, and
+   `/etc/samba/smbpasswd` is regenerated without it. `smb.conf` still shows it under `valid users`,
+   because those lists come from `.__<user>_var.txt` files on the USB drive, which survive.
+
+   Recovering it needs no nvram write: `/etc` is a symlink to tmpfs, so append the user to
+   `/etc/passwd` and `/etc/group` and run `/usr/sbin/smbpasswd <user> <password>`. **Do not restart
+   Samba afterwards** — the ASUS init script regenerates `passwd` and `smbpasswd` from the empty
+   `acc_list` and undoes it. The smbpasswd backend is read per-authentication, so no restart is
+   needed; to reload `smb.conf` alone, kill and relaunch `smbd -D -s /etc/smb.conf` by hand rather
+   than calling `service restart_samba`. To survive reboots, re-apply from a Merlin
+   `/jffs/scripts/service-event-end` hook — `/jffs` is a separate jffs2 partition and stays writable
+   when `/data` does not.
+
+**Do not verify any of this from a Windows client.** The router runs **Samba 3.6.25**, whose
+`max protocol = SMB2` means SMB 2.0.2. Windows 10/11 have SMB1 removed and will not complete a
+session against it: TCP connects, the redirector aborts before negotiate, and *every* share —
+including `IPC$` — returns `System error 67, The network name cannot be found`, with nothing at all
+in the server log. That failure is the Windows redirector and says nothing about the share. Kodi
+ships its own libsmbclient and talks to Samba 3.6 fine, so a Kodi device is the only meaningful test.
 
 ## Navigation is TMDbHelper-first
 
