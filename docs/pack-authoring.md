@@ -66,7 +66,7 @@ apps/kodi/
 
 Real pack, unabridged except for the docstrings — `packs/firetv/pack.py`:
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 CAPABILITIES: frozenset[Capability] = frozenset({
@@ -102,7 +102,7 @@ class FireTvPack:
 
 Packs and apps register through Python entry points, resolved by `core/registry.py::discover()` — a third-party package registers exactly the same way, which is what makes the plugin architecture real rather than a closed list of built-ins. `discover()` never raises on a broken third-party pack; it logs a warning and skips it, so one bad plugin doesn't take down the whole fleet.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-toml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-toml.svg" height="18"/></div>
 
 ```toml
 # pyproject.toml
@@ -134,7 +134,7 @@ A device pack declares the `Capability` values it supports as a `frozenset` clas
 
 Every `StepSpec` declares `effect=Effect.READ | MUTATING | DESTRUCTIVE`. This is the single highest-consequence declaration in the codebase — the policy layer (see [`safety.md`](safety.md)) keys approval off the effect class, not off a hand-maintained list of dangerous step names. Mislabel a wipe as `MUTATING` and it silently needs less approval than it should.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 MAINTAIN = StepSpec(
@@ -235,11 +235,10 @@ The reason is concrete, not stylistic: `pm disable-user` silently no-ops on Fire
 
 - [fleetctl](https://github.com/salvuswarez/fleetctl)
 - [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
-- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; Home Assistant integration
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
 
-- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
 - [Documentation Index](README.md)
 
 </td>
@@ -250,9 +249,6 @@ The reason is concrete, not stylistic: `pm disable-user` silently no-ops on Fire
 - Plugin-based home device fleet manager
 - MIT licensed
 
-<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
-
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
 
 </td>
 </tr>

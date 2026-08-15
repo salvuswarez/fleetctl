@@ -31,7 +31,7 @@ A pack author declares this once, on the step (see [`pack-authoring.md`](pack-au
 
 A device can be marked protected in config, denying specific steps regardless of who's asking — checked before any actor rule:
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/fleet.yml
@@ -46,9 +46,9 @@ policy:
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Per-Actor Policy, Gated on Effect Class</h2>
 
-Every request to run a step or workflow carries an actor identity — `cli:*`, `mcp:*`, and eventually `ha:*` once S7 lands — and policy is expressed per actor, keyed on effect class rather than a per-step allow-list:
+Every request to run a step or workflow carries an actor identity — `cli:*`, `mcp:*`, and `ha:*` — and policy is expressed per actor, keyed on effect class rather than a per-step allow-list:
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 policy:
@@ -144,7 +144,7 @@ The threat model — what's in scope for a security report, standing risks like 
 
 - [fleetctl](https://github.com/salvuswarez/fleetctl)
 - [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
-- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; Home Assistant integration
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
 
@@ -159,9 +159,6 @@ The threat model — what's in scope for a security report, standing risks like 
 - Plugin-based home device fleet manager
 - MIT licensed
 
-<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
-
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
 
 </td>
 </tr>

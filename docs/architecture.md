@@ -161,7 +161,7 @@ real.
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">F2 — `Device` is Fire-TV-and-Kodi shaped</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 class Device(BaseModel):
@@ -457,7 +457,7 @@ them fails at plan time rather than attempting anything.
 
 **Capabilities are the contract between rings.** An app pack step says:
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 class KodiDeploy(Step):
@@ -539,7 +539,7 @@ reading Python.
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">Inventory becomes type-aware</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/inventory/devices.yml
@@ -585,7 +585,7 @@ them. The core `Device` shrinks to identity + address + type + tags + vars.
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">The Kodi profile becomes a recipe</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/profiles/kodi/gold.yml
@@ -647,7 +647,7 @@ adopts it wholesale:
 
 Generalized: **`fleetctl` config files contain references, never values.**
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/fleet.yml — safe to commit, safe to share in a bug report
@@ -715,7 +715,7 @@ Today's pipeline is implicit: you know to run capture → build → deploy in
 that order because the docs say so. A workflow makes the ordering, the
 targeting, and the artifact handoff explicit and inspectable.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/workflows/kodi-refresh.yml
@@ -797,7 +797,7 @@ declarative concurrency, and `on_error` policy.
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">7. Plugin registration</h2>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 # packs/firetv/__init__.py
@@ -821,7 +821,7 @@ class FireTvPack:
         return {"maintain": DebloatAction(self.data("bloat.yml")), ...}
 ```
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-toml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-toml.svg" height="18"/></div>
 
 ```toml
 # pyproject.toml — third-party packs can register the same way
@@ -956,7 +956,7 @@ flowchart TB
     style roots fill:#0f766e,color:#fff
 ```
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1326,7 +1326,7 @@ concurrent ones.
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">Audit event schema</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1418,7 +1418,7 @@ that stay in a rotating diagnostic file, and a few hundred `pm disable-user`
 records that go in the durable audit. Nothing is lost; the durable stream
 stays reviewable.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/fleet.yml
@@ -1477,7 +1477,7 @@ Fixing S1 and S2 by remembering to be careful will fail. Structural fixes:
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; WORKFLOW</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">Worth backporting to `firestick_manager` now</h3>
 
-`firestick_manager` keeps running until S7 cutover, so three of these gaps
+`firestick_manager` ran until the Home Assistant cutover, so three of these gaps
 stay live for months. All three are small and independent of the rewrite:
 
 1. `logging.basicConfig` in the CLI with a `-v/--verbose` flag — turns 15
@@ -1525,7 +1525,7 @@ flowchart TB
     subgraph adapters["Port adapters — thin, generated, interchangeable"]
         CLI3["<b>CLI</b><br/>Click group<br/><i>exists</i>"]
         HA3["<b>Home Assistant</b><br/>in-process import<br/><i>exists</i>"]
-        MCP["<b>MCP server</b><br/>stdio<br/><i>planned</i>"]
+        MCP["<b>MCP server</b><br/>stdio"]
         HTTP["<b>HTTP API</b><br/>FastAPI<br/><i>on hold — no consumer</i>"]
     end
 
@@ -1550,7 +1550,7 @@ flowchart TB
 plugin registry combined with §5's Pydantic config schemas. A pack author
 declares a step once:
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-python.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-python.svg" height="18"/></div>
 
 ```python
 @step(
@@ -1633,7 +1633,7 @@ agent with a `kodi_deploy` tool and a device list will not know it exists.
 So it becomes **declarative policy**, enforced in the engine for every
 consumer:
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 # config/fleet.yml
@@ -1803,52 +1803,10 @@ citations — which is where they belonged anyway.
 
 <br/>
 
-<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">14. Build plan</h2>
+<h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">14. Review findings and inherited behaviour</h2>
+<h3 style="margin-top: 4px; margin-left: 10px;">Six decisions the architecture review surfaced</h3>
 
-This is a **new repository**, not an in-place refactor — which is simpler
-than the migration originally sketched. `firestick_manager` keeps running
-untouched the whole time and is retired only at cutover.
-
-```mermaid
-flowchart LR
-    subgraph now["Today"]
-        FM["firestick_manager<br/><i>keeps running</i>"]
-        HAOLD["HA integration<br/>pins fire_tools@tag"]
-        FM --> HAOLD
-    end
-    subgraph build["Build fleetctl in parallel"]
-        S1["S1 core"] --> S2["S2 firetv + kodi<br/><i>parity</i>"] --> S3["S3 config + workflows"] --> S4["S4 policy + audit"] --> S5["S5 Shield"] --> S6["S6 MCP"]
-    end
-    S2 -.->|"verify against<br/>same devices"| FM
-    S4 --> CUT["Cutover:<br/>HA repins to fleetctl"]
-    CUT --> RET["firestick_manager<br/>archived"]
-
-    style FM fill:#334155,stroke:#1e293b,color:#fff
-    style CUT fill:#dc2626,stroke:#991b1b,color:#fff
-    style RET fill:#334155,stroke:#1e293b,color:#fff
-```
-
-<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
-<h3 style="margin-top: 4px; margin-left: 10px;">Stages</h3>
-
-This is the original build plan, recorded here for the rationale behind each stage's contents. For current status, see [`roadmap.md`](roadmap.md) — as of this writing S0–S6 are done and S7–S8 are not started.
-
-| # | Stage | Contents | Exit criterion |
-|---|---|---|---|
-| **S0** | Repo bootstrap | uv + hatchling, `src/fleetctl/`, licence, CI (black/isort/mypy --strict/pytest), `.gitignore` incl. `config/` real data, `.example` files | CI green on an empty package |
-| **S1** | Core kernel | `Transport` protocol + `AdbTransport`; `ArtifactStore` + SMB **and** local adapters; inventory; operations; `SecretProvider` (env + keyring); observability (audit sink, redactor, correlation, log setup) | `FakeTransport` + `LocalArtifactStore` let a trivial step run end-to-end in tests, with audit records asserted |
-| **S2** | First pack + first app | `packs/android` (deep base) → `packs/firetv`; `apps/kodi` with all four transforms; capture/build/deploy steps | **Feature parity**: capture → build → deploy a real device, verified against what `firestick_manager` produces |
-| **S3** | Config-as-code + workflows | bloat/prune/allow/settings/hub-layout → YAML; layered resolution; `Workflow` + engine + plan/dry-run; registry-driven CLI | `fleetctl workflow plan kodi-refresh` prints a correct plan; `fleetctl config <device>` explains every resolved key |
-| **S4** | Policy + audit hardening | `PolicyEngine`, effect classification on every step, protected-device rules, blast-radius cap, hash chain + `audit verify` | Gold device is **structurally** undeployable-to without a config edit |
-| **S5** | Shield Pro | `packs/shield`; whatever quirks turn out to be Fire-OS-only get pushed down into `packs/firetv` | Same Kodi build deploys to a Stick and a Shield from one workflow |
-| **S6** | MCP adapter | stdio server; tools from the step/workflow registry; resources for inventory/builds/audit; approval flow | Agent completes a full `kodi-refresh` with per-step approval, fully audited |
-| **S7** | HA cutover | HA integration repinned to `fleetctl`; becomes actor `ha:*`; services regenerated from the registry; panel + automations updated | Live panel runs on `fleetctl`; `firestick_manager` archived |
-| **S8** | Later | `packs/linux_host` + SSH transport; HTTP API if a consumer appears; `fleet.lock` | — |
-
-<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
-<h3 style="margin-top: 4px; margin-left: 10px;">Open before S1 — six decisions the architecture review surfaced</h3>
-
-An architecture review of this plan (2026-08-01, against the S0 scaffold)
+An architecture review (2026-08-01, against the initial scaffold)
 found six decisions that are **unmade or wrong as written**, all cheap to
 settle now and expensive once `packs/firetv` and `apps/kodi` exist. The ring
 model is sound; the *contract between rings* is underspecified, and that is
@@ -1856,10 +1814,10 @@ where the leak will happen.
 
 | # | Issue | Why it can't wait |
 |---|---|---|
-| **1** | **`Transport.exec()` has no effect-class parameter**, yet §10 routes every call by effect class. As drawn, `AuditingTransport` could only classify by pattern-matching command strings — putting `getprop`/`pm`/`settings put` vocabulary *inside `core/`*, which `/ring-check` is built to reject. Also, step-level effect (policy) and command-level effect (audit routing) are never reconciled. | It's a signature change on the interface every pack, app and third-party plugin codes against. Free in S1; breaks the versioned pack API in S5. **Proposed:** the caller declares effect per call, defaulting to `MUTATING` (fail-safe — an unlabelled command gets audited, not dropped). |
+| **1** | **`Transport.exec()` has no effect-class parameter**, yet §10 routes every call by effect class. As drawn, `AuditingTransport` could only classify by pattern-matching command strings — putting `getprop`/`pm`/`settings put` vocabulary *inside `core/`*, which `/ring-check` is built to reject. Also, step-level effect (policy) and command-level effect (audit routing) are never reconciled. | It's a signature change on the interface every pack, app and third-party plugin codes against. Free in S1; breaks the versioned pack API in the Shield pack. **Proposed:** the caller declares effect per call, defaulting to `MUTATING` (fail-safe — an unlabelled command gets audited, not dropped). |
 | **2** | **One `StepContext` for three kinds of step.** Fleet-level steps (`kodi.build`, `fetch_base`) have no device but are handed a `Transport`. Worse, the headline guarantee — *"`build` gets a transform chain and no transport, so you can't put a transform in deploy"* — is **currently false**: `StepContext` has no transform-chain field and gives `transport` to every step. The guarantee is enforced by discipline, exactly the failure mode §2 criticizes. | **Proposed:** split into `FleetStepContext` / `DeviceStepContext` / `TransformStepContext`, and type `config` per step from its own Pydantic model rather than `Mapping[str, Any]` — an `Any` hole at the centre of a `mypy --strict` codebase. |
-| **3** | **The `apps/` → `packs/` decoupling doesn't survive the concrete Kodi case.** Deploy must know the on-device Kodi path (half app knowledge, half *device layout*), the staging dir for the free-space check (pure device knowledge), and issue the `gzip -d`/`tar xf` split — which is a **Fire OS quirk owned by `packs/firetv`**. The capability verb set has no verb for path resolution or archive extraction; `state` is the only candidate and is the least-specified verb in the document. | Either make `state` the deep verb (the pack owns tar/gzip/staging/headroom, and `apps/kodi` never issues a transfer shell command), or let quirks flow as typed pack-default config. The docs currently imply the latter without saying so, and finding 2 leaves it unvalidated. **Decide before S2**, or S5's validation criterion fires late and expensively. |
-| **4** | **S2 can't obey its own rules without S3's config loader.** `packs.md` and `apps.md` require package lists and recipes to live in `data/*.yml`; `build-stages` says no config loader before S3; §14 puts firetv+kodi in S2. S2 must therefore hardcode Python constants (breaking two rules, guaranteeing a rewrite) or write a throwaway YAML reader. | **Proposed:** split S3 — move pack-data loading and layered resolution (pure, no I/O, no device) into S1 or the front of S2; leave workflows and the registry-driven CLI in S3. |
+| **3** | **The `apps/` → `packs/` decoupling doesn't survive the concrete Kodi case.** Deploy must know the on-device Kodi path (half app knowledge, half *device layout*), the staging dir for the free-space check (pure device knowledge), and issue the `gzip -d`/`tar xf` split — which is a **Fire OS quirk owned by `packs/firetv`**. The capability verb set has no verb for path resolution or archive extraction; `state` is the only candidate and is the least-specified verb in the document. | Either make `state` the deep verb (the pack owns tar/gzip/staging/headroom, and `apps/kodi` never issues a transfer shell command), or let quirks flow as typed pack-default config. The docs currently imply the latter without saying so, and finding 2 leaves it unvalidated. **Decide before S2**, or the seam-validation criterion fires late and expensively. |
+| **4** | **A device pack cannot obey its own rules without the config loader.** `packs.md` and `apps.md` require package lists and recipes to live in `data/*.yml`; `build-stages` says no config loader before S3; §14 puts firetv+kodi in S2. S2 must therefore hardcode Python constants (breaking two rules, guaranteeing a rewrite) or write a throwaway YAML reader. | **Proposed:** split S3 — move pack-data loading and layered resolution (pure, no I/O, no device) into S1 or the front of S2; leave workflows and the registry-driven CLI in S3. |
 | **5** | **The ring rule is enforced by a Claude command, not by CI.** `/ring-check` is a grep an agent runs on request; CI runs black/isort/mypy/pytest and no import check. The single highest-consequence invariant is the one thing CI doesn't verify. | **Proposed:** add `import-linter` (layered contract: `core` < `packs`/`apps`, plus a forbidden `apps -> packs`) or a short `tests/test_architecture.py` walking the AST — wired into CI in **S1, while there are zero modules to fix**. It also forces the `packs/android` exception to be encoded explicitly. |
 | **6** | **`Step` returns `str`, but the workflow DSL depends on `{{ steps.build.artifact }}`.** A human-readable summary string has no `.artifact`. | **Proposed:** `StepResult(summary, artifacts, facts)`. Fix in S1 — it's the second-most-implemented interface after `Transport`. |
 
@@ -1872,7 +1830,7 @@ with no stated precedence); **`packs/android` is an undrawn fourth ring** and
 `AndroidActions` as specified owns six concerns — the same shape as the
 predecessor's `const.py` that §2 criticizes; and the **"two adapters" rule is
 vacuous as written**, since a test double always exists if you write one — the
-device-pack seam in particular has exactly one real adapter until S5.
+device-pack seam in particular had exactly one real adapter until the Shield pack landed.
 
 The review's recommendation on the workflow DSL is worth recording: keep
 plan/targeting/capability-checking (needed regardless, and what policy's
@@ -1881,24 +1839,6 @@ blast-radius cap and MCP's plan hash are built on), but **defer the
 querying the store for the latest build, which is simpler and needed anyway.
 Let workflows be registered Python callables first; add YAML as a thin
 front-end over the same plan model once a second real workflow exists.
-
-<div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
-<h3 style="margin-top: 4px; margin-left: 10px;">Sequencing rules</h3>
-
-1. **S1 before everything.** Both `ArtifactStore` adapters land in S1 — one
-   adapter is a hypothetical seam, two make it real, and the local adapter
-   is what makes S2 testable at all.
-2. **S4 before S6.** Policy and audit precede the MCP adapter. This is the
-   one ordering in the plan that is genuinely hard to walk back.
-3. **S2 is the honesty gate.** Parity against real hardware before any of
-   the interesting work. If `fleetctl` can't reproduce a working deploy,
-   nothing after it matters.
-4. **S5 validates the whole design.** If adding the Shield requires touching
-   `core/` or `apps/kodi/`, the seams are in the wrong place — that's the
-   signal to stop and fix, not to work around.
-5. **S7 is a coordinated release** across two repos, and the HA side has its
-   own deploy quirks (manual manifest bump + restart, feature branch not
-   `main`). Budget for it as its own piece of work.
 
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">Carried forward from `firestick_manager`</h3>
@@ -1921,7 +1861,7 @@ These are hard-won and must survive the port intact — they're the reason
   identifies an interface, not a box, so a **serial outranks a disagreeing
   MAC**; a device reached over ethernet once and wifi the next time reports
   two MACs and must not become two records.
-- **The gold-device rule** — but as enforced policy (S4), not a memory file.
+- **The gold-device rule** — but as enforced policy, not a memory file.
 
 <br/>
 
@@ -1990,12 +1930,11 @@ see the README for current status.*
 
 - [fleetctl](https://github.com/salvuswarez/fleetctl)
 - [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
-- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; Home Assistant integration
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
 
 - [Observability](observability.md) &mdash; diagnostics, timeline, audit
-- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
 - [HA Parity](ha-parity.md) &mdash; panel command mapping
 
 </td>
@@ -2006,9 +1945,6 @@ see the README for current status.*
 - Plugin-based home device fleet manager
 - MIT licensed
 
-<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
-
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
 
 </td>
 </tr>
