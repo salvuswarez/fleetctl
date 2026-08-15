@@ -138,6 +138,30 @@ def test_a_failed_pull_raises(tmp_path: Path) -> None:
         transport.get("/sdcard/missing", tmp_path / "x")
 
 
+def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path) -> None:
+    """A reset mid-transfer is the failure that matters here, and buffering in
+    memory discarded every byte of evidence with it. The partial file and the
+    byte count in the message are the only way to tell a consistent cutoff from
+    a flaky one."""
+
+    # Arrange — writes some bytes, then the connection drops.
+    class _DiesMidPull(_StubDevice):
+        def pull(self, remote: str, buffer: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+            buffer.write(b"partial payload")
+            raise ConnectionResetError(104, "Connection reset by peer")
+
+    destination = tmp_path / "out" / "big.tar.gz"
+    transport = _transport(tmp_path, _DiesMidPull())
+
+    # Act
+    with pytest.raises(TransportError, match="after 15 bytes") as caught:
+        transport.get("/sdcard/big.tar.gz", destination)
+
+    # Assert
+    assert caught.value.target == "192.168.1.50"
+    assert destination.read_bytes() == b"partial payload"
+
+
 def test_the_pull_timeout_scales_with_the_file_size(tmp_path: Path) -> None:
     """A flat allowance is how the predecessor produced silently truncated
     archives: a Kodi profile runs to hundreds of MB, and 180s does not cover
