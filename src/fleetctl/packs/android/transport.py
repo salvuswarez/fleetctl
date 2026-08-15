@@ -249,9 +249,14 @@ class AdbTransport:
         return size
 
     def _push_native(self, local_path: Path, remote_path: str) -> None:
+        # Both timeouts, deliberately. `read_timeout_s` governs the wait for the
+        # device's `OKAY`, defaults to 10s in the library, and does not inherit
+        # from `transport_timeout_s` — so a push that passes only the latter
+        # still gives a device 10s to acknowledge a multi-hundred-MB write.
+        # That is what failed a Shield deploy while native push itself was fine.
         timeout = self._transfer_timeout_for(local_path.stat().st_size)
         try:
-            self._require_device().push(str(local_path), remote_path, transport_timeout_s=timeout)
+            self._require_device().push(str(local_path), remote_path, transport_timeout_s=timeout, read_timeout_s=timeout)
         except Exception as exc:
             raise TransportError(f"ADB push failed for {remote_path} on {self._address}: {exc}", target=self._address) from exc
 

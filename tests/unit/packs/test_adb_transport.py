@@ -35,6 +35,7 @@ class _StubDevice:
         self.pushed: list[tuple[str, str]] = []
         self.pull_timeouts: list[float] = []
         self.push_timeouts: list[float] = []
+        self.push_read_timeouts: list[float] = []
 
     def shell(self, command: str, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> str:
         self.commands.append(command)
@@ -63,9 +64,16 @@ class _StubDevice:
                 raise OSError("pull failed")
             stream.write(self.responses.get(remote, "").encode("utf-8"))
 
-    def push(self, local: str, remote: str, transport_timeout_s: float = 0) -> None:
+    def push(self, local: str, remote: str, transport_timeout_s: float = 0, read_timeout_s: float = 10.0) -> None:
+        """Mirror `adb_shell.AdbDevice.push`, including its 10s default read timeout.
+
+        `read_timeout_s` is the wait for the device's `OKAY` and does not
+        inherit from `transport_timeout_s`. Defaulting it here rather than
+        accepting anything is what makes a caller that forgets it visible.
+        """
         self.pushed.append((local, remote))
         self.push_timeouts.append(transport_timeout_s)
+        self.push_read_timeouts.append(read_timeout_s)
 
     def close(self) -> None:
         self.closed = True
@@ -217,6 +225,26 @@ def test_the_pull_timeout_scales_with_the_file_size(tmp_path: Path) -> None:
 
     # Assert
     assert device.pull_timeouts == [480.0]
+
+
+def test_a_native_push_scales_both_timeouts(tmp_path: Path) -> None:
+    """`read_timeout_s` is the wait for the device's `OKAY` and defaults to 10s
+    in the library. Passing only `transport_timeout_s` still gives a device ten
+    seconds to acknowledge a multi-hundred-MB write, which failed a Shield
+    deploy while native push itself was working fine."""
+    # Arrange — 40 MB, so 180s flat + 40s at the 1 MB/s floor.
+    device = _StubDevice(responses={"md5sum /sdcard/build.tar.gz": "0" * 32})
+    transport = _transport(tmp_path, device, use_netcat=False)
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(b"x" * 40_000_000)
+
+    # Act — the digest will not match; only the timeouts are under test.
+    with pytest.raises(TransportError):
+        transport.put(payload, "/sdcard/build.tar.gz")
+
+    # Assert
+    assert device.push_timeouts == [220.0]
+    assert device.push_read_timeouts == [220.0]
 
 
 def test_the_pull_timeout_falls_back_when_the_size_is_unknown(tmp_path: Path) -> None:
