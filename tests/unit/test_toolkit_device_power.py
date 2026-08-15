@@ -123,7 +123,7 @@ def test_device_power_reports_an_awake_device(tmp_path: Path) -> None:
     reading = toolkit.device_power("stub-1")
 
     # Assert
-    assert reading == {"device": "stub-1", "reachable": True, "state": "awake", "awake": True}
+    assert reading == {"device": "stub-1", "reachable": True, "state": "awake", "awake": True, "busy": False}
 
 
 def test_device_power_reports_a_sleeping_device_as_reachable_but_not_awake(tmp_path: Path) -> None:
@@ -150,7 +150,48 @@ def test_device_power_never_raises_for_an_unreachable_device(tmp_path: Path) -> 
     reading = toolkit.device_power("stub-1")
 
     # Assert
-    assert reading == {"device": "stub-1", "reachable": False, "state": "", "awake": False}
+    assert reading == {"device": "stub-1", "reachable": False, "state": "", "awake": False, "busy": False}
+
+
+def test_a_busy_device_is_skipped_rather_than_reported_unreachable(tmp_path: Path) -> None:
+    """The poll must not queue behind a capture, and must not call a device it
+    deliberately did not look at "unreachable" — a sensor built on that drops
+    out for the whole length of every capture and fires spurious transitions.
+    """
+    # Arrange
+    toolkit, pack = _toolkit(tmp_path, AWAKE)
+    device = toolkit.container.inventory.get("stub-1")
+    assert device is not None
+    held = toolkit.container.transport_for(device)
+
+    # Act
+    try:
+        reading = toolkit.device_power("stub-1")
+    finally:
+        held.close()
+
+    # Assert
+    assert reading["busy"] is True
+    assert reading["awake"] is False
+    # No second connection was opened against the held device.
+    assert len(pack.opened) == 1
+
+
+def test_the_device_is_pollable_again_once_the_operation_closes(tmp_path: Path) -> None:
+    """A lock leaked on close would strand the device: every later poll would
+    see it as busy forever with nothing holding it."""
+    # Arrange
+    toolkit, _ = _toolkit(tmp_path, AWAKE)
+    device = toolkit.container.inventory.get("stub-1")
+    assert device is not None
+    toolkit.container.transport_for(device).close()
+
+    # Act
+    reading = toolkit.device_power("stub-1")
+
+    # Assert
+    assert reading["busy"] is False
+    assert reading["awake"] is True
 
 
 def test_a_device_that_answers_nothing_is_not_reported_awake(tmp_path: Path) -> None:

@@ -29,6 +29,13 @@ _SETTLE_TIMEOUT_S = 120.0
 _LISTENER_TIMEOUT_S = 3600.0
 _SHELL_TIMEOUT_S = 60.0
 _TRANSFER_TIMEOUT_S = 180.0
+# Floor throughput used to scale a transfer timeout by payload size, on top of
+# the flat allowance above. Deliberately pessimistic — netcat measured 5-12
+# MB/s, and `pull` on a busy set-top box runs well under that — because a
+# timeout that expires mid-transfer is how the predecessor produced silently
+# truncated archives. A Kodi profile runs to hundreds of MB, so a flat 180s
+# was never enough for the largest of them.
+_TRANSFER_FLOOR_BYTES_PER_S = 1_000_000.0
 
 CAPABILITIES: frozenset[Capability] = frozenset(
     {
@@ -165,12 +172,24 @@ class AdbTransport:
     def get(self, remote_path: str, local_path: Path) -> int:
         """Pull a file from the device.
 
+        The timeout is scaled to the file's size, read from the device first.
+        A flat allowance is what truncated archives in the predecessor, and a
+        Kodi profile is routinely large enough to exceed one.
+
+        **PARAMETERS:**
+            `remote_path` (str): Path on the device.  <br>
+            `local_path` (Path): Where the bytes land. Parent directories are created.  <br>
+
+        **RETURNS:**
+            `int`: Bytes read.  <br>
+
         **RAISES:**
             `TransportError`: If the pull failed.  <br>
         """
+        timeout = self._transfer_timeout_for(self._remote_size(remote_path))
         try:
             buffer = io.BytesIO()
-            self._require_device().pull(remote_path, buffer, transport_timeout_s=self._transfer_timeout_s, read_timeout_s=self._transfer_timeout_s)
+            self._require_device().pull(remote_path, buffer, transport_timeout_s=timeout, read_timeout_s=timeout)
         except Exception as exc:
             raise TransportError(f"ADB pull failed for {remote_path} on {self._address}: {exc}", target=self._address) from exc
         payload = buffer.getvalue()
@@ -218,10 +237,17 @@ class AdbTransport:
         return size
 
     def _push_native(self, local_path: Path, remote_path: str) -> None:
+        timeout = self._transfer_timeout_for(local_path.stat().st_size)
         try:
-            self._require_device().push(str(local_path), remote_path, transport_timeout_s=self._transfer_timeout_s)
+            self._require_device().push(str(local_path), remote_path, transport_timeout_s=timeout)
         except Exception as exc:
             raise TransportError(f"ADB push failed for {remote_path} on {self._address}: {exc}", target=self._address) from exc
+
+    def _transfer_timeout_for(self, size: int) -> float:
+        """RETURNS: float: The flat allowance plus time for `size` at the floor rate, or the flat allowance alone when the size is unknown (`_remote_size` reports -1)."""
+        if size <= 0:
+            return self._transfer_timeout_s
+        return self._transfer_timeout_s + size / _TRANSFER_FLOOR_BYTES_PER_S
 
     def _stream_via_netcat(self, local_path: Path, remote_path: str, size: int) -> None:
         listener = _NetcatListener(self._address, self._keys, self._port, remote_path)

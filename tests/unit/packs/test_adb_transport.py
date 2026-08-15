@@ -30,6 +30,8 @@ class _StubDevice:
         self.timeouts: list[float] = []
         self.closed = False
         self.pushed: list[tuple[str, str]] = []
+        self.pull_timeouts: list[float] = []
+        self.push_timeouts: list[float] = []
 
     def shell(self, command: str, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> str:
         self.commands.append(command)
@@ -39,12 +41,14 @@ class _StubDevice:
         return self.responses.get(command, "")
 
     def pull(self, remote: str, buffer: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+        self.pull_timeouts.append(transport_timeout_s)
         if remote in self.fail:
             raise OSError("pull failed")
         buffer.write(self.responses.get(remote, "").encode("utf-8"))
 
     def push(self, local: str, remote: str, transport_timeout_s: float = 0) -> None:
         self.pushed.append((local, remote))
+        self.push_timeouts.append(transport_timeout_s)
 
     def close(self) -> None:
         self.closed = True
@@ -132,6 +136,35 @@ def test_a_failed_pull_raises(tmp_path: Path) -> None:
     # Act / Assert
     with pytest.raises(TransportError):
         transport.get("/sdcard/missing", tmp_path / "x")
+
+
+def test_the_pull_timeout_scales_with_the_file_size(tmp_path: Path) -> None:
+    """A flat allowance is how the predecessor produced silently truncated
+    archives: a Kodi profile runs to hundreds of MB, and 180s does not cover
+    one at any throughput a set-top box actually sustains."""
+    # Arrange — 300 MB, so 180s flat + 300s at the 1 MB/s floor.
+    device = _StubDevice(responses={"stat -c %s /sdcard/big.tar.gz": "300000000", "/sdcard/big.tar.gz": "payload"})
+    transport = _transport(tmp_path, device)
+
+    # Act
+    transport.get("/sdcard/big.tar.gz", tmp_path / "big.tar.gz")
+
+    # Assert
+    assert device.pull_timeouts == [480.0]
+
+
+def test_the_pull_timeout_falls_back_when_the_size_is_unknown(tmp_path: Path) -> None:
+    """`_remote_size` reports -1 when `stat` gives nothing usable. Scaling on
+    that would produce a timeout shorter than the flat floor."""
+    # Arrange — no `stat` response, so the size is unknown.
+    device = _StubDevice(responses={"/sdcard/a.xml": "<a/>"})
+    transport = _transport(tmp_path, device)
+
+    # Act
+    transport.get("/sdcard/a.xml", tmp_path / "a.xml")
+
+    # Assert
+    assert device.pull_timeouts == [180.0]
 
 
 def test_put_verifies_the_digest_and_returns_the_size(tmp_path: Path) -> None:

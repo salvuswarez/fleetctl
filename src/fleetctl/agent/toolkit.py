@@ -15,6 +15,7 @@ from fleetctl.core.observability.correlation import correlate
 from fleetctl.core.operations.registry import OperationHandle, OperationStatus
 from fleetctl.core.policy import Verdict
 from fleetctl.core.registry import RegisteredStep
+from fleetctl.core.transport.exclusion import DeviceBusyError
 from fleetctl.core.workflow.engine import WorkflowEngine
 from fleetctl.core.workflow.plan import Plan, PlannedTask, build_plan
 
@@ -94,9 +95,9 @@ class Toolkit:
             `device_id` (str): Inventory id.  <br>
 
         **RETURNS:**
-            `dict[str, Any]`: `device`, `reachable`, `state`, and `awake`. `awake` is only ever true on a positive reading, so an unreachable device never looks awake.  <br>
+            `dict[str, Any]`: `device`, `reachable`, `state`, `awake`, and `busy`. `awake` is only ever true on a positive reading, so an unreachable device never looks awake. `busy` means an operation held the device and no read was attempted — not that the device is unreachable.  <br>
         """
-        answer: dict[str, Any] = {"device": device_id, "reachable": False, "state": "", "awake": False}
+        answer: dict[str, Any] = {"device": device_id, "reachable": False, "state": "", "awake": False, "busy": False}
 
         device = self.container.inventory.get(device_id)
         if device is None or not device.type:
@@ -116,8 +117,16 @@ class Toolkit:
 
         transport = None
         try:
-            transport = self.container.transport_for(device)
+            # Never waits. Queueing behind a capture would stall the poll for
+            # minutes and then report a minutes-old reading as current.
+            transport = self.container.transport_for(device, wait=False)
             state = str(read(transport) or "")
+        except DeviceBusyError:
+            # Distinct from unreachable: the device is fine, we simply did not
+            # look. A caller that flattens this into `reachable: false` drops
+            # its sensor out for the whole length of every capture.
+            LOGGER.debug("Skipped power read for %s: an operation holds the device", device_id)
+            return {**answer, "busy": True}
         except (FleetError, OSError):
             LOGGER.debug("Could not read power state for %s", device_id, exc_info=True)
             return answer
@@ -126,7 +135,7 @@ class Toolkit:
                 with suppress(Exception):
                     transport.close()
 
-        return {"device": device_id, "reachable": bool(state), "state": state, "awake": state == "awake"}
+        return {"device": device_id, "reachable": bool(state), "state": state, "awake": state == "awake", "busy": False}
 
     def list_steps(self) -> list[dict[str, Any]]:
         """RETURNS: list[dict[str, Any]]: Registered steps, with the effect class that decides how they are gated."""
