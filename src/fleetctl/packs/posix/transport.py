@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from fleetctl.core.config.secrets import Secret
 from fleetctl.core.effects import Capability, Effect
-from fleetctl.core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
+from fleetctl.core.errors import CommandFailedError, ConfigError, DeviceUnauthorizedError, TransportError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +71,38 @@ def _reject_unknown_host(paramiko_module: Any) -> Any:
     return _Policy()
 
 
+def _configured_path(value: Any, key: str) -> Path | None:
+    """Turn a configured path into an absolute one, or `None` when unset.
+
+    Relative paths are rejected rather than resolved. Nothing here can say what
+    they are relative *to* — the process CWD belongs to whoever launched it, and
+    under Home Assistant that is neither the config directory nor the fleetctl
+    home. A relative `known_hosts` was accepted silently and then failed as a
+    bare `FileNotFoundError` out of `connect`, which read as the device being
+    unreachable rather than as the config error it was.
+
+    **PARAMETERS:**
+        `value` (Any): The configured value; falsy means unset.  <br>
+        `key` (str): Dotted config key, used in the error message.  <br>
+
+    **RETURNS:**
+        `Path | None`: The absolute path, or ``None`` when unset.  <br>
+
+    **RAISES:**
+        `ConfigError`: If the path is relative.  <br>
+    """
+    if not value:
+        return None
+    path = Path(str(value)).expanduser()
+    # `root` as well as `is_absolute`: the fleet is configured with POSIX paths
+    # but the suite also runs on Windows, where `PureWindowsPath` calls a
+    # rooted-but-driveless path like `/keys/id_ed25519` relative. Rooted is the
+    # property that matters here — it is what makes the path unambiguous.
+    if not path.is_absolute() and not path.root:
+        raise ConfigError(f"{key} must be an absolute path, got {str(value)!r}; leave it blank to use the fleetctl home default", key=key)
+    return path
+
+
 @dataclass(frozen=True, slots=True)
 class SshSettings:
     """How to authenticate to a POSIX host.
@@ -98,15 +130,23 @@ class SshSettings:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> SshSettings:
-        """RETURNS: SshSettings: Settings read from a device's `vars.ssh` block."""
-        key = data.get("key_path")
-        hosts = data.get("known_hosts")
+        """Read settings from a fleet-level `ssh` block or a device's `vars.ssh`.
+
+        **PARAMETERS:**
+            `data` (Mapping[str, Any]): The config block.  <br>
+
+        **RETURNS:**
+            `SshSettings`: The parsed settings.  <br>
+
+        **RAISES:**
+            `ConfigError`: If `key_path` or `known_hosts` is a relative path.  <br>
+        """
         return cls(
             user=str(data.get("user", "")),
-            key_path=Path(str(key)).expanduser() if key else None,
+            key_path=_configured_path(data.get("key_path"), "ssh.key_path"),
             password=data.get("password", ""),
             port=int(data.get("port", SSH_PORT)),
-            known_hosts=Path(str(hosts)).expanduser() if hosts else None,
+            known_hosts=_configured_path(data.get("known_hosts"), "ssh.known_hosts"),
         )
 
 
@@ -140,15 +180,23 @@ class SshTransport:
 
         **RAISES:**
             `DeviceUnauthorizedError`: If the host key is known but the credential was refused — an expected host, worth acting on.  <br>
-            `TransportError`: If the host is unreachable, absent from `known_hosts`, or the handshake failed.  <br>
+            `TransportError`: If the `known_hosts` file could not be read, the host is unreachable or absent from it, or the handshake failed.  <br>
         """
         import paramiko
 
         client = paramiko.SSHClient()
-        if self._settings.known_hosts is not None:
-            client.load_host_keys(str(self._settings.known_hosts))
-        else:
-            client.load_system_host_keys()
+        # Guarded separately from connect: a configured-but-missing file raises
+        # here, and left unguarded it escaped as a bare OSError, bypassing this
+        # method's contract. Its own message because "cannot read your
+        # known_hosts" and "cannot reach the device" need different fixes.
+        try:
+            if self._settings.known_hosts is not None:
+                client.load_host_keys(str(self._settings.known_hosts))
+            else:
+                client.load_system_host_keys()
+        except OSError as exc:
+            raise TransportError(f"Could not read known_hosts at {self._settings.known_hosts}: {exc}", target=self._address) from exc
+
         client.set_missing_host_key_policy(_reject_unknown_host(paramiko))
 
         try:
