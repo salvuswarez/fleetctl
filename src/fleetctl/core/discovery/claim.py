@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
 from fleetctl.core.discovery.sweep import Host
-from fleetctl.core.errors import DeviceUnauthorizedError, TransportError
+from fleetctl.core.errors import DeviceUnauthorizedError, FleetError, TransportError
 from fleetctl.core.inventory.device import Device, DeviceStatus
 from fleetctl.core.registry import DevicePack
 from fleetctl.core.transport.base import Transport
@@ -92,6 +92,16 @@ def claim_host(host: Host, packs: Sequence[DevicePack], connect: Connector) -> C
             continue
         except TransportError as exc:
             LOGGER.debug("No %s transport to %s: %s", pack_platform, host.address, exc)
+            continue
+        except FleetError as exc:
+            # Anything else a pack raises building a transport — a malformed
+            # credential, an unusable path — is that platform's problem, not
+            # this host's and not the sweep's. A fleet-wide scan died on the
+            # first host because one pack's SSH identity was misconfigured,
+            # finding nothing at all when every ADB device was reachable.
+            # WARNING rather than debug: unlike an unreachable host, this is
+            # not a normal outcome and someone has to fix it.
+            LOGGER.warning("Cannot build a %s transport for %s: %s", pack_platform, host.address, exc)
             continue
         try:
             for pack in platform_packs:

@@ -206,6 +206,43 @@ def test_packs_on_different_platforms_each_get_a_connection() -> None:
     assert claim.pack_id == "box"
 
 
+def test_a_misconfigured_pack_does_not_end_the_sweep() -> None:
+    """`claim_host` promises never to raise. A relative `ssh.key_path` in a live
+    fleet.yml made one pack's transport factory raise `ConfigError` on the first
+    host, which escaped the thread pool and failed the whole scan — finding
+    nothing, while every ADB device on the subnet was reachable."""
+
+    # Arrange
+    def _connect(address: str, platform: str) -> Transport:
+        if platform == "ssh":
+            raise ConfigError("ssh.key_path must be an absolute path", key="ssh.key_path")
+        return FakeTransport(responses=FIRE_FACTS)
+
+    packs = [_Pack("box", "Acme", platform="ssh"), _Pack("firetv", "Amazon")]
+
+    # Act
+    claim = claim_host(Host(address="192.168.1.50"), packs, _connect)
+
+    # Assert — the healthy platform still claims the host.
+    assert claim.pack_id == "firetv"
+
+
+def test_a_misconfigured_pack_leaves_other_hosts_claimable() -> None:
+    """The failure mode that mattered was fleet-wide, not per-host."""
+    # Arrange
+    hosts = [Host(address=f"192.168.1.{index}") for index in range(50, 55)]
+
+    def _connect(address: str, platform: str) -> Transport:
+        raise ConfigError("ssh.known_hosts must be an absolute path", key="ssh.known_hosts")
+
+    # Act
+    claims = claim_hosts(hosts, [_Pack("box", "Acme", platform="ssh")], _connect)
+
+    # Assert — every host is reported unclaimed rather than the sweep dying.
+    assert len(claims) == len(hosts)
+    assert all(claim.device is None for claim in claims)
+
+
 @pytest.mark.parametrize(
     ("facts", "mac", "expected"),
     [
