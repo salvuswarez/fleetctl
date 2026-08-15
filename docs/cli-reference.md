@@ -3,9 +3,9 @@
 
 <hr style="border: 0; border-top: 2px solid #005288; margin: 0 0 32px 0;"/>
 
-<sub style="color: #64748b;">Last verified 2026-08-02</sub>
+<sub style="color: #64748b;">Last verified 2026-08-14</sub>
 
-Nothing here is aspirational. Also usable through MCP (see [`ha-parity.md`](ha-parity.md)) and, once S7 lands, through Home Assistant.
+Nothing here is aspirational. The same operations are available through MCP and through the Home Assistant integration (see [`ha-parity.md`](ha-parity.md)).
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">Global options</h2>
 
@@ -37,7 +37,7 @@ fleetctl scan [OPTIONS] SUBNET
 
 Sweeps `SUBNET`, identifies hosts against every installed device pack, and merges what it finds into `config/inventory/devices.yml`. Never touches `tags` or `vars` on a device already known — hand-edit those. A device that answers but refuses the ADB key is recorded anyway, flagged `unauthorized` so it's visible rather than silently dropped.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl scan 192.168.1.0/24
@@ -64,7 +64,7 @@ fleetctl run [OPTIONS] STEP_ID
 
 Runs one registered step directly, outside a workflow. `fleetctl steps` lists what's available.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl run firetv.check --device living-room-stick
@@ -87,7 +87,7 @@ fleetctl run fleet.scan --set subnet=192.168.1.0/24 --set dry_run=true
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE &middot; Command</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">`workflow list`</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl workflow list
@@ -115,7 +115,7 @@ fleetctl workflow plan NAME
 
 Shows every task the workflow would run — which step, which device, its effect class, whether it's blocked or needs approval — without doing any of it. Prints a digest.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl workflow plan kodi-refresh
@@ -134,7 +134,7 @@ fleetctl workflow run [OPTIONS] NAME
 
 `--confirm` must be the digest `workflow plan` just printed. If the fleet changed since — a device added, a tag edited — the digest won't match and the run is refused. This is deliberate: a workflow never runs against a plan nobody looked at.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl workflow plan kodi-check                                    # note the digest
@@ -150,7 +150,7 @@ fleetctl workflow run kodi-refresh --confirm <digest> --approve      # destructi
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">`devices list`</h2>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl devices list
@@ -166,7 +166,7 @@ fleetctl config DEVICE_ID
 
 Explains one device's fully resolved config, layer by layer (pack defaults → fleet → groups → device `vars` → step `with:` → `--set` flags), so it's clear which layer supplied a given value.
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl config living-room-stick
@@ -174,7 +174,7 @@ fleetctl config living-room-stick
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">`steps`</h2>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl steps
@@ -184,7 +184,7 @@ Every registered step, its effect class (`read` / `mutating` / `destructive`), a
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">`packs`</h2>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl packs
@@ -200,7 +200,7 @@ fleetctl artifacts list KIND
 
 Lists stored artifacts of one kind — `captures`, `builds`, or `gold` — newest first, from whichever backend `fleet.yml` configures (SMB or local).
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl artifacts list builds
@@ -222,7 +222,7 @@ The most recent audit records — one per mutating or destructive effect, redact
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE &middot; Command</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">`audit verify`</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 fleetctl audit verify
@@ -273,12 +273,11 @@ Serves the agent toolkit over MCP on stdio — 7 tools, 5 read-only resources. S
 
 - [fleetctl](https://github.com/salvuswarez/fleetctl)
 - [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
-- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; Home Assistant integration
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
 
 - [Observability](observability.md) &mdash; diagnostics, timeline, audit
-- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
 - [HA Parity](ha-parity.md) &mdash; panel command mapping
 
 </td>
@@ -289,9 +288,6 @@ Serves the agent toolkit over MCP on stdio — 7 tools, 5 read-only resources. S
 - Plugin-based home device fleet manager
 - MIT licensed
 
-<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
-
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
 
 </td>
 </tr>

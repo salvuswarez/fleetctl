@@ -128,12 +128,11 @@ finish.
 
 - [fleetctl](https://github.com/salvuswarez/fleetctl)
 - [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
-- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; Home Assistant integration
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
 
 - [Observability](observability.md) &mdash; diagnostics, timeline, audit
-- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
 - [HA Parity](ha-parity.md) &mdash; panel command mapping
 
 </td>
@@ -144,9 +143,6 @@ finish.
 - Plugin-based home device fleet manager
 - MIT licensed
 
-<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
-
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
 
 </td>
 </tr>

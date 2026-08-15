@@ -15,13 +15,13 @@ Three files, none required beyond `config/inventory/devices.yml` (and even that 
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">`.env`</h2>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 cp .env.example .env
 ```
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 SMB_HOST=nas.example.lan
@@ -41,7 +41,7 @@ Loaded once, at container bootstrap, from the directory above `--config-dir` (th
 
 <h2 style="border-left: 6px solid #005288; padding: 4px 0 10px 16px; margin: 40px 0 16px; border-bottom: 1px solid rgba(0, 82, 136, 0.25); background-image: url(data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27100%25%27%20height%3D%27100%25%27%3E%3Cdefs%3E%3Cpattern%20id%3D%27h%27%20width%3D%2720%27%20height%3D%2735%27%20patternUnits%3D%27userSpaceOnUse%27%3E%3Cpath%20d%3D%27M10%2023L0%2018V6L10%200l10%206v12L10%2023zm0%200v12%27%20fill%3D%27none%27%20stroke%3D%27%23005288%27%20stroke-opacity%3D%270.22%27%2F%3E%3C%2Fpattern%3E%3ClinearGradient%20id%3D%27lg%27%20x1%3D%270%25%27%20x2%3D%27100%25%27%3E%3Cstop%20offset%3D%270%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%271%27%2F%3E%3Cstop%20offset%3D%2785%25%27%20stop-color%3D%27white%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3Cmask%20id%3D%27f%27%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23lg%29%27%2F%3E%3C%2Fmask%3E%3C%2Fdefs%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20fill%3D%27url%28%23h%29%27%20mask%3D%27url%28%23f%29%27%2F%3E%3C%2Fsvg%3E); background-size: 100% 100%; background-repeat: no-repeat; border-radius: 3px;">`config/fleet.yml`</h2>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-bash.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-bash.svg" height="18"/></div>
 
 ```bash
 cp config/fleet.yml.example config/fleet.yml
@@ -52,7 +52,7 @@ Every top-level block is optional. An empty file (or a missing one) is a fully p
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE &middot; fleet.yml Field</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">`artifacts.smb`</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 artifacts:
@@ -71,7 +71,7 @@ artifacts:
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE &middot; fleet.yml Field</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">`observability`</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 observability:
@@ -83,7 +83,7 @@ Relative paths resolve under `--home` (`~/.fleetctl` by default), not the workin
 <div style="margin-top: 52px; margin-left: 10px; color: #7986cb; font-size: 10.5px; font-weight: 700; letter-spacing: 2px; line-height: 1;">&#9642; REFERENCE &middot; fleet.yml Field</div>
 <h3 style="margin-top: 4px; margin-left: 10px;">`policy`</h3>
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 policy:
@@ -134,7 +134,7 @@ A `mutating`/`destructive` step's effect is what `confirm:` and `deny:` key off 
 
 Not something you write by hand from scratch — `fleetctl scan SUBNET` creates and updates it. Hand-edit `tags`, `name`, and `vars`; a scan never touches those three, only the fields it can actually observe (address, mac, model, os_version, status).
 
-<div align="left" style="margin-bottom: -16px;"><img src="assets/lang-yaml.svg" height="18"/></div>
+<div align="left" style="position: relative; z-index: 1; margin-left: 10px; margin-bottom: -10px;"><img src="assets/lang-yaml.svg" height="18"/></div>
 
 ```yaml
 devices:
@@ -220,12 +220,11 @@ A value here can be tried once without editing the file, via `--set kodi.display
 
 - [fleetctl](https://github.com/salvuswarez/fleetctl)
 - [firestick_manager](https://github.com/salvuswarez/firestick_manager) &mdash; predecessor
-- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; S7 consumer
+- [ha-cyberpunk](https://github.com/salvuswarez/ha-cyberpunk) &mdash; Home Assistant integration
 
 <h4><ins style="color: #2a8b93; text-decoration: none;">References</ins></h4>
 
 - [Observability](observability.md) &mdash; diagnostics, timeline, audit
-- [Roadmap](roadmap.md) &mdash; S0&ndash;S8 stages
 - [HA Parity](ha-parity.md) &mdash; panel command mapping
 
 </td>
@@ -236,9 +235,6 @@ A value here can be tried once without editing the file, via `--set kodi.display
 - Plugin-based home device fleet manager
 - MIT licensed
 
-<h4><ins style="color: #2a8b93; text-decoration: none;">Status</ins></h4>
-
-- S0&ndash;S6 done &middot; S7 (HA cutover) not started
 
 </td>
 </tr>
