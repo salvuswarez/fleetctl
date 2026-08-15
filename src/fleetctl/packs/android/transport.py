@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import logging
 import shlex
 import socket
@@ -187,15 +186,25 @@ class AdbTransport:
             `TransportError`: If the pull failed.  <br>
         """
         timeout = self._transfer_timeout_for(self._remote_size(remote_path))
-        try:
-            buffer = io.BytesIO()
-            self._require_device().pull(remote_path, buffer, transport_timeout_s=timeout, read_timeout_s=timeout)
-        except Exception as exc:
-            raise TransportError(f"ADB pull failed for {remote_path} on {self._address}: {exc}", target=self._address) from exc
-        payload = buffer.getvalue()
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(payload)
-        return len(payload)
+        # Streamed to disk rather than accumulated in a BytesIO. A profile
+        # archive runs past 300MB, and buffering meant growing that in memory
+        # by repeated reallocation and then `getvalue()` copying the whole
+        # thing again — roughly double the archive, resident, on a box with far
+        # less headroom than that. Reallocation stalls also back up the read,
+        # and a reader that stalls long enough gets its connection reset by the
+        # device. Writing straight through also leaves the partial file behind
+        # when a pull fails, which is the only way to see how far it got.
+        try:
+            with local_path.open("wb") as sink:
+                self._require_device().pull(remote_path, sink, transport_timeout_s=timeout, read_timeout_s=timeout)
+        except Exception as exc:
+            landed = local_path.stat().st_size if local_path.exists() else 0
+            raise TransportError(
+                f"ADB pull failed for {remote_path} on {self._address} after {landed} bytes: {exc}",
+                target=self._address,
+            ) from exc
+        return local_path.stat().st_size
 
     def free_bytes(self, remote_path: str) -> int:
         """RETURNS: int: Free bytes on the filesystem holding `remote_path`, or 0 if `df` output could not be parsed."""
