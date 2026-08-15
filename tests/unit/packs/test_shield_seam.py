@@ -66,13 +66,33 @@ def test_the_shield_does_not_inherit_fire_os_quirks() -> None:
     `split_gzip` is deliberately not in this list. It looked like a Fire OS
     quirk and is in fact toybox's, which both vendors ship; see the sibling
     test below.
+
+    `push_via_netcat` is not in this list either, for a different reason: it is
+    not a bug workaround at all on this device, but a transport chosen on
+    throughput. Also below.
     """
     # Act
     quirks = ShieldPack().quirks
 
     # Assert
-    assert quirks.push_via_netcat is False
     assert quirks.verify_disable_user is False
+
+
+def test_the_shield_uses_netcat_for_speed_not_because_push_is_broken() -> None:
+    """The distinction is the point, because the file records the opposite.
+
+    Native push moved a 160MB build and a 64MB APK intact here on 2026-08-12.
+    The 330MB deploy that failed on 2026-08-14 died on `adb_shell`'s 10s default
+    `read_timeout_s` waiting for the device's `OKAY` — not on the transfer — and
+    that gap is fixed in `_push_native` regardless. Netcat is chosen because it
+    measures 5-12 MB/s against roughly 1 MB/s, not because this device cannot
+    push. Recording it as a Fire OS quirk inherited would be a false finding.
+    """
+    # Act
+    quirks = ShieldPack().quirks
+
+    # Assert
+    assert quirks.push_via_netcat is True
 
 
 def test_the_shield_splits_gzip_because_its_toybox_truncates_on_create() -> None:

@@ -38,15 +38,21 @@ Fixing `exec` to append `; echo __EXIT__$?` and parse it would remove the root c
 | Device must already be authorized | An unauthorized device hangs at auth until timeout rather than erroring cleanly |
 | Key identity matters | The CLI and the HA integration hold **separate** key pairs. Authorizing one does not authorize the other. |
 
-Timeouts do **not** inherit from the connection. `adb_shell`'s `shell()`/`pull()` each take their own `transport_timeout_s`/`read_timeout_s` and fall back to a 10s library default if unset — far too short for a `tar` over a large directory or a multi-hundred-MB transfer.
+Timeouts do **not** inherit from the connection. `adb_shell`'s `shell()`, `pull()` **and `push()`** each take their own `transport_timeout_s`/`read_timeout_s` and fall back to a 10s library default if unset — far too short for a `tar` over a large directory or a multi-hundred-MB transfer.
+
+**Pass both, on every one of them.** `read_timeout_s` is a separate parameter that does not inherit from `transport_timeout_s`, and on a transfer it governs the wait for the device's `OKAY` acknowledgement, not the data. A `push()` given only `transport_timeout_s` still allows a device exactly ten seconds to acknowledge a 330MB write, and fails with `TcpTimeoutException: Reading from <addr> timed out (10.0 seconds)` while the transfer itself is perfectly healthy. That is a Shield deploy failure that looked like broken hardware and was a missing keyword argument.
 
 Scale timeouts with data size. A flat timeout is how the predecessor silently truncated archives.
+
+`pull()` takes a **`BytesIO` or a path**, never an open handle — it selects its opener with `_open_bytesio if isinstance(local_path, BytesIO) else open` and opens the destination itself. Hand it a path: an already-open file object reaches `open()` and dies with `TypeError: expected str, bytes or os.PathLike object, not BufferedWriter` before a byte moves. Passing a path also streams straight to disk, which avoids growing a 300MB+ `BytesIO` by reallocation and then copying it whole with `getvalue()`, and leaves the partial file behind when a transfer fails — the only way to tell a consistent cutoff from a flaky one.
 
 ## Uploads go over netcat, not `push()`
 
 **`adb_shell`'s `push()` does not work against these devices.** Measured against a real Fire TV: it moved *zero* bytes and hung until timeout for anything beyond a few MB — the destination file was never created — from both a workstation and Home Assistant. Netcat moves the same payload at 5–12 MB/s.
 
 `shell()` and `pull()` are unaffected and work fine. Do not "unify" pull onto netcat.
+
+**The Shield uses netcat too, as of 2026-08-14 — but not for this reason.** Native push moved a 160MB build and a 64MB APK intact on that device on 2026-08-12, and the 330MB deploy that failed two days later died on the missing `read_timeout_s` above, not on the transfer. It was switched on throughput (5-12 MB/s against roughly 1 MB/s), which stops being academic at 300MB+. Recording it as "push is broken on the Shield" would be a false finding, and the pack's `quirks.yml` says so explicitly.
 
 Three constraints, all found the hard way:
 

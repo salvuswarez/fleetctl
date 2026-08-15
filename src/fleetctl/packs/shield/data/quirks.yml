@@ -22,8 +22,6 @@
 # while every capture came back short.
 #
 # Notably NOT set, each measured rather than assumed:
-#   push_via_netcat   — the ADB push protocol moved a 160MB build and a 64MB
-#                       APK intact.
 #   verify_disable_user — VERIFIED HONEST: 15 packages disabled, and all 15
 #                       independently confirmed by `pm list packages -d`.
 #                       Unlike Fire OS, this device does not silently no-op.
@@ -39,6 +37,24 @@
 
 # Create as `tar` then a separate `gzip`; extract as `gzip -d` then `tar`.
 split_gzip: true
+
+# Stream uploads through an on-device listener rather than the ADB push
+# protocol. Amended 2026-08-14, and the reason matters because the earlier
+# entry recorded the opposite:
+#
+# This is NOT "native push is broken here" — that was never demonstrated. It
+# moved a 160MB build and a 64MB APK intact on 2026-08-12, and the 330MB deploy
+# that failed on 2026-08-14 did so on `adb_shell`'s 10s default
+# `read_timeout_s` waiting for the device's `OKAY`, not on the transfer. That
+# gap is fixed in `_push_native` regardless, so native push would very likely
+# work now.
+#
+# Netcat is chosen on merit instead: 5-12 MB/s measured against ~1 MB/s for the
+# push protocol, it is `AdbTransport`'s own default, every Fire TV deploy
+# already exercises it, and it removes the ack-timeout class rather than
+# widening a window. A 330MB build is where that difference stops being
+# academic.
+push_via_netcat: true
 
 external_storage: /sdcard
 app_data_root: /sdcard/Android/data
