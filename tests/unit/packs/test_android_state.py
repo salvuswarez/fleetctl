@@ -26,6 +26,7 @@ SPEC = AppStateSpec(
 )
 
 ROOT = "/sdcard/Android/data/com.example.demo/files/.demo"
+DONE = "__fleetctl_done__"
 
 FIRE_OS = AndroidQuirks(split_gzip=True, verify_disable_user=True)
 STOCK = AndroidQuirks()
@@ -34,9 +35,10 @@ STOCK = AndroidQuirks()
 def _ok_responses(archive: str) -> dict[str, str]:
     plain = archive.removesuffix(".gz")
     return {
-        f"tar cf {plain} -C /sdcard/Android/data/com.example.demo/files .demo": "",
-        f"gzip {plain}": "",
-        f"tar czf {archive} -C /sdcard/Android/data/com.example.demo/files .demo": "",
+        f"rm -f {archive} {plain}": "",
+        f"tar cf {plain} -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}": DONE,
+        f"gzip {plain} && echo {DONE}": DONE,
+        f"tar czf {archive} -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}": DONE,
         archive: "archive-bytes",
         f"gzip -d {archive}": "",
         f"tar xf {plain} -C {ROOT}": "",
@@ -79,8 +81,8 @@ def test_snapshot_splits_tar_and_gzip_when_the_quirk_is_declared(tmp_path: Path)
 
     # Assert
     issued = transport.commands()
-    assert "tar cf /sdcard/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo" in issued
-    assert "gzip /sdcard/capture.tar" in issued
+    assert f"tar cf /sdcard/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}" in issued
+    assert f"gzip /sdcard/capture.tar && echo {DONE}" in issued
     assert not [command for command in issued if "tar czf" in command]
 
 
@@ -179,3 +181,154 @@ def test_unpack_timeout_scales_with_archive_size(tmp_path: Path) -> None:
     # Assert
     assert small == 180.0
     assert large > 180.0
+
+
+def _execs_after(transport: FakeTransport, kind: str) -> list[str]:
+    """RETURNS: list[str]: Commands issued after the last `kind` transfer — what a `finally` ran."""
+    kinds = [call.kind for call in transport.calls]
+    start = len(kinds) - kinds[::-1].index(kind)
+    return [call.argument for call in transport.calls[start:] if call.kind == "exec"]
+
+
+def test_snapshot_removes_the_staging_archive_when_the_pull_fails(tmp_path: Path) -> None:
+    """A pull that died mid-stream left its archive on the device; fourteen of
+    those filled a SHIELD's external storage."""
+    # Arrange
+    responses = _ok_responses("/sdcard/capture.tar.gz")
+    del responses["/sdcard/capture.tar.gz"]
+    transport = FakeTransport(responses=responses)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(TransportError) as caught:
+        manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert "no scripted content" in str(caught.value)
+    assert transport.commands()[-1] == "rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"
+
+
+def test_snapshot_raises_and_removes_the_plain_tar_when_gzip_fails(tmp_path: Path) -> None:
+    """With the disk full, `gzip` fails and leaves the plain `.tar` — 1.45GB of it."""
+    # Arrange
+    responses = _ok_responses("/sdcard/capture.tar.gz")
+    responses[f"gzip /sdcard/capture.tar && echo {DONE}"] = "gzip: /sdcard/capture.tar.gz: No space left on device"
+    transport = FakeTransport(responses=responses)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(TransportError) as caught:
+        manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert "No space left" in str(caught.value)
+    assert not [call for call in transport.calls if call.kind == "get"]
+    assert transport.commands()[-1] == "rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"
+
+
+def test_snapshot_does_not_compress_a_tar_that_failed(tmp_path: Path) -> None:
+    """ADB reports no exit status, so a failed `tar` used to be noticed only at the pull."""
+    # Arrange
+    responses = _ok_responses("/sdcard/capture.tar.gz")
+    responses[f"tar cf /sdcard/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}"] = "tar: write error"
+    transport = FakeTransport(responses=responses)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(TransportError) as caught:
+        manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert "tar failed" in str(caught.value)
+    assert not [command for command in transport.commands() if command.startswith("gzip")]
+
+
+def test_snapshot_refuses_before_archiving_when_the_device_lacks_space(tmp_path: Path) -> None:
+    """Split gzip holds the plain tar and its compressed copy at once: 2x the tree."""
+    # Arrange
+    responses = _ok_responses("/sdcard/capture.tar.gz")
+    responses[f"du -sk {ROOT}"] = f"1000000\t{ROOT}"
+    transport = FakeTransport(responses=responses, free_space=1_500_000 * 1024)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(FleetError) as caught:
+        manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert "free space" in str(caught.value)
+    assert not [command for command in transport.commands() if command.startswith(("tar", "gzip"))]
+
+
+def test_snapshot_proceeds_when_the_tree_fits(tmp_path: Path) -> None:
+    # Arrange
+    responses = _ok_responses("/sdcard/capture.tar.gz")
+    responses[f"du -sk {ROOT}"] = f"1000000\t{ROOT}"
+    transport = FakeTransport(responses=responses, free_space=2_500_000 * 1024)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    result = manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert result.read_text() == "archive-bytes"
+
+
+def test_snapshot_removes_the_staging_archive_exactly_once_on_success(tmp_path: Path) -> None:
+    # Arrange
+    transport = FakeTransport(responses=_ok_responses("/sdcard/capture.tar.gz"))
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert _execs_after(transport, "get") == ["rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"]
+
+
+def test_a_failed_cleanup_does_not_mask_the_original_error(tmp_path: Path) -> None:
+    # Arrange
+    responses = _ok_responses("/sdcard/capture.tar.gz")
+    del responses["/sdcard/capture.tar.gz"]
+    del responses["rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"]
+    transport = FakeTransport(responses=responses, failures={"rm -f /sdcard/capture.tar.gz /sdcard/capture.tar": "device offline"})
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(TransportError) as caught:
+        manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
+
+    # Assert
+    assert "no scripted content" in str(caught.value)
+
+
+def test_restore_removes_the_staged_archive_when_the_push_fails(tmp_path: Path) -> None:
+    # Arrange
+    archive = tmp_path / "build.tar.gz"
+    archive.write_bytes(b"x" * 1024)
+    transport = FakeTransport(responses=_ok_responses("/sdcard/build.tar.gz"), failures={"/sdcard/build.tar.gz": "connection reset"})
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(TransportError):
+        manager.restore(SPEC, archive)
+
+    # Assert
+    assert _execs_after(transport, "put") == ["rm -f /sdcard/build.tar.gz /sdcard/build.tar"]
+
+
+def test_restore_removes_the_unpacked_tar_when_extraction_fails(tmp_path: Path) -> None:
+    # Arrange
+    archive = tmp_path / "build.tar.gz"
+    archive.write_bytes(b"x" * 1024)
+    responses = _ok_responses("/sdcard/build.tar.gz")
+    del responses[f"tar xf /sdcard/build.tar -C {ROOT}"]
+    transport = FakeTransport(responses=responses)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(TransportError):
+        manager.restore(SPEC, archive)
+
+    # Assert
+    assert transport.commands()[-1] == "rm -f /sdcard/build.tar.gz /sdcard/build.tar"
