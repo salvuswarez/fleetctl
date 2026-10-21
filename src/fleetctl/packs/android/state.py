@@ -8,7 +8,7 @@ import shlex
 from pathlib import Path
 
 from fleetctl.core.effects import Effect
-from fleetctl.core.errors import FleetError, TransportError
+from fleetctl.core.errors import CommandFailedError, FleetError, TransportError
 from fleetctl.core.state import AppStateSpec
 from fleetctl.core.transport.base import Transport
 from fleetctl.packs.android.quirks import AndroidQuirks
@@ -16,6 +16,7 @@ from fleetctl.packs.android.quirks import AndroidQuirks
 LOGGER = logging.getLogger(__name__)
 
 PLATFORM = "android"
+_DONE = "__fleetctl_done__"
 
 
 class AndroidStateManager:
@@ -51,10 +52,15 @@ class AndroidStateManager:
     def snapshot(self, spec: AppStateSpec, destination: Path) -> Path:
         """Trim, archive, and retrieve the app's state.
 
+        The staging archive is removed however this exits. Failed captures that
+        left theirs behind filled a SHIELD's 12GB of external storage with
+        fourteen of them, and a full disk is what made the next one fail.
+
         **RETURNS:**
             `Path`: `destination`.  <br>
 
         **RAISES:**
+            `FleetError`: If the device lacks free space to build the archive.  <br>
             `TransportError`: If the archive could not be built or retrieved.  <br>
         """
         root = self.state_root(spec)
@@ -66,16 +72,19 @@ class AndroidStateManager:
 
         parent, leaf = posixpath.split(root.rstrip("/"))
         timeout = self._transfer_timeout()
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)} {shlex.quote(plain)}", effect=Effect.DESTRUCTIVE)
+        self._discard(staged, plain)
+        # Split gzip holds the plain tar and its compressed copy at once.
+        self._require_free(self._footprint(root) * (2 if self._quirks.split_gzip else 1))
 
-        if self._quirks.split_gzip:
-            self._transport.exec(f"tar cf {shlex.quote(plain)} -C {shlex.quote(parent)} {shlex.quote(leaf)}", timeout_s=timeout)
-            self._transport.exec(f"gzip {shlex.quote(plain)}", timeout_s=timeout)
-        else:
-            self._transport.exec(f"tar czf {shlex.quote(staged)} -C {shlex.quote(parent)} {shlex.quote(leaf)}", timeout_s=timeout)
-
-        self._transport.get(staged, destination)
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)}", effect=Effect.DESTRUCTIVE)
+        try:
+            if self._quirks.split_gzip:
+                self._run_checked(f"tar cf {shlex.quote(plain)} -C {shlex.quote(parent)} {shlex.quote(leaf)}", timeout)
+                self._run_checked(f"gzip {shlex.quote(plain)}", timeout)
+            else:
+                self._run_checked(f"tar czf {shlex.quote(staged)} -C {shlex.quote(parent)} {shlex.quote(leaf)}", timeout)
+            self._transport.get(staged, destination)
+        finally:
+            self._discard(staged, plain)
         return destination
 
     def restore(self, spec: AppStateSpec, archive: Path) -> None:
@@ -87,28 +96,30 @@ class AndroidStateManager:
         """
         root = self.state_root(spec)
         size = archive.stat().st_size
-        self._require_space(size)
+        self._require_free(int(size * self._quirks.disk_headroom))
 
         staged = posixpath.join(self._quirks.external_storage, archive.name)
         plain = _plain(staged)
         timeout = self._unpack_timeout(size)
 
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)} {shlex.quote(plain)}", effect=Effect.DESTRUCTIVE)
-        self._transport.put(archive, staged, effect=Effect.DESTRUCTIVE)
+        self._discard(staged, plain)
+        try:
+            self._transport.put(archive, staged, effect=Effect.DESTRUCTIVE)
 
-        if self._quirks.split_gzip:
-            self._transport.exec(f"gzip -d {shlex.quote(staged)}", timeout_s=timeout)
-            unpack_from = plain
-        else:
-            unpack_from = staged
+            if self._quirks.split_gzip:
+                self._transport.exec(f"gzip -d {shlex.quote(staged)}", timeout_s=timeout)
+                unpack_from = plain
+            else:
+                unpack_from = staged
 
-        for member in spec.members:
-            self._transport.exec_ok(f"rm -rf {shlex.quote(posixpath.join(root, member))}", effect=Effect.DESTRUCTIVE)
-        self._transport.exec(f"mkdir -p {shlex.quote(root)}")
+            for member in spec.members:
+                self._transport.exec_ok(f"rm -rf {shlex.quote(posixpath.join(root, member))}", effect=Effect.DESTRUCTIVE)
+            self._transport.exec(f"mkdir -p {shlex.quote(root)}")
 
-        extract = "tar xf" if self._quirks.split_gzip else "tar xzf"
-        self._transport.exec(f"{extract} {shlex.quote(unpack_from)} -C {shlex.quote(root)}", timeout_s=timeout)
-        self._transport.exec_ok(f"rm -f {shlex.quote(unpack_from)}", effect=Effect.DESTRUCTIVE)
+            extract = "tar xf" if self._quirks.split_gzip else "tar xzf"
+            self._transport.exec(f"{extract} {shlex.quote(unpack_from)} -C {shlex.quote(root)}", timeout_s=timeout)
+        finally:
+            self._discard(staged, plain)
 
         self._verify(root, spec)
 
@@ -128,11 +139,38 @@ class AndroidStateManager:
             if not entries:
                 raise TransportError(f"Restore verification failed: {root}/{member} is missing or empty", target=self._transport.target)
 
-    def _require_space(self, archive_size: int) -> None:
+    def _require_free(self, needed: int) -> None:
         free = self._transport.free_bytes(self._quirks.external_storage)
-        needed = int(archive_size * self._quirks.disk_headroom)
         if free and free < needed:
             raise FleetError(f"Not enough free space on {self._transport.target}: need ~{needed // (1024 * 1024)}MB, {free // (1024 * 1024)}MB available")
+
+    def _footprint(self, root: str) -> int:
+        """RETURNS: int: Bytes the tree at `root` occupies, or 0 when `du` cannot say — which skips the check rather than refusing."""
+        fields = self._transport.exec_ok(f"du -sk {shlex.quote(root)}", effect=Effect.READ, timeout_s=self._transfer_timeout()).split()
+        return int(fields[0]) * 1024 if fields and fields[0].isdigit() else 0
+
+    def _run_checked(self, command: str, timeout: float) -> None:
+        """Run an archive command and raise unless it exited 0.
+
+        ADB's shell reports no exit status, so a `tar` that ran out of space
+        returns its complaint as ordinary output. That left a truncated 1.45GB
+        `.tar` on a full SHIELD and surfaced only at the pull, as "No such file
+        or directory". A marker chained on `&&` makes the exit status visible.
+        """
+        output = self._transport.exec(f"{command} && echo {_DONE}", timeout_s=timeout)
+        if not output.endswith(_DONE):
+            raise CommandFailedError(
+                f"{command.split()[0]} failed on {self._transport.target}: {output or 'no output'}", target=self._transport.target, command=command
+            )
+
+    def _discard(self, *paths: str) -> None:
+        """Remove staging files, best effort. Runs from `finally`, so a failure here
+        is logged and must never replace the exception that got it there."""
+        command = "rm -f " + " ".join(shlex.quote(path) for path in paths)
+        try:
+            self._transport.exec(command, effect=Effect.DESTRUCTIVE)
+        except FleetError as exc:
+            LOGGER.warning("Could not remove staging files on %s: %s", self._transport.target, exc)
 
     def _unpack_timeout(self, archive_size: int) -> float:
         """Scale the timeout by payload size. A flat timeout is how the

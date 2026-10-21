@@ -239,8 +239,9 @@ def test_a_shield_capture_never_asks_toybox_to_compress_while_it_tars(tmp_path: 
     # Arrange
     transport = FakeTransport(
         responses={
-            f"tar cf /sdcard/capture.tar -C {posixpath.dirname(KODI_ROOT)} .kodi": "",
-            "gzip /sdcard/capture.tar": "",
+            "rm -f /sdcard/capture.tar.gz /sdcard/capture.tar": "",
+            f"tar cf /sdcard/capture.tar -C {posixpath.dirname(KODI_ROOT)} .kodi && echo __fleetctl_done__": "__fleetctl_done__",
+            "gzip /sdcard/capture.tar && echo __fleetctl_done__": "__fleetctl_done__",
             "/sdcard/capture.tar.gz": "archive bytes",
         }
     )
