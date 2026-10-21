@@ -150,9 +150,10 @@ row_groups:
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "1900-01-01", first_air_date.lte: "1999-12-31"}
 
   movie_collections: &movie_collections
+    # TMDb averages are out of 10, so the "90%" in the label is 9.0.
     - label: Top Rated (90%+)
       icon: "{tmdb}/popular.png"
-      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_average.gte: 8.0, vote_count.gte: 2000}
+      discover: {tmdb_type: movie, sort_by: popularity.desc, vote_average.gte: 9.0, vote_count.gte: 2000}
     - label: Crime & Thriller
       icon: "{tmdb}/movies.png"
       discover: {tmdb_type: movie, with_genres: "80%7C53", sort_by: popularity.desc, vote_count.gte: 100}
@@ -187,7 +188,7 @@ row_groups:
   tv_acclaimed: &tv_acclaimed
     - label: Top Rated (90%+)
       icon: "{tmdb}/popular.png"
-      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_average.gte: 8.0, vote_count.gte: 500}
+      discover: {tmdb_type: tv, sort_by: popularity.desc, vote_average.gte: 9.0, vote_count.gte: 500}
     - label: Hidden Gems
       icon: "{tmdb}/tv.png"
       discover: {tmdb_type: tv, sort_by: vote_average.desc, vote_count.gte: 20, vote_count.lte: 200}
@@ -199,6 +200,7 @@ hubs:
     widgets:
       - {label: Continue Watching, icon: "{skin}/clock-rotate-left.png", path: *lib_tv_progress}
       - {label: Recently Added, icon: "{skin}/calendar.png", path: *lib_movie_recent}
+      - {label: Recently Added Episodes, icon: "{skin}/calendar.png", path: *lib_tv_recent}
       - label: New Releases This Week
         icon: "{tmdb}/intheatres.png"
         discover:
@@ -208,6 +210,24 @@ hubs:
           vote_count.gte: 10
           primary_release_date.lte: T-0
           primary_release_date.gte: T-7
+      # Series already on air, as opposed to "New Premieres" in the Series hub,
+      # which is series that debuted recently. TMDb has no season-premiere
+      # filter: `air_date` matches any episode airing in the window, so a show
+      # mid-season qualifies too. `first_air_date.lte: T-90` is what keeps
+      # brand-new series out. Defined here once and aliased into the Series hub
+      # so the two cannot drift.
+      - &returning_shows
+        label: Returning Shows
+        icon: "{tmdb}/trending.png"
+        discover:
+          tmdb_type: tv
+          sort_by: popularity.desc
+          with_original_language: en
+          vote_count.gte: 50
+          first_air_date.lte: T-90
+          air_date.gte: T-0
+          # %2B is a URL-encoded plus; a bare one reads back as a space ("T 14").
+          air_date.lte: T%2B14
       - label: Trending Now
         icon: "{tmdb}/trending.png"
         discover: {tmdb_type: tv, sort_by: popularity.desc}
@@ -256,6 +276,7 @@ hubs:
           vote_count.gte: 5
           first_air_date.lte: T-0
           first_air_date.gte: T-90
+      - *returning_shows
       - label: Drama
         icon: "{tmdb}/tv.png"
         discover: {tmdb_type: tv, with_genres: 18, sort_by: popularity.desc, vote_count.gte: 100}

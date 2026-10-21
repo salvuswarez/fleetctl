@@ -111,6 +111,14 @@ apply_settings:
       # lookup failed. This restores the addon's own shipped default.
       indicators: "Local"
 
+    guisettings.xml:
+      # 2 = never check. Kodi's default is 0 (install automatically), and
+      # five addon repositories are installed, so left alone the skin, TMDbHelper
+      # and the provider addons all move under a deployed device. Versions here
+      # are meant to change only when a build is cut. `default="true"` is
+      # cleared by the writer, or Kodi would discard this on load.
+      general.addonupdates: "2"
+
     addon_data/plugin.video.thecrew/settings.xml:
       trakt.scrobble: "false"
       # Showed a Trakt list nav entry that cannot load without an account.

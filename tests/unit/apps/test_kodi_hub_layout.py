@@ -170,6 +170,53 @@ def test_an_empty_layout_writes_nothing(tmp_path: Path, monkeypatch: pytest.Monk
     assert not (tmp_path / SKINVARS).exists()
 
 
+def _params(widgets: object, label: str) -> dict[str, str]:
+    assert isinstance(widgets, list)
+    row = next(row for row in widgets if row["label"] == label)
+    return dict(parse_qsl(urlsplit(row["path"]).query))
+
+
+def test_returning_shows_excludes_new_series_and_is_identical_on_home_and_series(tmp_path: Path) -> None:
+    """`New Premieres` is series that debuted recently; this row is the other
+    half. `first_air_date.lte` is what keeps the two from overlapping."""
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+    home = _params(_read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-homewidgets.json"), "Returning Shows")
+    series = _params(_read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1102widgets.json"), "Returning Shows")
+
+    # Assert
+    assert home == series
+    assert home["tmdb_type"] == "tv"
+    assert home["first_air_date.lte"] == "T-90"
+    assert home["air_date.gte"] == "T-0"
+    assert home["air_date.lte"] == "T+14"
+
+
+def test_home_shows_recent_episodes_from_the_library(tmp_path: Path) -> None:
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+    widgets = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-homewidgets.json")
+
+    # Assert
+    assert isinstance(widgets, list)
+    row = next(row for row in widgets if row["label"] == "Recently Added Episodes")
+    assert row["path"] == "library://video/tvshows/recentlyaddedepisodes.xml/"
+
+
+def test_top_rated_rows_filter_at_the_nine_out_of_ten_their_label_promises(tmp_path: Path) -> None:
+    """TMDb averages are out of 10, so a "90%+" label that filtered at 8.0 was promising a row it did not deliver."""
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+    movies = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1101submenu.json")
+    series = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1102submenu.json")
+
+    # Assert
+    assert isinstance(movies, list) and isinstance(series, list)
+    rows = [row for group in (*movies, *series) for row in group["submenu"] if row["label"] == "Top Rated (90%+)"]
+    assert len(rows) == 2
+    assert all(dict(parse_qsl(urlsplit(row["path"]).query))["vote_average.gte"] == "9.0" for row in rows)
+
+
 def test_the_shipped_layout_defines_the_expected_hubs() -> None:
     # Act
     layout = load_layout()

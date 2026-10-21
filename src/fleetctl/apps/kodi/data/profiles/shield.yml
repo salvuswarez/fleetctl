@@ -31,6 +31,14 @@ apply_settings:
       # stick does not; do not copy this number into `gold`.
       filecache.memorysize: "200"
 
+      # Observed live on the Shield with an explicit value of 30 (minutes) and
+      # no `default` attribute, i.e. set deliberately, not Kodi's default. The
+      # point of an always-on box is that Kodi is already open when the TV
+      # turns on; quitting after half an hour idle turns the next use into a
+      # cold start of the skin. 0 disables it. The screen still blanks on
+      # `powermanagement.displaysoff`, which is left alone.
+      powermanagement.shutdowntime: "0"
+
     addon_data/skin.arctic.fuse.3/settings.xml:
       # Overrides gold, which disables this. Preloading every home tab's
       # widgets at startup contributed to a low-memory kill on a 1.7GB stick —
@@ -50,8 +58,8 @@ apply_settings:
 #     23.976 switching, but the entries are version-specific strings that
 #     cannot be verified without watching the switch happen.
 #
-#   videoplayer.adjustrefreshrate — already 2 on the captured profile and
-#     inherited unchanged. Nothing to do.
+#   videoplayer.adjustrefreshrate — 1 (switch on start and stop) on the live
+#     Shield, read 2026-10-21. Suits a 4K panel, so it is inherited unchanged.
 #
 #   audiooutput.* — gold strips these on purpose and this must not put them
 #     back. Passthrough settings describe the receiver a device is plugged

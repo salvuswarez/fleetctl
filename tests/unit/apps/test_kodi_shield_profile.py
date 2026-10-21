@@ -71,7 +71,28 @@ def test_gold_keeps_hub_preloading_off_and_names_no_file_cache() -> None:
 
     # Assert
     assert gold[SKIN]["startup.enablehubpreloading"] == "false"
-    assert GUISETTINGS not in gold
+    assert not [key for key in gold.get(GUISETTINGS, {}) if key.startswith(("filecache.", "powermanagement."))]
+
+
+@pytest.mark.parametrize("profile", ["gold", "shield", "deck"])
+def test_every_profile_stops_addons_updating_themselves(profile: str) -> None:
+    """2 is "never check". Kodi's default is to install automatically, and the
+    installed repositories would move the skin and providers under a device."""
+    # Act
+    settings = _recipe(profile)["apply_settings"]["settings"]
+
+    # Assert
+    assert settings[GUISETTINGS]["general.addonupdates"] == "2"
+
+
+def test_the_shield_recipe_stops_kodi_quitting_when_idle() -> None:
+    """The live Shield had a 30 minute idle shutdown set explicitly."""
+    # Act
+    settings = _recipe("shield")["apply_settings"]["settings"]
+
+    # Assert
+    assert settings[GUISETTINGS]["powermanagement.shutdowntime"] == "0"
+    assert settings[GUISETTINGS]["filecache.memorysize"] == "200"
 
 
 def test_the_shield_recipe_still_strips_capture_device_settings() -> None:
