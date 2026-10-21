@@ -79,6 +79,9 @@ row_groups:
 
   # The captured config had this group's icon pointing at a repository .zip
   # URL — a paste error that can never resolve as an image.
+  # Network ids added 2026-10-21 were checked against TMDb's public
+  # /network/<id> pages: Prime Video 1024, Peacock 3353, FX 88, AMC 174,
+  # Showtime 67, Adult Swim 80.
   networks: &networks
     - label: Netflix
       icon: "{tmdb}/discover.png"
@@ -86,18 +89,69 @@ row_groups:
     - label: HBO / Max
       icon: "{tmdb}/discover.png"
       discover: {tmdb_type: tv, with_networks: "49%7C3186", sort_by: popularity.desc}
+    - label: Prime Video
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 1024, sort_by: popularity.desc}
     - label: Apple TV+
       icon: "{tmdb}/discover.png"
       discover: {tmdb_type: tv, with_networks: 2552, sort_by: popularity.desc}
     - label: Disney+
       icon: "{tmdb}/discover.png"
       discover: {tmdb_type: tv, with_networks: 2739, sort_by: popularity.desc}
-    - label: Paramount+
-      icon: "{tmdb}/discover.png"
-      discover: {tmdb_type: tv, with_networks: 4330, sort_by: popularity.desc}
     - label: Hulu
       icon: "{tmdb}/discover.png"
       discover: {tmdb_type: tv, with_networks: 453, sort_by: popularity.desc}
+    - label: Paramount+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 4330, sort_by: popularity.desc}
+    - label: Peacock
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 3353, sort_by: popularity.desc}
+    - label: FX
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 88, sort_by: popularity.desc}
+    - label: AMC
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 174, sort_by: popularity.desc}
+    - label: Showtime
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 67, sort_by: popularity.desc}
+    - label: Adult Swim
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: tv, with_networks: 80, sort_by: popularity.desc}
+
+  # TMDb has no network filter for movies — a network is a TV concept there.
+  # The movie equivalent is "streaming on", which is watch-provider
+  # availability and needs a region. TMDbHelper's own Where to Watch menus
+  # build this same URL. Provider ids are TMDb's, not its network ids, and
+  # were not verifiable without an API key: an empty row on the device is the
+  # sign one is wrong. Paramount+ and Peacock are the likeliest to have moved,
+  # since TMDb now lists them as Premium/Essential tiers.
+  movie_networks: &movie_networks
+    - label: Netflix
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 8, watch_region: US, sort_by: popularity.desc}
+    - label: HBO / Max
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 1899, watch_region: US, sort_by: popularity.desc}
+    - label: Prime Video
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 9, watch_region: US, sort_by: popularity.desc}
+    - label: Apple TV+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 350, watch_region: US, sort_by: popularity.desc}
+    - label: Disney+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 337, watch_region: US, sort_by: popularity.desc}
+    - label: Hulu
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 15, watch_region: US, sort_by: popularity.desc}
+    - label: Paramount+
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 531, watch_region: US, sort_by: popularity.desc}
+    - label: Peacock
+      icon: "{tmdb}/discover.png"
+      discover: {tmdb_type: movie, with_watch_providers: 386, watch_region: US, sort_by: popularity.desc}
 
   # K-Dramas and Anime go by origin country plus genre: TMDb has no network
   # id for either as a category.
@@ -257,6 +311,7 @@ hubs:
         discover: {tmdb_type: movie, with_genres: "80%7C9648%7C99", sort_by: popularity.desc, vote_count.gte: 100}
     submenu:
       - {label: Genres, icon: "{skin}/genre.png", rows: *movie_genres}
+      - {label: By Network, icon: "{skin}/rocket.png", rows: *movie_networks}
       - {label: Collections, icon: "{skin}/genre.png", rows: *movie_collections}
       - {label: By Decade, icon: "{skin}/calendar.png", rows: *movie_decades}
       - {label: By Studio, icon: "{skin}/genre.png", rows: *studios}
@@ -308,5 +363,6 @@ hubs:
     submenu:
       - {label: Movie Genres, icon: "{skin}/genre.png", rows: *movie_genres}
       - {label: TV Genres, icon: "{skin}/genre.png", rows: *tv_genres}
-      - {label: By Network, icon: "{skin}/rocket.png", rows: *networks}
+      - {label: Movie Networks, icon: "{skin}/rocket.png", rows: *movie_networks}
+      - {label: TV Networks, icon: "{skin}/rocket.png", rows: *networks}
       - {label: International, icon: "{skin}/genre.png", rows: *international}

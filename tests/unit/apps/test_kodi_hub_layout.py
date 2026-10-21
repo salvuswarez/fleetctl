@@ -217,6 +217,51 @@ def test_top_rated_rows_filter_at_the_nine_out_of_ten_their_label_promises(tmp_p
     assert all(dict(parse_qsl(urlsplit(row["path"]).query))["vote_average.gte"] == "9.0" for row in rows)
 
 
+def _group(submenu: object, label: str) -> list[dict[str, str]]:
+    assert isinstance(submenu, list)
+    rows: list[dict[str, str]] = next(group for group in submenu if group["label"] == label)["submenu"]
+    return rows
+
+
+def test_movies_browse_by_network_through_streaming_availability(tmp_path: Path) -> None:
+    """TMDb movies have no network filter; `with_networks` on a movie query is
+    ignored and the row silently becomes "all popular movies"."""
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+    rows = _group(_read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1101submenu.json"), "By Network")
+
+    # Assert
+    params = [dict(parse_qsl(urlsplit(row["path"]).query)) for row in rows]
+    assert rows
+    assert all(p["tmdb_type"] == "movie" and p["with_watch_providers"] and p["watch_region"] == "US" for p in params)
+    assert not [p for p in params if "with_networks" in p]
+
+
+def test_every_streaming_service_is_browsable_for_both_movies_and_series(tmp_path: Path) -> None:
+    """The movie list is the streaming half of the series list; cable networks have no movie catalogue to filter."""
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+    movies = [row["label"] for row in _group(_read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1101submenu.json"), "By Network")]
+    series = [row["label"] for row in _group(_read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1102submenu.json"), "By Network")]
+
+    # Assert
+    assert movies == ["Netflix", "HBO / Max", "Prime Video", "Apple TV+", "Disney+", "Hulu", "Paramount+", "Peacock"]
+    assert series[: len(movies)] == movies
+    assert series[len(movies) :] == ["FX", "AMC", "Showtime", "Adult Swim"]
+
+
+def test_the_browse_hub_offers_both_network_lists(tmp_path: Path) -> None:
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+    browse = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1104submenu.json")
+    movies = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1101submenu.json")
+    series = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1102submenu.json")
+
+    # Assert
+    assert [row["path"] for row in _group(browse, "Movie Networks")] == [row["path"] for row in _group(movies, "By Network")]
+    assert [row["path"] for row in _group(browse, "TV Networks")] == [row["path"] for row in _group(series, "By Network")]
+
+
 def test_the_shipped_layout_defines_the_expected_hubs() -> None:
     # Act
     layout = load_layout()
