@@ -265,9 +265,22 @@ down per-user micro-customisation, so a design that needs a skin change will not
   generated labels short, or two rows that differ only in their suffix become indistinguishable.
 - **Sub-menus** are a pop-out beside the side rail. A `Custom_Submenu` group opens its rows only
   when one is picked, so a large group costs nothing to show. A `Custom_Submenu` can also be a
-  *row* (Experimental), with a stacked-folder row under it previewing the focused chip.
-  That chip-plus-preview pattern is user-reported and not yet verified here.
-- **No per-hub backgrounds** and no custom genre icons. Rows show about 20 items whatever the limit.
+  *row* (Experimental): a row of tiles, each opening its list. Verified on a Shield.
+- **A `Stacked_Folder` preview does not work in Combined mode.** It follows the row above it, but
+  Combined shows one row at a time, each only while its own tab in the strip is selected, so the
+  preview never shares the screen with its chips. Verified on a Shield 2026-10-22. It needs
+  Standard mode, where rows stack vertically.
+- **Icons come from three places**, all installed with the skin: `special://skin/extras/icons/`
+  (about 1,800 glyphs, plus a few brands: netflix, hulu, disneyplus, apple), TMDbHelper's
+  `resources/icons/themoviedb/` (only 33; there is **no** `trending.png`), and two resource packs
+  read through `resource://`: `resource.images.moviegenreicons.white` (genre glyphs, `.jpg`) and
+  `resource.images.studios.coloured` (~7,400 network and studio logos, lowercase names with
+  spaces, e.g. `hbo max.png`). The packs are single `Textures.xbt` files, so list their names by
+  reading the archive's index, not with `ls`. A missing icon renders as a blank tile and logs
+  nothing.
+- **No per-hub backgrounds.** Rows show about 20 items whatever the limit.
+- **An empty row is hidden**, and focus jumps to the next one. A library-backed row (Embuary's
+  similar/next-up) that reads as "disappears when selected" is returning nothing.
 
 Rows can come from sources other than TMDb discover, none of which need Trakt:
 
