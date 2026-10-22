@@ -198,6 +198,52 @@ Every one of these was green in the fake-backed tests and wrong on hardware.
   than hand-editing an IP, and verify with a live probe before capturing or
   deploying.
 
+## The live Home Assistant instance
+
+Production fleetctl runs inside Home Assistant as the `fleetctl` integration
+(the Fleet Ops panel). When a panel operation fails, debug it there before
+touching a device.
+
+**Two ways in, for different things:**
+
+| Need | Use |
+|---|---|
+| Integration state, HA logs, restart, config check | the **`ha-mcp`** MCP server (`mcp__ha-mcp__*` tools) |
+| fleetctl's own files: audit trail, failed-op workspaces, inventory, the integration's `manifest.json` | `ssh root@homeassistant.local` (key auth) |
+
+`ha-mcp` is an HTTP MCP server registered per project in the user's
+`~/.claude.json`, so it is **not loaded in a session started from this repo
+unless it has been added to this project's scope too**. If `ToolSearch` finds
+no `ha-mcp` tools, copy the server entry from the `ha-cyberpunk` project's
+`mcpServers` (never paste its URL into anything committed: the path is the
+credential). Its tools that matter here:
+
+- `ha_get_integration(query="fleetctl")`: is the config entry `loaded`?
+- `ha_get_logs(source="system", search="fleetctl")`: deduplicated errors with tracebacks.
+  `source="error_log"` reads only a 2000-line window, which the power poller's
+  DEBUG tracebacks fill within minutes.
+- `ha_get_system_health(include="config_check")`, then `ha_restart`. Do not
+  restart while an operation is in flight: a capture killed by a restart is
+  what left a 1.2GB archive on a Fire Stick.
+
+**On disk, over SSH** (no `python3` and no `docker` there; parse with `grep`/`sed`):
+
+- `/homeassistant/fleetctl_home/audit/YYYY-MM-DD.jsonl`: one record per transport action.
+- `/homeassistant/fleetctl_home/forensics/<op_id>/`: every failed operation's workspace, kept verbatim.
+- `/homeassistant/fleetctl_config/inventory/devices.yml`: real addresses and serials. Redact when quoting.
+
+A step that fails a pre-check (free space, policy) issues no transport action,
+so it leaves **no audit record**, only a forensics dir. Its message is in the
+`system` log. An operation the process died during shows as an audit trace
+that simply stops, with no cleanup `rm -f` after it.
+
+**Releasing to it:** tag `vX.Y.Z` and push it, bump the pin in
+`/homeassistant/custom_components/fleetctl/manifest.json` (keep a
+`manifest.json.vOLD.bak`), run the config check, then restart. Whether HA reinstalls
+a `pkg @ git+…@tag` requirement when only the tag changes is **unconfirmed**:
+a URL requirement carries no version specifier for HA to compare against.
+Prove the new code is live by its behaviour in the audit trail, not by the pin.
+
 ## Related
 
 - `.claude/skills/adb-device-ops/SKILL.md` — the same territory for ADB.

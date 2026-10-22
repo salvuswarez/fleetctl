@@ -243,6 +243,42 @@ directly. This decides where a UI change belongs:
 
 Reaching for the skin or the hub layout to add a menu entry is the wrong layer.
 
+## What Arctic Fuse 3 can and cannot do
+
+Read off skin.arctic.fuse.3 3.2.15's own XML and strings on a device, 2026-10-22, plus the author's
+posts in the Kodi forum thread (tid 383722). Design a layout inside these limits. The author turns
+down per-user micro-customisation, so a design that needs a skin change will not get one.
+
+- **Hubs are fixed windows in a fixed order.** 1101–1104 plus Home are the customisable ones. 1105
+  Search, 1106 Next Aired, 1107 Live TV and 1108 Add-ons are built-in, each switched by
+  `homeswitcher.<id>.toggle` (empty = off). Hubs cannot be reordered, and each loads its rows only
+  while it is the current window, so a hub with many rows costs nothing until you switch to it.
+- **1106 Next Aired** reads the library when `HomeSwitcher.1106.UpNextMode` is `library_nextaired`.
+  No Trakt account needed.
+- **Hub mode** is `HomeSwitcher.<id>.Mode`: `Standard`, `Combined` or `Wall`. Every device here runs
+  `Combined`. Only one combined row set fits per hub; a second cannot be stacked under it.
+- **Spotlight is per hub**: `HomeSwitcher.<id>.Spotlight.{Path,Label,SortMethod,Limit,Target}`. Any
+  widget path works; a path of `None` turns it off. It is a skin setting, not hub-layout JSON.
+- **Row styles** (`widget_style`): Poster, Landscape, Square, Board, Circle, Card, Banner. Leaving
+  it unset gives every row the same style.
+- **The row strip cuts labels at about 15 characters** at 1080p ("Continue Watchi…"). Keep
+  generated labels short, or two rows that differ only in their suffix become indistinguishable.
+- **Sub-menus** are a pop-out beside the side rail. A `Custom_Submenu` group opens its rows only
+  when one is picked, so a large group costs nothing to show. A `Custom_Submenu` can also be a
+  *row* (Experimental), with a stacked-folder row under it previewing the focused chip.
+  That chip-plus-preview pattern is user-reported and not yet verified here.
+- **No per-hub backgrounds** and no custom genre icons. Rows show about 20 items whatever the limit.
+
+Rows can come from sources other than TMDb discover, none of which need Trakt:
+
+- **TMDbHelper 6.18:** `trending_day`, `trending_week`, `now_playing`, `upcoming`, `airing_today`,
+  `on_the_air`, `popular`, `top_rated`, `genres`, `watch_providers`, `all_networks`,
+  `library_nextaired`. These are route names, so the path is `?info=<route>&tmdb_type=movie|tv`.
+- **script.embuary.helper 2.0.8:** `getinprogress&type=mixed` (in-progress movies *and* episodes
+  in one row), `getnextup` (next unwatched episode per show), `getnewshows` (recently added
+  unwatched), `getsimilar&pos=0` (similar to the last thing watched). These read the Kodi library,
+  so they inherit its dependency on the shared database.
+
 ## Triaging a download that does nothing
 
 An Umbrella download producing no file, no error and no `kodi.log` line has **two** unrelated causes,
