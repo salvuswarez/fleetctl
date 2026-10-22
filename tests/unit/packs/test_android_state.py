@@ -27,6 +27,7 @@ SPEC = AppStateSpec(
 
 ROOT = "/sdcard/Android/data/com.example.demo/files/.demo"
 DONE = "__fleetctl_done__"
+CLEAR_STAGING = "rm -rf /sdcard/fleetctl && mkdir -p /sdcard/fleetctl"
 
 FIRE_OS = AndroidQuirks(split_gzip=True, verify_disable_user=True)
 STOCK = AndroidQuirks()
@@ -35,6 +36,7 @@ STOCK = AndroidQuirks()
 def _ok_responses(archive: str) -> dict[str, str]:
     plain = archive.removesuffix(".gz")
     return {
+        CLEAR_STAGING: "",
         f"rm -f {archive} {plain}": "",
         f"tar cf {plain} -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}": DONE,
         f"gzip {plain} && echo {DONE}": DONE,
@@ -73,7 +75,7 @@ def test_snapshot_splits_tar_and_gzip_when_the_quirk_is_declared(tmp_path: Path)
     the verified-clean path."""
     # Arrange
     destination = tmp_path / "capture.tar.gz"
-    transport = FakeTransport(responses=_ok_responses("/sdcard/capture.tar.gz"))
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/capture.tar.gz"))
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act
@@ -81,8 +83,8 @@ def test_snapshot_splits_tar_and_gzip_when_the_quirk_is_declared(tmp_path: Path)
 
     # Assert
     issued = transport.commands()
-    assert f"tar cf /sdcard/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}" in issued
-    assert f"gzip /sdcard/capture.tar && echo {DONE}" in issued
+    assert f"tar cf /sdcard/fleetctl/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}" in issued
+    assert f"gzip /sdcard/fleetctl/capture.tar && echo {DONE}" in issued
     assert not [command for command in issued if "tar czf" in command]
 
 
@@ -90,7 +92,7 @@ def test_snapshot_uses_single_step_tar_on_stock_android(tmp_path: Path) -> None:
     """The quirk is Amazon's, so a device without it must not pay the cost."""
     # Arrange
     destination = tmp_path / "capture.tar.gz"
-    transport = FakeTransport(responses=_ok_responses("/sdcard/capture.tar.gz"))
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/capture.tar.gz"))
     manager = AndroidStateManager(transport, STOCK)
 
     # Act
@@ -106,7 +108,7 @@ def test_snapshot_trims_excluded_paths_on_device_first(tmp_path: Path) -> None:
     """Trimming before archiving keeps the archive small, rather than
     shipping caches and cleaning up afterwards."""
     # Arrange
-    transport = FakeTransport(responses=_ok_responses("/sdcard/capture.tar.gz"))
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/capture.tar.gz"))
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act
@@ -122,7 +124,7 @@ def test_restore_replaces_members_and_extracts_flat(tmp_path: Path) -> None:
     # Arrange
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1024)
-    transport = FakeTransport(responses=_ok_responses("/sdcard/build.tar.gz"))
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/build.tar.gz"))
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act
@@ -132,8 +134,8 @@ def test_restore_replaces_members_and_extracts_flat(tmp_path: Path) -> None:
     issued = transport.commands()
     assert f"rm -rf {ROOT}/addons" in issued
     assert f"rm -rf {ROOT}/userdata" in issued
-    assert "gzip -d /sdcard/build.tar.gz" in issued
-    assert f"tar xf /sdcard/build.tar -C {ROOT}" in issued
+    assert "gzip -d /sdcard/fleetctl/build.tar.gz" in issued
+    assert f"tar xf /sdcard/fleetctl/build.tar -C {ROOT}" in issued
 
 
 def test_restore_refuses_when_the_device_lacks_headroom(tmp_path: Path) -> None:
@@ -142,7 +144,7 @@ def test_restore_refuses_when_the_device_lacks_headroom(tmp_path: Path) -> None:
     # Arrange
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1_000_000)
-    transport = FakeTransport(responses=_ok_responses("/sdcard/build.tar.gz"), free_space=1_500_000)
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/build.tar.gz"), free_space=1_500_000)
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act / Assert
@@ -157,7 +159,7 @@ def test_restore_verifies_the_extracted_tree(tmp_path: Path) -> None:
     # Arrange
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1024)
-    responses = _ok_responses("/sdcard/build.tar.gz")
+    responses = _ok_responses("/sdcard/fleetctl/build.tar.gz")
     responses[f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l"] = "0"
     transport = FakeTransport(responses=responses)
     manager = AndroidStateManager(transport, FIRE_OS)
@@ -194,8 +196,8 @@ def test_snapshot_removes_the_staging_archive_when_the_pull_fails(tmp_path: Path
     """A pull that died mid-stream left its archive on the device; fourteen of
     those filled a SHIELD's external storage."""
     # Arrange
-    responses = _ok_responses("/sdcard/capture.tar.gz")
-    del responses["/sdcard/capture.tar.gz"]
+    responses = _ok_responses("/sdcard/fleetctl/capture.tar.gz")
+    del responses["/sdcard/fleetctl/capture.tar.gz"]
     transport = FakeTransport(responses=responses)
     manager = AndroidStateManager(transport, FIRE_OS)
 
@@ -205,14 +207,14 @@ def test_snapshot_removes_the_staging_archive_when_the_pull_fails(tmp_path: Path
 
     # Assert
     assert "no scripted content" in str(caught.value)
-    assert transport.commands()[-1] == "rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"
+    assert transport.commands()[-1] == "rm -f /sdcard/fleetctl/capture.tar.gz /sdcard/fleetctl/capture.tar"
 
 
 def test_snapshot_raises_and_removes_the_plain_tar_when_gzip_fails(tmp_path: Path) -> None:
     """With the disk full, `gzip` fails and leaves the plain `.tar` — 1.45GB of it."""
     # Arrange
-    responses = _ok_responses("/sdcard/capture.tar.gz")
-    responses[f"gzip /sdcard/capture.tar && echo {DONE}"] = "gzip: /sdcard/capture.tar.gz: No space left on device"
+    responses = _ok_responses("/sdcard/fleetctl/capture.tar.gz")
+    responses[f"gzip /sdcard/fleetctl/capture.tar && echo {DONE}"] = "gzip: /sdcard/fleetctl/capture.tar.gz: No space left on device"
     transport = FakeTransport(responses=responses)
     manager = AndroidStateManager(transport, FIRE_OS)
 
@@ -223,14 +225,14 @@ def test_snapshot_raises_and_removes_the_plain_tar_when_gzip_fails(tmp_path: Pat
     # Assert
     assert "No space left" in str(caught.value)
     assert not [call for call in transport.calls if call.kind == "get"]
-    assert transport.commands()[-1] == "rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"
+    assert transport.commands()[-1] == "rm -f /sdcard/fleetctl/capture.tar.gz /sdcard/fleetctl/capture.tar"
 
 
 def test_snapshot_does_not_compress_a_tar_that_failed(tmp_path: Path) -> None:
     """ADB reports no exit status, so a failed `tar` used to be noticed only at the pull."""
     # Arrange
-    responses = _ok_responses("/sdcard/capture.tar.gz")
-    responses[f"tar cf /sdcard/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}"] = "tar: write error"
+    responses = _ok_responses("/sdcard/fleetctl/capture.tar.gz")
+    responses[f"tar cf /sdcard/fleetctl/capture.tar -C /sdcard/Android/data/com.example.demo/files .demo && echo {DONE}"] = "tar: write error"
     transport = FakeTransport(responses=responses)
     manager = AndroidStateManager(transport, FIRE_OS)
 
@@ -246,7 +248,7 @@ def test_snapshot_does_not_compress_a_tar_that_failed(tmp_path: Path) -> None:
 def test_snapshot_refuses_before_archiving_when_the_device_lacks_space(tmp_path: Path) -> None:
     """Split gzip holds the plain tar and its compressed copy at once: 2x the tree."""
     # Arrange
-    responses = _ok_responses("/sdcard/capture.tar.gz")
+    responses = _ok_responses("/sdcard/fleetctl/capture.tar.gz")
     responses[f"du -sk {ROOT}"] = f"1000000\t{ROOT}"
     transport = FakeTransport(responses=responses, free_space=1_500_000 * 1024)
     manager = AndroidStateManager(transport, FIRE_OS)
@@ -262,7 +264,7 @@ def test_snapshot_refuses_before_archiving_when_the_device_lacks_space(tmp_path:
 
 def test_snapshot_proceeds_when_the_tree_fits(tmp_path: Path) -> None:
     # Arrange
-    responses = _ok_responses("/sdcard/capture.tar.gz")
+    responses = _ok_responses("/sdcard/fleetctl/capture.tar.gz")
     responses[f"du -sk {ROOT}"] = f"1000000\t{ROOT}"
     transport = FakeTransport(responses=responses, free_space=2_500_000 * 1024)
     manager = AndroidStateManager(transport, FIRE_OS)
@@ -276,22 +278,22 @@ def test_snapshot_proceeds_when_the_tree_fits(tmp_path: Path) -> None:
 
 def test_snapshot_removes_the_staging_archive_exactly_once_on_success(tmp_path: Path) -> None:
     # Arrange
-    transport = FakeTransport(responses=_ok_responses("/sdcard/capture.tar.gz"))
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/capture.tar.gz"))
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act
     manager.snapshot(SPEC, tmp_path / "capture.tar.gz")
 
     # Assert
-    assert _execs_after(transport, "get") == ["rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"]
+    assert _execs_after(transport, "get") == ["rm -f /sdcard/fleetctl/capture.tar.gz /sdcard/fleetctl/capture.tar"]
 
 
 def test_a_failed_cleanup_does_not_mask_the_original_error(tmp_path: Path) -> None:
     # Arrange
-    responses = _ok_responses("/sdcard/capture.tar.gz")
-    del responses["/sdcard/capture.tar.gz"]
-    del responses["rm -f /sdcard/capture.tar.gz /sdcard/capture.tar"]
-    transport = FakeTransport(responses=responses, failures={"rm -f /sdcard/capture.tar.gz /sdcard/capture.tar": "device offline"})
+    responses = _ok_responses("/sdcard/fleetctl/capture.tar.gz")
+    del responses["/sdcard/fleetctl/capture.tar.gz"]
+    del responses["rm -f /sdcard/fleetctl/capture.tar.gz /sdcard/fleetctl/capture.tar"]
+    transport = FakeTransport(responses=responses, failures={"rm -f /sdcard/fleetctl/capture.tar.gz /sdcard/fleetctl/capture.tar": "device offline"})
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act
@@ -306,7 +308,7 @@ def test_restore_removes_the_staged_archive_when_the_push_fails(tmp_path: Path) 
     # Arrange
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1024)
-    transport = FakeTransport(responses=_ok_responses("/sdcard/build.tar.gz"), failures={"/sdcard/build.tar.gz": "connection reset"})
+    transport = FakeTransport(responses=_ok_responses("/sdcard/fleetctl/build.tar.gz"), failures={"/sdcard/fleetctl/build.tar.gz": "connection reset"})
     manager = AndroidStateManager(transport, FIRE_OS)
 
     # Act
@@ -314,15 +316,15 @@ def test_restore_removes_the_staged_archive_when_the_push_fails(tmp_path: Path) 
         manager.restore(SPEC, archive)
 
     # Assert
-    assert _execs_after(transport, "put") == ["rm -f /sdcard/build.tar.gz /sdcard/build.tar"]
+    assert _execs_after(transport, "put") == ["rm -f /sdcard/fleetctl/build.tar.gz /sdcard/fleetctl/build.tar"]
 
 
 def test_restore_removes_the_unpacked_tar_when_extraction_fails(tmp_path: Path) -> None:
     # Arrange
     archive = tmp_path / "build.tar.gz"
     archive.write_bytes(b"x" * 1024)
-    responses = _ok_responses("/sdcard/build.tar.gz")
-    del responses[f"tar xf /sdcard/build.tar -C {ROOT}"]
+    responses = _ok_responses("/sdcard/fleetctl/build.tar.gz")
+    del responses[f"tar xf /sdcard/fleetctl/build.tar -C {ROOT}"]
     transport = FakeTransport(responses=responses)
     manager = AndroidStateManager(transport, FIRE_OS)
 
@@ -331,4 +333,29 @@ def test_restore_removes_the_unpacked_tar_when_extraction_fails(tmp_path: Path) 
         manager.restore(SPEC, archive)
 
     # Assert
-    assert transport.commands()[-1] == "rm -f /sdcard/build.tar.gz /sdcard/build.tar"
+    assert transport.commands()[-1] == "rm -f /sdcard/fleetctl/build.tar.gz /sdcard/fleetctl/build.tar"
+
+
+@pytest.mark.parametrize("archive_name", ["capture.tar.gz", "build.tar.gz"])
+def test_staging_is_cleared_before_free_space_is_measured(tmp_path: Path, archive_name: str) -> None:
+    """A capture killed by a restart never reaches its `finally`. Its 1.2GB `.tar`
+    stayed on a Fire Stick and failed every later deploy's space check by 30MB,
+    so the leftover has to be gone before space is measured, not after."""
+    # Arrange
+    archive = tmp_path / archive_name
+    archive.write_bytes(b"x" * 1_000_000)
+    responses = _ok_responses(f"/sdcard/fleetctl/{archive_name}")
+    responses[f"du -sk {ROOT}"] = f"1000000\t{ROOT}"
+    transport = FakeTransport(responses=responses, free_space=1)
+    manager = AndroidStateManager(transport, FIRE_OS)
+
+    # Act
+    with pytest.raises(FleetError) as caught:
+        if archive_name.startswith("build"):
+            manager.restore(SPEC, archive)
+        else:
+            manager.snapshot(SPEC, archive)
+
+    # Assert
+    assert "free space" in str(caught.value)
+    assert CLEAR_STAGING in transport.commands()

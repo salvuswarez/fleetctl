@@ -33,6 +33,7 @@ from fleetctl.packs.android.state import AndroidStateManager
 
 FIRE_OS = AndroidQuirks(split_gzip=True, push_via_netcat=True, verify_disable_user=True)
 ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+CLEAR_STAGING = "rm -rf /sdcard/fleetctl && mkdir -p /sdcard/fleetctl"
 
 
 def _make_profile(root: Path) -> Path:
@@ -161,14 +162,15 @@ def test_deploy_hands_the_build_to_the_device_pack(tmp_path: Path, store: LocalA
     built = steps.build(_transform_context(tmp_path, store, {"source": capture_artifact.wire}))
     inner = FakeTransport(
         responses={
+            CLEAR_STAGING: "",
             f"mkdir -p {ROOT}": "",
             f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
         }
     )
-    inner.responses = {**inner.responses, **{f"gzip -d /sdcard/{built.artifacts['build'].name}": ""}}
-    inner.responses = {**inner.responses, **{f"tar xf /sdcard/{built.artifacts['build'].name.removesuffix('.gz')} -C {ROOT}": ""}}
+    inner.responses = {**inner.responses, **{f"gzip -d /sdcard/fleetctl/{built.artifacts['build'].name}": ""}}
+    inner.responses = {**inner.responses, **{f"tar xf /sdcard/fleetctl/{built.artifacts['build'].name.removesuffix('.gz')} -C {ROOT}": ""}}
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
     context = _device_context(tmp_path, store, transport, {"build": built.artifacts["build"].wire}, "ws-deploy")
 
@@ -204,8 +206,9 @@ def test_the_app_pack_issues_no_tar_command(tmp_path: Path, store: LocalArtifact
     name = built.artifacts["build"].name
     inner = FakeTransport(
         responses={
-            f"gzip -d /sdcard/{name}": "",
-            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+            f"gzip -d /sdcard/fleetctl/{name}": "",
+            f"tar xf /sdcard/fleetctl/{name.removesuffix('.gz')} -C {ROOT}": "",
+            CLEAR_STAGING: "",
             f"mkdir -p {ROOT}": "",
             f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
@@ -344,12 +347,13 @@ def test_deploy_allows_a_build_with_no_recorded_profile(tmp_path: Path, store: L
     name = built.artifacts["build"].name
     inner = FakeTransport(
         responses={
+            CLEAR_STAGING: "",
             f"mkdir -p {ROOT}": "",
             f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
-            f"gzip -d /sdcard/{name}": "",
-            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+            f"gzip -d /sdcard/fleetctl/{name}": "",
+            f"tar xf /sdcard/fleetctl/{name.removesuffix('.gz')} -C {ROOT}": "",
         }
     )
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
@@ -405,12 +409,13 @@ def test_deploy_without_a_named_build_picks_one_for_this_device(tmp_path: Path, 
     name = gold_ref.name
     inner = FakeTransport(
         responses={
+            CLEAR_STAGING: "",
             f"mkdir -p {ROOT}": "",
             f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
-            f"gzip -d /sdcard/{name}": "",
-            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+            f"gzip -d /sdcard/fleetctl/{name}": "",
+            f"tar xf /sdcard/fleetctl/{name.removesuffix('.gz')} -C {ROOT}": "",
         }
     )
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
@@ -489,12 +494,13 @@ def test_deploy_allows_a_build_whose_architecture_the_device_covers(tmp_path: Pa
     name = built.artifacts["build"].name
     inner = FakeTransport(
         responses={
+            CLEAR_STAGING: "",
             f"mkdir -p {ROOT}": "",
             f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
-            f"gzip -d /sdcard/{name}": "",
-            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+            f"gzip -d /sdcard/fleetctl/{name}": "",
+            f"tar xf /sdcard/fleetctl/{name.removesuffix('.gz')} -C {ROOT}": "",
         }
     )
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
@@ -516,12 +522,13 @@ def test_deploy_gives_no_verdict_when_the_kodi_abi_is_unknown(tmp_path: Path, st
     name = built.artifacts["build"].name
     inner = FakeTransport(
         responses={
+            CLEAR_STAGING: "",
             f"mkdir -p {ROOT}": "",
             f"ls -1 {ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/userdata 2>/dev/null | wc -l": "1",
             f"ls -1 {ROOT}/media 2>/dev/null | wc -l": "1",
-            f"gzip -d /sdcard/{name}": "",
-            f"tar xf /sdcard/{name.removesuffix('.gz')} -C {ROOT}": "",
+            f"gzip -d /sdcard/fleetctl/{name}": "",
+            f"tar xf /sdcard/fleetctl/{name.removesuffix('.gz')} -C {ROOT}": "",
         }
     )
     transport = AuditingTransport(inner, ChainedAuditWriter(InMemoryAuditSink()))
