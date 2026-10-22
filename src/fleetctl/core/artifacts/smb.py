@@ -53,6 +53,9 @@ _SESSION_GONE = frozenset(
         0xC00000B0,  # STATUS_PIPE_DISCONNECTED
     }
 )
+# STATUS_OBJECT_NAME_NOT_FOUND and STATUS_OBJECT_PATH_NOT_FOUND: the only
+# answers that mean the artifact is genuinely not there.
+_NOT_FOUND = frozenset({0xC0000034, 0xC000003A})
 _CONTENTION_BACKOFF_S = 0.15
 # Payloads land under this suffix and are renamed into place once whole, so a
 # transfer cut off mid-flight leaves nothing that reads as a finished artifact.
@@ -213,28 +216,49 @@ class SmbArtifactStore:
         return ArtifactInfo(ref=ref, size=int(record["size"]), created_at=created_at, meta=record)
 
     def get(self, ref: ArtifactRef, local_path: Path) -> Path:
-        """Download `ref` to `local_path`.
+        """Download `ref` to `local_path`, resuming rather than restarting after a dropped session.
+
+        The share drops sessions mid-transfer: two deploys in fifteen minutes
+        lost theirs 70 and 100 seconds into a 250MB build, while the router's
+        Wi-Fi was struggling. The retry already reconnected, but began again
+        from byte zero, and then lost that attempt too. It now continues from
+        what already landed, so each attempt only has to carry the remainder.
 
         **RETURNS:**
             `Path`: `local_path`.  <br>
 
         **RAISES:**
-            `ArtifactError`: If `ref` is absent or the download failed.  <br>
+            `ArtifactError`: If `ref` is absent, the download failed, or what landed is not the size the share reports.  <br>
         """
         import smbclient
 
+        remote = self._path(ref.kind, ref.name)
         local_path.parent.mkdir(parents=True, exist_ok=True)
+        # Anything already here is from some earlier run, not this one: only a
+        # retry inside this call may resume.
+        local_path.unlink(missing_ok=True)
 
         def _download() -> None:
-            with smbclient.open_file(self._path(ref.kind, ref.name), mode="rb", share_access=_SHARE_READ) as source, open(local_path, "wb") as target:
+            expected = int(smbclient.stat(remote).st_size)
+            offset = local_path.stat().st_size if local_path.exists() else 0
+            if offset:
+                LOGGER.info("Resuming %s at %d of %d bytes", ref.wire, offset, expected)
+            with smbclient.open_file(remote, mode="rb", share_access=_SHARE_READ) as source, open(local_path, "ab") as target:
+                source.seek(offset)
                 shutil.copyfileobj(source, target, _CHUNK)
+            landed = local_path.stat().st_size
+            if landed != expected:
+                raise ArtifactError(f"SMB download of {ref.wire} landed {landed} of {expected} bytes", ref=ref.wire)
 
         try:
             self._retry(_download)
         except ArtifactError:
             raise
         except Exception as exc:
-            raise ArtifactError(f"No such artifact on SMB: {ref.wire} ({exc})", ref=ref.wire) from exc
+            if _is_missing(exc):
+                raise ArtifactError(f"No such artifact on SMB: {ref.wire}", ref=ref.wire) from exc
+            landed = local_path.stat().st_size if local_path.exists() else 0
+            raise ArtifactError(f"SMB download of {ref.wire} failed after {landed} bytes: {exc}", ref=ref.wire) from exc
         return local_path
 
     def list(self, kind: str) -> list[ArtifactInfo]:
@@ -321,6 +345,22 @@ def _is_contended(exc: BaseException) -> bool:
     sidecar, and the panel lists concurrently, so this happens routinely.
     """
     return bool(getattr(exc, "ntstatus", None) == _SHARING_VIOLATION)
+
+
+def _is_missing(exc: BaseException) -> bool:
+    """Decide whether a failed read means the artifact does not exist.
+
+    Every download failure used to read "No such artifact", including a
+    session the router dropped mid-transfer ("SMB socket was closed"). That
+    sends the reader looking for a deleted build that is sitting right there.
+
+    **PARAMETERS:**
+        `exc` (BaseException): The failure to classify.  <br>
+
+    **RETURNS:**
+        `bool`: Whether the share said the path is not there.  <br>
+    """
+    return isinstance(exc, FileNotFoundError) or getattr(exc, "ntstatus", None) in _NOT_FOUND or getattr(exc, "errno", None) == errno.ENOENT
 
 
 def _is_transient(exc: BaseException) -> bool:

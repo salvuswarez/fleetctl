@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fleetctl.core.effects import Capability, Effect
-from fleetctl.core.errors import CommandFailedError, DeviceUnauthorizedError, TransportError
+from fleetctl.core.errors import CommandFailedError, DeviceHandshakeTimeoutError, DeviceUnauthorizedError, TransportError
 from fleetctl.packs.android.keys import AdbKeyStore
 
 LOGGER = logging.getLogger(__name__)
@@ -27,6 +27,9 @@ _SETTLE_TIMEOUT_S = 120.0
 # cover a worst-case upload rather than a single round-trip.
 _LISTENER_TIMEOUT_S = 3600.0
 _SHELL_TIMEOUT_S = 60.0
+# How long the key handshake gets. Also how long a device showing its key prompt
+# waits for someone to accept it before this side gives up.
+_AUTH_TIMEOUT_S = 10.0
 _TRANSFER_TIMEOUT_S = 180.0
 # Floor throughput used to scale a transfer timeout by payload size, on top of
 # the flat allowance above. Deliberately pessimistic — netcat measured 5-12
@@ -119,11 +122,13 @@ class AdbTransport:
 
         try:
             device = AdbDeviceTcp(self._address, self._port, default_transport_timeout_s=self._shell_timeout_s)
-            device.connect(rsa_keys=[self._keys.signer(target=self._address)], auth_timeout_s=10.0)
+            device.connect(rsa_keys=[self._keys.signer(target=self._address)], auth_timeout_s=_AUTH_TIMEOUT_S)
         except Exception as exc:
             # The port answering while the handshake fails means the device is
             # there and said no — a different problem from an empty address,
             # and the only one the user can act on.
+            if was_listening and _is_timeout(exc):
+                raise DeviceHandshakeTimeoutError(self._address, _AUTH_TIMEOUT_S, str(exc)) from exc
             if was_listening:
                 raise DeviceUnauthorizedError(self._address, str(exc)) from exc
             raise TransportError(f"ADB connect failed for {self._address}: {exc}", target=self._address) from exc
@@ -368,3 +373,8 @@ def _file_md5(path: Path) -> str:
         while chunk := handle.read(_CHUNK):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    """RETURNS: bool: Whether a failed handshake ran out of time, rather than being refused. `adb_shell` raises its own `TcpTimeoutException`, which is not a `TimeoutError`."""
+    return isinstance(exc, TimeoutError) or "Timeout" in type(exc).__name__

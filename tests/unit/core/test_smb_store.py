@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from fleetctl.core.artifacts.smb import SmbArtifactStore, SmbSettings, _is_transient
+from fleetctl.core.artifacts.smb import SmbArtifactStore, SmbSettings, _is_missing, _is_transient
 from fleetctl.core.artifacts.store import ArtifactStore, LocalArtifactStore
 from fleetctl.core.config.secrets import Secret
 from fleetctl.core.errors import ArtifactError
@@ -160,11 +160,22 @@ def test_a_local_root_is_resolved_under_home(tmp_path: Path) -> None:
     assert isinstance(store, LocalArtifactStore)
 
 
+class _SocketClosed(Exception):
+    """Named like smbprotocol's `SMBConnectionClosed`, which is what `_is_transient` keys on for a socket that dies mid-transfer."""
+
+
+_SocketClosed.__name__ = "SMBConnectionClosed"
+
+
 class _FakeSmb:
     """In-memory stand-in for smbclient, keyed by UNC path."""
 
-    def __init__(self, *, fail_times: int = 0, fail_with: BaseException | None = None) -> None:
+    def __init__(self, *, fail_times: int = 0, fail_with: BaseException | None = None, drop_reads_after: list[int] | None = None) -> None:
         self.fail_with = fail_with
+        # Byte counts at which successive reads die mid-transfer, as the
+        # router-hosted share did on 2026-10-22: "SMB socket was closed".
+        self.drop_reads_after = list(drop_reads_after or [])
+        self.seeks: list[int] = []
         self.files: dict[str, bytes] = {}
         self.opens: list[tuple[str, str, str | None]] = []
         self.renames: list[tuple[str, str]] = []
@@ -191,6 +202,11 @@ class _FakeSmb:
 
     def exists(self, path: str) -> bool:
         return path in self.files
+
+    def stat(self, path: str) -> Any:
+        if path not in self.files:
+            raise FileNotFoundError(path)
+        return type("Stat", (), {"st_size": len(self.files[path])})()
 
     def remove(self, path: str) -> None:
         if path not in self.files:
@@ -219,6 +235,8 @@ class _FakeFile:
             if path not in smb.files:
                 raise FileNotFoundError(path)
             self.data = smb.files[path]
+            self.served = 0
+            self.drop_after = smb.drop_reads_after.pop(0) if smb.drop_reads_after else None
 
     def __enter__(self) -> Any:
         return self
@@ -227,8 +245,18 @@ class _FakeFile:
         if "w" in self.mode:
             self.smb.files[self.path] = bytes(self.buffer)
 
+    def seek(self, offset: int, whence: int = 0) -> int:
+        self.smb.seeks.append(offset)
+        self.data = self.smb.files[self.path][offset:]
+        return offset
+
     def read(self, size: int = -1) -> Any:
+        if self.drop_after is not None and self.served >= self.drop_after:
+            raise _SocketClosed("SMB socket was closed, cannot send or receive any more data")
+        if self.drop_after is not None:
+            size = min(size if size != -1 else len(self.data), self.drop_after - self.served)
         data, self.data = (self.data, b"") if size == -1 else (self.data[:size], self.data[size:])
+        self.served += len(data)
         return data.decode("utf-8") if "b" not in self.mode else data
 
     def write(self, chunk: Any) -> int:
@@ -522,3 +550,84 @@ def test_a_retry_clears_the_dead_sessions_staging_file(monkeypatch: pytest.Monke
     # Assert
     assert staged in removed
     assert fake.files[store._path("builds", "build.tar.gz")] == b"z" * 32
+
+
+def _seeded(smb: _FakeSmb, tmp_path: Path, size: int) -> Any:
+    from fleetctl.core.artifacts.ref import ArtifactRef
+
+    payload = tmp_path / "build.tar.gz"
+    payload.write_bytes(bytes(range(256)) * (size // 256))
+    ref = ArtifactRef(kind="builds", name="build.tar.gz")
+    _configured().put(payload, ref)
+    return ref, payload.read_bytes()
+
+
+def test_a_download_that_drops_resumes_where_it_stopped(smb: _FakeSmb, tmp_path: Path) -> None:
+    """Two deploys lost the session 70 and 100 seconds into a 250MB build, and each retry began again at byte zero."""
+    # Arrange
+    ref, original = _seeded(smb, tmp_path, 4096)
+    smb.drop_reads_after = [1536]
+
+    # Act
+    restored = _configured().get(ref, tmp_path / "out.tar.gz")
+
+    # Assert
+    assert restored.read_bytes() == original
+    assert smb.resets == 1
+    assert smb.seeks == [0, 1536]
+
+
+def test_a_stale_partial_file_from_an_earlier_run_is_not_resumed(smb: _FakeSmb, tmp_path: Path) -> None:
+    """Only a retry inside one call may resume; a leftover could be from a different build of the same name."""
+    # Arrange
+    ref, original = _seeded(smb, tmp_path, 1024)
+    target = tmp_path / "out.tar.gz"
+    target.write_bytes(b"stale bytes from some other attempt")
+
+    # Act
+    _configured().get(ref, target)
+
+    # Assert
+    assert target.read_bytes() == original
+    assert smb.seeks == [0]
+
+
+def test_a_dropped_download_is_not_reported_as_a_missing_artifact(smb: _FakeSmb, tmp_path: Path) -> None:
+    """ "No such artifact" sent the reader looking for a deleted build that was sitting on the share."""
+    # Arrange
+    ref, _ = _seeded(smb, tmp_path, 4096)
+    smb.drop_reads_after = [1024, 2048]
+
+    # Act
+    with pytest.raises(ArtifactError) as caught:
+        _configured().get(ref, tmp_path / "out.tar.gz")
+
+    # Assert
+    message = str(caught.value)
+    assert "No such artifact" not in message
+    # 1024 on the first attempt, then 2048 more on the resumed second.
+    assert "failed after 3072 bytes" in message
+    assert "SMB socket was closed" in message
+
+
+def test_a_missing_artifact_still_says_so(smb: _FakeSmb, tmp_path: Path) -> None:
+    # Arrange
+    from fleetctl.core.artifacts.ref import ArtifactRef
+
+    # Act
+    with pytest.raises(ArtifactError) as caught:
+        _configured().get(ArtifactRef(kind="builds", name="nope.tar.gz"), tmp_path / "x")
+
+    # Assert
+    assert str(caught.value) == "No such artifact on SMB: builds/nope.tar.gz"
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [FileNotFoundError("x"), _SmbOSError(0xC0000034, "STATUS_OBJECT_NAME_NOT_FOUND"), _SmbOSError(0xC000003A, "STATUS_OBJECT_PATH_NOT_FOUND")],
+)
+def test_only_a_not_found_answer_means_missing(exc: BaseException) -> None:
+    # Act / Assert
+    assert _is_missing(exc) is True
+    assert _is_missing(_SocketClosed("SMB socket was closed")) is False
+    assert _is_missing(_SmbOSError(0xC0000022, "STATUS_ACCESS_DENIED")) is False

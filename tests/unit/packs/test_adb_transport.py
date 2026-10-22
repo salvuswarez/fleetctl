@@ -405,3 +405,62 @@ def test_an_address_with_nothing_listening_is_a_plain_transport_error(tmp_path: 
     with pytest.raises(TransportError) as caught:
         transport.connect()
     assert not isinstance(caught.value, DeviceUnauthorizedError)
+
+
+class _HandshakeFails:
+    """Stands in for `adb_shell`'s AdbDeviceTcp, failing `connect` with a scripted error."""
+
+    error: BaseException = RuntimeError("unset")
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def connect(self, **kwargs: object) -> None:
+        raise self.error
+
+
+def _failing_handshake(monkeypatch: pytest.MonkeyPatch, error: BaseException) -> None:
+    import adb_shell.adb_device
+
+    monkeypatch.setattr(_HandshakeFails, "error", error)
+    monkeypatch.setattr(adb_shell.adb_device, "AdbDeviceTcp", _HandshakeFails)
+
+
+def test_a_handshake_that_times_out_says_so_rather_than_blaming_the_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Shield on a lagging network (600ms pings) was reported as "did not authorize this key"."""
+    # Arrange
+    from adb_shell.exceptions import TcpTimeoutException
+
+    from fleetctl.core.errors import DeviceHandshakeTimeoutError, DeviceUnauthorizedError
+
+    _failing_handshake(monkeypatch, TcpTimeoutException("Reading from 192.168.1.50:5555 timed out (10.0 seconds)"))
+    transport = AdbTransport("192.168.1.50", AdbKeyStore(tmp_path / "keys"))
+    monkeypatch.setattr(transport, "is_online", lambda timeout_s=3.0: True)
+
+    # Act
+    with pytest.raises(DeviceHandshakeTimeoutError) as caught:
+        transport.connect()
+
+    # Assert
+    message = str(caught.value)
+    assert "timed out after 10s" in message and "network is too slow" in message and "key prompt" in message
+    assert "did not authorize" not in message
+    # Still flagged as needing attention, so a new device waiting at its prompt keeps its hint.
+    assert isinstance(caught.value, DeviceUnauthorizedError)
+
+
+def test_a_refused_handshake_is_still_reported_as_unauthorized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    from fleetctl.core.errors import DeviceHandshakeTimeoutError, DeviceUnauthorizedError
+
+    _failing_handshake(monkeypatch, ConnectionResetError("Connection reset by peer"))
+    transport = AdbTransport("192.168.1.50", AdbKeyStore(tmp_path / "keys"))
+    monkeypatch.setattr(transport, "is_online", lambda timeout_s=3.0: True)
+
+    # Act
+    with pytest.raises(DeviceUnauthorizedError) as caught:
+        transport.connect()
+
+    # Assert
+    assert not isinstance(caught.value, DeviceHandshakeTimeoutError)
+    assert "did not authorize this key" in str(caught.value)
