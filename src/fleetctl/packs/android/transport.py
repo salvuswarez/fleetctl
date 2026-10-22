@@ -188,10 +188,34 @@ class AdbTransport:
             `int`: Bytes read.  <br>
 
         **RAISES:**
-            `TransportError`: If the pull failed.  <br>
+            `TransportError`: If the pull failed twice, failed in a way reconnecting cannot fix, or landed a different size than the device reported.  <br>
         """
-        timeout = self._transfer_timeout_for(self._remote_size(remote_path))
         local_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            return self._pull_once(remote_path, local_path)
+        except TransportError as exc:
+            if not _is_dropped(exc.__cause__):
+                raise
+            # The file is still on the device, so one reconnect costs a pull
+            # rather than the work that made it. A Shield capture spent 70s
+            # building its archive, then the pull hit "Broken pipe" at byte 0:
+            # the connection had been cut while `gzip` ran.
+            LOGGER.warning("ADB connection to %s dropped before %s was pulled; reconnecting once", self._address, remote_path)
+            self.close()
+            self.connect()
+            return self._pull_once(remote_path, local_path)
+
+    def _pull_once(self, remote_path: str, local_path: Path) -> int:
+        """Pull `remote_path` once, checking what landed against the size the device reports.
+
+        **RETURNS:**
+            `int`: Bytes read.  <br>
+
+        **RAISES:**
+            `TransportError`: If the pull failed, or landed short.  <br>
+        """
+        expected = self._remote_size(remote_path)
+        timeout = self._transfer_timeout_for(expected)
         # Streamed to disk rather than accumulated in a BytesIO. A profile
         # archive runs past 300MB, and buffering meant growing that in memory
         # by repeated reallocation and then `getvalue()` copying the whole
@@ -212,7 +236,11 @@ class AdbTransport:
                 f"ADB pull failed for {remote_path} on {self._address} after {landed} bytes: {exc}",
                 target=self._address,
             ) from exc
-        return local_path.stat().st_size
+        landed = local_path.stat().st_size
+        # -1 means `stat` could not say, which is no reason to reject a pull.
+        if expected >= 0 and landed != expected:
+            raise TransportError(f"ADB pull of {remote_path} from {self._address} landed {landed} of {expected} bytes", target=self._address)
+        return landed
 
     def free_bytes(self, remote_path: str) -> int:
         """RETURNS: int: Free bytes on the filesystem holding `remote_path`, or 0 if `df` output could not be parsed."""
@@ -378,3 +406,8 @@ def _file_md5(path: Path) -> str:
 def _is_timeout(exc: BaseException) -> bool:
     """RETURNS: bool: Whether a failed handshake ran out of time, rather than being refused. `adb_shell` raises its own `TcpTimeoutException`, which is not a `TimeoutError`."""
     return isinstance(exc, TimeoutError) or "Timeout" in type(exc).__name__
+
+
+def _is_dropped(exc: BaseException | None) -> bool:
+    """RETURNS: bool: Whether a failed transfer lost its connection, which a reconnect can fix, rather than failing on its own terms. `adb_shell` timeouts are not `TimeoutError`s."""
+    return isinstance(exc, (ConnectionError, TimeoutError)) or (exc is not None and "Timeout" in type(exc).__name__)
