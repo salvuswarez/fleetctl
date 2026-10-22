@@ -27,7 +27,34 @@ def _widgets(profile: Path, slot: str) -> list[dict[str, Any]]:
 
 
 def _row(widgets: list[dict[str, Any]], label: str) -> dict[str, Any]:
-    return next(row for row in widgets if row["label"] == label and row["path"] != "Stacked_Folder")
+    return next(row for row in widgets if row["label"] == label)
+
+
+# Everything an icon may point at, read off a Shield's installed addons on
+# 2026-10-22. TMDbHelper 6.18 ships exactly these; `trending.png` is not one,
+# and every chip that named it rendered as a blank tile.
+TMDB_ICONS = {
+    "airing.png", "cast.png", "config.png", "default.png", "discover.png", "download.png", "episodes.png", "folder.png",
+    "genre.png", "images.png", "intheatres.png", "movies.png", "nextpage.png", "popular.png", "randomise.png",
+    "recommended.png", "refresh.png", "reviews.png", "save.png", "saveas.png", "search.png", "settings.png",
+    "similar.png", "tags.png", "toprated.png", "trakt.png", "trash.png", "tv.png", "upcoming.png",
+}  # fmt: skip
+SKIN_ICONS = {"calendar.png", "clock-rotate-left.png", "earth-asia.png", "fire.png", "gem.png", "genre.png", "rocket.png", "trophy.png"}
+GENRE_ICONS = {
+    "action and adventure.jpg", "animation.jpg", "anime.jpg", "comedy.jpg", "crime.jpg", "documentary.jpg", "drama.jpg",
+    "family.jpg", "horror.jpg", "reality.jpg", "sci-fi.jpg", "thriller.jpg",
+}  # fmt: skip
+STUDIO_LOGOS = {
+    "a24.png", "abs-cbn entertainment.png", "adult swim.png", "amazon prime video.png", "amc.png", "apple tv+.png",
+    "disney+.png", "fx.png", "gma.png", "hbo max.png", "hulu.png", "marvel studios.png", "netflix.png", "paramount+.png",
+    "peacock.png", "pixar.png", "showtime.png", "studio ghibli.png",
+}  # fmt: skip
+KNOWN = {
+    "special://home/addons/plugin.video.themoviedb.helper/resources/icons/themoviedb/": TMDB_ICONS,
+    "special://skin/extras/icons/": SKIN_ICONS,
+    "resource://resource.images.moviegenreicons.white/": GENRE_ICONS,
+    "resource://resource.images.studios.coloured/": STUDIO_LOGOS,
+}
 
 
 def _params(row: dict[str, Any]) -> dict[str, str]:
@@ -114,14 +141,32 @@ def test_submenus_end_with_the_skins_blank_slot(profile: Path) -> None:
     assert all(group["path"] == "Custom_Submenu" for group in submenu[:-1])
 
 
-def test_icons_resolve_to_real_addon_paths(profile: Path) -> None:
+def test_every_icon_names_a_file_that_ships(profile: Path) -> None:
+    """A missing icon renders as a blank tile with no error anywhere; this is the only place it can be caught."""
+    # Arrange
+    widgets = [row for slot in MANAGED for row in _widgets(profile, slot)]
+    submenus = [_read(profile, f"{SKINVARS}/skinvariables-shortcut-{slot}submenu.json") for slot in ("1101", "1102", "1104")]
+    icons = {row["icon"] for row in widgets} | {chip["icon"] for row in widgets for chip in row.get("submenu", [])}
+    icons |= {item["icon"] for submenu in submenus for group in submenu for item in [group, *group.get("submenu", [])]}
+
     # Act
-    rows = [row for slot in MANAGED for row in _widgets(profile, slot) if row["icon"]]
+    unknown = sorted(icon for icon in icons - {""} if not any(icon.startswith(prefix) and icon[len(prefix) :] in names for prefix, names in KNOWN.items()))
 
     # Assert
-    assert rows
-    assert all(row["icon"].startswith("special://") for row in rows)
-    assert not [row for row in rows if "{" in row["icon"]]
+    assert unknown == []
+
+
+def test_genres_and_networks_get_their_own_icons(profile: Path) -> None:
+    """A generic film strip on every genre and binoculars on every network told you nothing (seen on a Shield)."""
+    # Act
+    genres = {chip["label"]: chip["icon"] for chip in _chips(_widgets(profile, "1101"), "Genres")}
+    networks = {chip["label"]: chip["icon"] for chip in _chips(_widgets(profile, "1102"), "Networks")}
+
+    # Assert
+    assert genres["Horror"] == "resource://resource.images.moviegenreicons.white/horror.jpg"
+    assert networks["Netflix"] == "resource://resource.images.studios.coloured/netflix.png"
+    assert len(set(genres.values())) == len(genres)
+    assert len(set(networks.values())) == len(networks)
 
 
 def test_regenerating_an_unchanged_layout_is_byte_identical(tmp_path: Path) -> None:
@@ -347,19 +392,24 @@ def test_discover_offers_the_past_twelve_months_as_rolling_windows(profile: Path
 # --- chip rows --------------------------------------------------------------
 
 
-def test_a_chip_row_is_a_custom_submenu_followed_by_its_preview(profile: Path) -> None:
-    """Arctic Fuse's Stacked Folder loads whatever is focused in the row directly above it, so order is the contract."""
+def test_a_chip_row_is_one_custom_submenu_row_of_tiles(profile: Path) -> None:
     # Act
-    widgets = _widgets(profile, "1101")
-    index = next(i for i, row in enumerate(widgets) if row["label"] == "Genres" and row["path"] == "Custom_Submenu")
+    chips = _row(_widgets(profile, "1101"), "Genres")
 
     # Assert
-    chips, preview = widgets[index], widgets[index + 1]
+    assert chips["path"] == "Custom_Submenu"
     assert chips["widget_style"] == "Square"
     assert [chip["label"] for chip in chips["submenu"]][:2] == ["Action & Adventure", "Comedy"]
-    assert preview["path"] == "Stacked_Folder"
-    assert preview["widget_style"] == "Poster"
-    assert "submenu" not in preview
+
+
+@pytest.mark.parametrize("slot", MANAGED)
+def test_no_hub_carries_a_stacked_preview_row(profile: Path, slot: str) -> None:
+    """In Combined mode a Stacked Folder got a tab of its own and never shared the screen with its chips (seen on a Shield)."""
+    # Act
+    paths = [row["path"] for row in _widgets(profile, slot)]
+
+    # Assert
+    assert "Stacked_Folder" not in paths
 
 
 def test_a_hub_page_opens_a_chip_row_as_a_folder_of_its_chips(profile: Path) -> None:
@@ -373,8 +423,7 @@ def test_a_hub_page_opens_a_chip_row_as_a_folder_of_its_chips(profile: Path) -> 
     assert [entry["path"] for entry in folder["list"]] == [chip["path"] for chip in _chips(_widgets(profile, "1101"), "Genres")]
 
 
-def test_a_hub_page_lists_each_row_once_and_no_preview_rows(profile: Path) -> None:
-    """The preview row has no content of its own; on the page it would open nothing."""
+def test_a_hub_page_lists_each_row_once(profile: Path) -> None:
     # Act
     node = _read(profile, f"{NODES}/movies_hub_main.json")
     names = [entry["name"] for entry in node["list"]]
@@ -383,7 +432,6 @@ def test_a_hub_page_lists_each_row_once_and_no_preview_rows(profile: Path) -> No
     assert node["name"] == "MOVIES"
     assert names == ["Resume Movies", "Added Movies", "New Releases", "Popular", "Genres", "Streaming On", "Coming Soon", "By Decade", "Collections"]
     assert all(entry["widget"] == "False" for entry in node["list"])
-    assert not [entry for entry in node["list"] if "Stacked_Folder" in entry["path"]]
 
 
 def test_a_hub_page_opens_each_submenu_group_as_a_folder_of_all_its_rows(profile: Path) -> None:

@@ -27,14 +27,11 @@ _OPEN_NODE = _TMDB + "?info=dir_custom_node&filename={filename}"
 # Separates a hub's node from the per-group nodes it links to, so a build can
 # remove the group nodes it wrote last time without touching anyone else's.
 _GROUP_NODE_SEP = "--"
-# Arctic Fuse 3's experimental row paths, read off its `widgets_row.xml`
-# generator template (3.2.15). A Custom Submenu row lists the items in its own
-# `submenu` key; a Stacked Folder row placed straight after it loads whatever
-# item is focused in the row above (`WidgetMeta.<prev id>.FolderPath`).
+# Arctic Fuse 3's experimental row path, read off its `widgets_row.xml`
+# generator template (3.2.15): a Custom Submenu row lists the items in its own
+# `submenu` key, each opening its list when picked.
 _CUSTOM_SUBMENU = "Custom_Submenu"
-_STACKED_FOLDER = "Stacked_Folder"
 _CHIP_STYLE = "Square"
-_PREVIEW_STYLE = "Poster"
 _NODES_REL = "addon_data/plugin.video.themoviedb.helper/nodes"
 _SKINVARS_REL = "addon_data/script.skinvariables/nodes/skin.arctic.fuse.3"
 
@@ -141,10 +138,15 @@ def _row(row: Mapping[str, Any], icons: Mapping[str, str], scope: str) -> dict[s
 def _widgets(rows: Sequence[Mapping[str, Any]], icons: Mapping[str, str], scope: str) -> list[dict[str, Any]]:
     """Expand a hub's rows into skinvariables widgets.
 
-    A row with `chips` becomes two: a Custom Submenu row of chips, then a
-    Stacked Folder row previewing whichever chip has focus. That replaces a
-    stack of one-genre rows with one row you scroll along, and the preview is
-    the only live query: the chips themselves load nothing until focused.
+    A row with `chips` becomes a Custom Submenu row: one tile per list, each
+    opening its list when picked. That replaces a stack of one-genre rows with
+    one row you scroll along, and the tiles cost no query at all.
+
+    No Stacked Folder preview follows it. The skin can preview the focused
+    chip in a second row, but only in its Standard hub mode, where rows stack.
+    In Combined mode, which every hub here uses, a row shows only while its
+    own tab is selected, so the preview had a tab of its own and never shared
+    the screen with the chips it followed. Verified on hardware.
 
     **RETURNS:**
         `list[dict[str, Any]]`: Widgets in display order.  <br>
@@ -164,18 +166,6 @@ def _widgets(rows: Sequence[Mapping[str, Any]], icons: Mapping[str, str], scope:
                 "guid": _guid(scope, "chips", label),
                 "widget_style": str(row.get("style") or _CHIP_STYLE),
                 "submenu": _rows(row["chips"], icons, f"{scope}:{label}"),
-            }
-        )
-        # The skin labels this row with the focused chip's name; ours is only
-        # what the customisation dialog shows.
-        widgets.append(
-            {
-                "label": label,
-                "path": _STACKED_FOLDER,
-                "icon": "",
-                "target": "",
-                "guid": _guid(scope, "preview", label),
-                "widget_style": str(row.get("preview_style") or _PREVIEW_STYLE),
             }
         )
     return widgets
