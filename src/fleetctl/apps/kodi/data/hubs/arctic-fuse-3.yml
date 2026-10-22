@@ -35,7 +35,7 @@
 #   `path`      a literal path (library smartlist, another addon)
 #   `discover`  TMDbHelper's discover route with filters
 #   `tmdb`      any TMDbHelper list route by name (`info`) with its params
-#   `chips`     a row of chips plus a preview row of the focused chip
+#   `chips`     a row of tiles, one per list, each opening its list
 # and may set `style` (Poster, Landscape, Square, Board, Circle, Card, Banner).
 
 # TMDbHelper ships no `white` icon set; rows that referenced one rendered
@@ -43,6 +43,12 @@
 icons:
   tmdb: special://home/addons/plugin.video.themoviedb.helper/resources/icons/themoviedb
   skin: special://skin/extras/icons
+  # Kodi resource packs installed alongside the skin, read off a device's
+  # Textures.xbt indexes. Names are the packs' own, lowercase, spaces and all.
+  # A chip shows its icon as the whole tile, so a generic film strip on every
+  # genre told you nothing; a genre glyph or a network's logo does.
+  genres: resource://resource.images.moviegenreicons.white
+  studios: resource://resource.images.studios.coloured
 
 # Kodi library smartlists: local, instant, no network round-trip. Every hub
 # leads with these so something renders before any TMDb call resolves.
@@ -58,8 +64,10 @@ embuary:
   in_progress: &emb_in_progress plugin://script.embuary.helper/?info=getinprogress&type=mixed
   next_up: &emb_next_up plugin://script.embuary.helper/?info=getnextup&type=tvshow
   new_episodes: &emb_new_episodes plugin://script.embuary.helper/?info=getnewshows&type=tvshow
-  # Similar to a random one of the last ten movies watched.
-  similar_movies: &emb_similar_movies plugin://script.embuary.helper/?info=getsimilar&type=movie
+  # Similar to a random one of the last ten shows watched. `type=movie` came back
+  # empty on a device, and Arctic Fuse hides an empty row: movies here are
+  # mostly played through providers, so the library has few watched to go on.
+  similar_shows: &emb_similar_shows plugin://script.embuary.helper/?info=getsimilar&type=tvshow
 
 # Discover filters used by more than one row under different labels. A row
 # group shares a whole list; this shares one row's query.
@@ -70,51 +78,51 @@ filters:
 row_groups:
   movie_genres: &movie_genres
     - label: Action & Adventure
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/action and adventure.jpg"
       discover: {tmdb_type: movie, with_genres: "28%7C12", sort_by: popularity.desc, vote_count.gte: 500}
     - label: Comedy
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/comedy.jpg"
       discover: {tmdb_type: movie, with_genres: 35, sort_by: popularity.desc, vote_count.gte: 300}
     - label: Sci-Fi
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/sci-fi.jpg"
       discover: {tmdb_type: movie, with_genres: 878, sort_by: popularity.desc, vote_count.gte: 200}
     - label: Thriller
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/thriller.jpg"
       discover: {tmdb_type: movie, with_genres: 53, sort_by: popularity.desc, vote_count.gte: 200}
     - label: Horror
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/horror.jpg"
       discover: {tmdb_type: movie, with_genres: 27, sort_by: popularity.desc, vote_count.gte: 100}
     - label: Family
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/family.jpg"
       discover: {tmdb_type: movie, with_genres: 10751, sort_by: popularity.desc, vote_count.gte: 100}
     - label: Drama
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/drama.jpg"
       discover: {tmdb_type: movie, with_genres: 18, sort_by: popularity.desc, vote_count.gte: 300}
     - label: Crime & Mystery
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/crime.jpg"
       discover: {tmdb_type: movie, with_genres: "80%7C9648%7C99", sort_by: popularity.desc, vote_count.gte: 100}
 
   tv_genres: &tv_genres
     - label: Drama
-      icon: "{tmdb}/tv.png"
+      icon: "{genres}/drama.jpg"
       discover: {tmdb_type: tv, with_genres: 18, sort_by: popularity.desc, vote_count.gte: 100}
     - label: Comedy
-      icon: "{tmdb}/tv.png"
+      icon: "{genres}/comedy.jpg"
       discover: {tmdb_type: tv, with_genres: 35, sort_by: popularity.desc, vote_count.gte: 100}
     - label: Crime & Mystery
-      icon: "{tmdb}/tv.png"
+      icon: "{genres}/crime.jpg"
       discover: *tv_crime_docs_mystery
     - label: Sci-Fi & Fantasy
-      icon: "{tmdb}/tv.png"
+      icon: "{genres}/sci-fi.jpg"
       discover: {tmdb_type: tv, with_genres: 10765, sort_by: popularity.desc, vote_count.gte: 100}
     - label: Animation
-      icon: "{tmdb}/tv.png"
+      icon: "{genres}/animation.jpg"
       discover: {tmdb_type: tv, with_genres: 16, sort_by: popularity.desc, vote_count.gte: 50}
     - label: Reality
-      icon: "{tmdb}/genre.png"
+      icon: "{genres}/reality.jpg"
       discover: {tmdb_type: tv, with_genres: 10764, sort_by: popularity.desc, vote_count.gte: 20}
     - label: Documentary
-      icon: "{tmdb}/genre.png"
+      icon: "{genres}/documentary.jpg"
       discover: {tmdb_type: tv, with_genres: 99, sort_by: popularity.desc, vote_count.gte: 20}
 
   # The captured config had this group's icon pointing at a repository .zip
@@ -124,40 +132,40 @@ row_groups:
   # Showtime 67, Adult Swim 80.
   networks: &networks
     - label: Netflix
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/netflix.png"
       discover: {tmdb_type: tv, with_networks: 213, sort_by: popularity.desc}
     - label: HBO / Max
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/hbo max.png"
       discover: {tmdb_type: tv, with_networks: "49%7C3186", sort_by: popularity.desc}
     - label: Prime Video
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/amazon prime video.png"
       discover: {tmdb_type: tv, with_networks: 1024, sort_by: popularity.desc}
     - label: Apple TV+
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/apple tv+.png"
       discover: {tmdb_type: tv, with_networks: 2552, sort_by: popularity.desc}
     - label: Disney+
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/disney+.png"
       discover: {tmdb_type: tv, with_networks: 2739, sort_by: popularity.desc}
     - label: Hulu
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/hulu.png"
       discover: {tmdb_type: tv, with_networks: 453, sort_by: popularity.desc}
     - label: Paramount+
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/paramount+.png"
       discover: {tmdb_type: tv, with_networks: 4330, sort_by: popularity.desc}
     - label: Peacock
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/peacock.png"
       discover: {tmdb_type: tv, with_networks: 3353, sort_by: popularity.desc}
     - label: FX
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/fx.png"
       discover: {tmdb_type: tv, with_networks: 88, sort_by: popularity.desc}
     - label: AMC
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/amc.png"
       discover: {tmdb_type: tv, with_networks: 174, sort_by: popularity.desc}
     - label: Showtime
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/showtime.png"
       discover: {tmdb_type: tv, with_networks: 67, sort_by: popularity.desc}
     - label: Adult Swim
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/adult swim.png"
       discover: {tmdb_type: tv, with_networks: 80, sort_by: popularity.desc}
 
   # TMDb has no network filter for movies — a network is a TV concept there.
@@ -169,28 +177,28 @@ row_groups:
   # since TMDb now lists them as Premium/Essential tiers.
   movie_networks: &movie_networks
     - label: Netflix
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/netflix.png"
       discover: {tmdb_type: movie, with_watch_providers: 8, watch_region: US, sort_by: popularity.desc}
     - label: HBO / Max
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/hbo max.png"
       discover: {tmdb_type: movie, with_watch_providers: 1899, watch_region: US, sort_by: popularity.desc}
     - label: Prime Video
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/amazon prime video.png"
       discover: {tmdb_type: movie, with_watch_providers: 9, watch_region: US, sort_by: popularity.desc}
     - label: Apple TV+
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/apple tv+.png"
       discover: {tmdb_type: movie, with_watch_providers: 350, watch_region: US, sort_by: popularity.desc}
     - label: Disney+
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/disney+.png"
       discover: {tmdb_type: movie, with_watch_providers: 337, watch_region: US, sort_by: popularity.desc}
     - label: Hulu
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/hulu.png"
       discover: {tmdb_type: movie, with_watch_providers: 15, watch_region: US, sort_by: popularity.desc}
     - label: Paramount+
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/paramount+.png"
       discover: {tmdb_type: movie, with_watch_providers: 531, watch_region: US, sort_by: popularity.desc}
     - label: Peacock
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/peacock.png"
       discover: {tmdb_type: movie, with_watch_providers: 386, watch_region: US, sort_by: popularity.desc}
 
   # K-Dramas and Anime go by origin country plus genre: TMDb has no network
@@ -198,19 +206,19 @@ row_groups:
   # so new teleseryes lead rather than the long-running ones.
   international: &international
     - label: K-Dramas
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/earth-asia.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, with_origin_country: KR, vote_count.gte: 50}
     - label: Anime
-      icon: "{tmdb}/tv.png"
+      icon: "{genres}/anime.jpg"
       discover: {tmdb_type: tv, with_genres: 16, sort_by: popularity.desc, with_origin_country: JP, vote_count.gte: 50}
     - label: ABS-CBN
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/abs-cbn entertainment.png"
       discover: {tmdb_type: tv, with_networks: 156, sort_by: first_air_date.desc}
     - label: GMA
-      icon: "{tmdb}/discover.png"
+      icon: "{studios}/gma.png"
       discover: {tmdb_type: tv, with_networks: 210, sort_by: popularity.desc}
     - label: Viu
-      icon: "{tmdb}/discover.png"
+      icon: "{skin}/earth-asia.png"
       discover: {tmdb_type: tv, with_networks: 1510, sort_by: popularity.desc}
 
   # What came out in the last year, as one place to look. Rolling rather than
@@ -222,47 +230,47 @@ row_groups:
       icon: "{tmdb}/intheatres.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 25, primary_release_date.gte: T-365, primary_release_date.lte: T-0}
     - label: New Series
-      icon: "{tmdb}/trending.png"
+      icon: "{tmdb}/airing.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 10, first_air_date.gte: T-365, first_air_date.lte: T-0}
     # Any episode aired in the window, from a series that premiered before it:
     # the same split "Airing Now" makes, over a year.
     - label: Returning Series
-      icon: "{tmdb}/trending.png"
+      icon: "{tmdb}/episodes.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 50, first_air_date.lte: T-365, air_date.gte: T-365, air_date.lte: T-0}
 
   movie_decades: &movie_decades
     - label: 2020s
-      icon: "{tmdb}/movies.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "2020-01-01", primary_release_date.lte: "2029-12-31"}
     - label: 2010s
-      icon: "{tmdb}/movies.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "2010-01-01", primary_release_date.lte: "2019-12-31"}
     - label: 2000s
-      icon: "{tmdb}/movies.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "2000-01-01", primary_release_date.lte: "2009-12-31"}
     - label: 1990s
-      icon: "{tmdb}/movies.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "1990-01-01", primary_release_date.lte: "1999-12-31"}
     - label: Before 1990
-      icon: "{tmdb}/movies.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_count.gte: 200, primary_release_date.gte: "1900-01-01", primary_release_date.lte: "1989-12-31"}
 
   # The same cut-offs as movies, so "1990s" means the same thing in both hubs.
   tv_decades: &tv_decades
     - label: 2020s
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "2020-01-01", first_air_date.lte: "2029-12-31"}
     - label: 2010s
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "2010-01-01", first_air_date.lte: "2019-12-31"}
     - label: 2000s
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "2000-01-01", first_air_date.lte: "2009-12-31"}
     - label: 1990s
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "1990-01-01", first_air_date.lte: "1999-12-31"}
     - label: Before 1990
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/calendar.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_count.gte: 100, first_air_date.gte: "1900-01-01", first_air_date.lte: "1989-12-31"}
 
   # Defined once here and reached three ways: each hub's Collections menu and
@@ -274,36 +282,36 @@ row_groups:
   movie_collections: &movie_collections
     - &top_rated_movies
       label: Top Rated
-      icon: "{tmdb}/popular.png"
+      icon: "{skin}/trophy.png"
       discover: {tmdb_type: movie, sort_by: popularity.desc, vote_average.gte: 8.0, vote_count.gte: 2000}
     - &hidden_gem_movies
       label: Hidden Gems
-      icon: "{tmdb}/movies.png"
+      icon: "{skin}/gem.png"
       discover: {tmdb_type: movie, sort_by: vote_average.desc, vote_count.gte: 50, vote_count.lte: 400}
     - label: Crime & Thriller
-      icon: "{tmdb}/movies.png"
+      icon: "{genres}/crime.jpg"
       discover: {tmdb_type: movie, with_genres: "80%7C53", sort_by: popularity.desc, vote_count.gte: 100}
     - label: Marvel
-      icon: "{tmdb}/movies.png"
+      icon: "{studios}/marvel studios.png"
       discover: {tmdb_type: movie, with_companies: 420, sort_by: primary_release_date.desc}
     - label: Pixar
-      icon: "{tmdb}/movies.png"
+      icon: "{studios}/pixar.png"
       discover: {tmdb_type: movie, with_companies: 3, sort_by: primary_release_date.desc}
     - label: A24
-      icon: "{tmdb}/movies.png"
+      icon: "{studios}/a24.png"
       discover: {tmdb_type: movie, with_companies: 41077, sort_by: primary_release_date.desc}
     - label: Studio Ghibli
-      icon: "{tmdb}/movies.png"
+      icon: "{studios}/studio ghibli.png"
       discover: {tmdb_type: movie, with_companies: 10342, sort_by: primary_release_date.desc}
 
   tv_collections: &tv_collections
     - &top_rated_series
       label: Top Rated
-      icon: "{tmdb}/popular.png"
+      icon: "{skin}/trophy.png"
       discover: {tmdb_type: tv, sort_by: popularity.desc, vote_average.gte: 8.0, vote_count.gte: 500}
     - &hidden_gem_series
       label: Hidden Gems
-      icon: "{tmdb}/tv.png"
+      icon: "{skin}/gem.png"
       discover: {tmdb_type: tv, sort_by: vote_average.desc, vote_count.gte: 20, vote_count.lte: 200}
 
   top_rated: &top_rated
@@ -331,7 +339,7 @@ hubs:
       # so the two cannot drift.
       - &airing_now
         label: Airing Now
-        icon: "{tmdb}/trending.png"
+        icon: "{tmdb}/airing.png"
         style: Poster
         discover:
           tmdb_type: tv
@@ -342,11 +350,12 @@ hubs:
           air_date.gte: T-0
           # %2B is a URL-encoded plus; a bare one reads back as a space ("T 14").
           air_date.lte: T%2B14
-      - {label: You Might Like, icon: "{tmdb}/discover.png", path: *emb_similar_movies, style: Poster}
+      - {label: You Might Like, icon: "{tmdb}/discover.png", path: *emb_similar_shows, style: Poster}
       # Series > Crime & Mystery, surfaced on home. The filter is that row's
       # own, by anchor: a hand copy had dropped documentaries.
       - {label: Maddy's Picks, icon: "{tmdb}/discover.png", discover: *tv_crime_docs_mystery, style: Poster}
-    submenu: []
+    # No `submenu` key: Home's menu (Videos, Music, Pictures) is the skin's own
+    # and is disabled in its settings; this layout leaves the file alone.
 
   "1101":
     node: movies_hub_main.json
@@ -374,7 +383,7 @@ hubs:
       - {label: Next Up, icon: "{skin}/clock-rotate-left.png", path: *emb_next_up, style: Landscape}
       - {label: New Episodes, icon: "{skin}/calendar.png", path: *emb_new_episodes, style: Landscape}
       - label: New Series
-        icon: "{tmdb}/trending.png"
+        icon: "{tmdb}/airing.png"
         style: Poster
         discover:
           tmdb_type: tv
@@ -393,15 +402,14 @@ hubs:
       - {label: Collections, icon: "{skin}/genre.png", rows: *tv_collections}
 
   # Discover: find something new. Its live rows stay few (see the 1104 OOM
-  # note above): two trending rows plus one preview per chip row, six in all,
-  # against the ten that preceded the crash. Everything here is on screen, so
-  # it needs no sub-menu.
+  # note above): two trending rows, and chip rows that load nothing until a
+  # chip is picked. Everything here is on screen, so it needs no sub-menu.
   "1104":
     node: genres_hub.json
     node_name: DISCOVER
     widgets:
-      - {label: Trending Movies, icon: "{tmdb}/trending.png", style: Poster, tmdb: {info: trending_week, tmdb_type: movie}}
-      - {label: Trending Series, icon: "{tmdb}/trending.png", style: Poster, tmdb: {info: trending_week, tmdb_type: tv}}
+      - {label: Trending Movies, icon: "{skin}/fire.png", style: Poster, tmdb: {info: trending_week, tmdb_type: movie}}
+      - {label: Trending Series, icon: "{skin}/fire.png", style: Poster, tmdb: {info: trending_week, tmdb_type: tv}}
       - {label: Past 12 Months, icon: "{skin}/calendar.png", chips: *past_year}
       - {label: Top Rated, icon: "{skin}/genre.png", chips: *top_rated}
       - {label: Hidden Gems, icon: "{skin}/genre.png", chips: *hidden_gems}
