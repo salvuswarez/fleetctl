@@ -32,7 +32,7 @@ def _row(widgets: list[dict[str, Any]], label: str) -> dict[str, Any]:
 
 # Everything an icon may point at, read off a Shield's installed addons on
 # 2026-10-22. TMDbHelper 6.18 ships exactly these; `trending.png` is not one,
-# and every chip that named it rendered as a blank tile.
+# and every entry that named it rendered as a blank tile.
 TMDB_ICONS = {
     "airing.png", "cast.png", "config.png", "default.png", "discover.png", "download.png", "episodes.png", "folder.png",
     "genre.png", "images.png", "intheatres.png", "movies.png", "nextpage.png", "popular.png", "randomise.png",
@@ -61,9 +61,9 @@ def _params(row: dict[str, Any]) -> dict[str, str]:
     return dict(parse_qsl(urlsplit(row["path"]).query))
 
 
-def _chips(widgets: list[dict[str, Any]], label: str) -> list[dict[str, Any]]:
-    chips: list[dict[str, Any]] = _row(widgets, label)["submenu"]
-    return chips
+def _menu(profile: Path, slot: str, label: str) -> list[dict[str, Any]]:
+    """RETURNS: list[dict[str, Any]]: The rows of one ▶ menu group."""
+    return _group(_read(profile, f"{SKINVARS}/skinvariables-shortcut-{slot}submenu.json"), label)
 
 
 def _group(submenu: list[dict[str, Any]], label: str) -> list[dict[str, Any]]:
@@ -115,12 +115,14 @@ def test_a_hub_that_owns_no_submenu_leaves_the_skins_file_alone(tmp_path: Path) 
     assert skin_owned.read_text(encoding="utf-8") == '[{"label": "$LOCALIZE[3]"}]'
 
 
-def test_an_empty_submenu_replaces_one_left_by_the_capture(tmp_path: Path) -> None:
+def test_an_empty_submenu_replaces_one_left_by_the_capture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Skipping the file left Browse's four duplicate menus on Discover after a real deploy."""
     # Arrange
     stale = tmp_path / SKINVARS / "skinvariables-shortcut-1104submenu.json"
     stale.parent.mkdir(parents=True)
     stale.write_text('[{"label": "Movie Genres", "path": "Custom_Submenu"}]', encoding="utf-8")
+    layout = {"hubs": {"1104": {"node": "d.json", "node_name": "D", "widgets": [], "submenu": []}}}
+    monkeypatch.setattr("fleetctl.apps.kodi.transforms.hub_layout.load_layout", lambda name: layout)
 
     # Act
     ApplyHubLayout().apply(tmp_path, {})
@@ -137,7 +139,7 @@ def test_submenus_end_with_the_skins_blank_slot(profile: Path) -> None:
 
     # Assert
     assert submenu[-1]["label"] == ""
-    assert [group["label"] for group in submenu[:-1]] == ["International", "By Decade", "Collections"]
+    assert [group["label"] for group in submenu[:-1]] == ["Genres", "Networks", "International", "By Decade", "Collections"]
     assert all(group["path"] == "Custom_Submenu" for group in submenu[:-1])
 
 
@@ -146,7 +148,7 @@ def test_every_icon_names_a_file_that_ships(profile: Path) -> None:
     # Arrange
     widgets = [row for slot in MANAGED for row in _widgets(profile, slot)]
     submenus = [_read(profile, f"{SKINVARS}/skinvariables-shortcut-{slot}submenu.json") for slot in ("1101", "1102", "1104")]
-    icons = {row["icon"] for row in widgets} | {chip["icon"] for row in widgets for chip in row.get("submenu", [])}
+    icons = {row["icon"] for row in widgets}
     icons |= {item["icon"] for submenu in submenus for group in submenu for item in [group, *group.get("submenu", [])]}
 
     # Act
@@ -159,8 +161,8 @@ def test_every_icon_names_a_file_that_ships(profile: Path) -> None:
 def test_genres_and_networks_get_their_own_icons(profile: Path) -> None:
     """A generic film strip on every genre and binoculars on every network told you nothing (seen on a Shield)."""
     # Act
-    genres = {chip["label"]: chip["icon"] for chip in _chips(_widgets(profile, "1101"), "Genres")}
-    networks = {chip["label"]: chip["icon"] for chip in _chips(_widgets(profile, "1102"), "Networks")}
+    genres = {row["label"]: row["icon"] for row in _menu(profile, "1101", "Genres")}
+    networks = {row["label"]: row["icon"] for row in _menu(profile, "1102", "Networks")}
 
     # Assert
     assert genres["Horror"] == "resource://resource.images.moviegenreicons.white/horror.jpg"
@@ -187,7 +189,7 @@ def test_every_guid_in_a_hub_is_distinct(profile: Path, slot: str) -> None:
     widgets = _widgets(profile, slot)
 
     # Assert
-    guids = [row["guid"] for row in widgets] + [chip["guid"] for row in widgets for chip in row.get("submenu", [])]
+    guids = [row["guid"] for row in widgets]
     assert len(guids) == len(set(guids))
 
 
@@ -227,7 +229,7 @@ def test_every_label_fits_the_row_strip(profile: Path, slot: str) -> None:
 
 def test_discover_rows_carry_their_params(profile: Path) -> None:
     # Act
-    comedy = next(chip for chip in _chips(_widgets(profile, "1101"), "Genres") if chip["label"] == "Comedy")
+    comedy = next(row for row in _menu(profile, "1101", "Genres") if row["label"] == "Comedy")
 
     # Assert
     assert _params(comedy) == {
@@ -265,7 +267,7 @@ def test_a_row_style_is_carried_and_an_unset_one_is_left_to_the_skin(profile: Pa
     # Assert
     assert _row(home, "Continue")["widget_style"] == "Landscape"
     assert _row(home, "Added Movies")["widget_style"] == "Poster"
-    assert "widget_style" not in next(chip for chip in _chips(_widgets(profile, "1101"), "Genres"))
+    assert "widget_style" not in _menu(profile, "1101", "Genres")[0]
 
 
 def test_library_rows_lead_so_the_screen_paints_before_any_tmdb_call(profile: Path) -> None:
@@ -313,11 +315,11 @@ def test_airing_now_excludes_new_series_and_is_identical_on_home_and_series(prof
     assert home["air_date.lte"] == "T+14"
 
 
-def test_maddys_row_is_the_series_crime_and_mystery_chip(profile: Path) -> None:
+def test_maddys_row_is_the_series_crime_and_mystery_genre(profile: Path) -> None:
     """A hand copy had dropped documentaries (genre 99); the two now share one filter."""
     # Act
     home = _params(_row(_widgets(profile, "home"), "Maddy's Picks"))
-    series = _params(next(chip for chip in _chips(_widgets(profile, "1102"), "Genres") if chip["label"] == "Crime & Mystery"))
+    series = _params(next(row for row in _menu(profile, "1102", "Genres") if row["label"] == "Crime & Mystery"))
 
     # Assert
     assert home == series
@@ -337,21 +339,22 @@ def test_top_rated_filters_at_eight_and_promises_no_percentage(profile: Path) ->
     assert not [row for row in (*movies, *series) if "%" in row["label"]]
 
 
-def test_discover_reuses_the_collection_queries_under_its_own_labels(profile: Path) -> None:
+@pytest.mark.parametrize(("label", "slot"), [("Top Movies", "1101"), ("Top Shows", "1102")])
+def test_discovers_top_rows_reuse_the_collection_queries(profile: Path, label: str, slot: str) -> None:
     """Merge keys relabel a row without copying its filter, so the two cannot drift."""
     # Act
-    top = _chips(_widgets(profile, "1104"), "Top Rated")
-    movies = _group(_read(profile, f"{SKINVARS}/skinvariables-shortcut-1101submenu.json"), "Collections")
+    top = _row(_widgets(profile, "1104"), label)
+    collection = next(row for row in _menu(profile, slot, "Collections") if row["label"] == "Top Rated")
 
     # Assert
-    assert [chip["label"] for chip in top] == ["Movies", "Series"]
-    assert top[0]["path"] == next(row for row in movies if row["label"] == "Top Rated")["path"]
+    assert top["path"] == collection["path"]
+    assert top["widget_style"] == "Poster"
 
 
 def test_movies_browse_by_service_through_streaming_availability(profile: Path) -> None:
     """TMDb movies have no network filter; `with_networks` on a movie query is ignored and silently means "all popular movies"."""
     # Act
-    params = [_params(chip) for chip in _chips(_widgets(profile, "1101"), "Streaming On")]
+    params = [_params(row) for row in _menu(profile, "1101", "Streaming On")]
 
     # Assert
     assert params
@@ -362,8 +365,8 @@ def test_movies_browse_by_service_through_streaming_availability(profile: Path) 
 def test_every_streaming_service_is_browsable_for_both_movies_and_series(profile: Path) -> None:
     """The movie list is the streaming half of the series list; cable networks have no movie catalogue to filter."""
     # Act
-    movies = [chip["label"] for chip in _chips(_widgets(profile, "1101"), "Streaming On")]
-    series = [chip["label"] for chip in _chips(_widgets(profile, "1102"), "Networks")]
+    movies = [row["label"] for row in _menu(profile, "1101", "Streaming On")]
+    series = [row["label"] for row in _menu(profile, "1102", "Networks")]
 
     # Assert
     assert movies == ["Netflix", "HBO / Max", "Prime Video", "Apple TV+", "Disney+", "Hulu", "Paramount+", "Peacock"]
@@ -382,37 +385,44 @@ def test_every_streaming_service_is_browsable_for_both_movies_and_series(profile
 def test_discover_offers_the_past_twelve_months_as_rolling_windows(profile: Path, label: str, expected: dict[str, str]) -> None:
     """Rolling, because TMDbHelper resolves only day offsets: a calendar year would go stale every January."""
     # Act
-    chip = next(chip for chip in _chips(_widgets(profile, "1104"), "Past 12 Months") if chip["label"] == label)
+    row = next(row for row in _menu(profile, "1104", "Past 12 Months") if row["label"] == label)
 
     # Assert
-    params = _params(chip)
+    params = _params(row)
     assert {key: params[key] for key in expected} == expected
 
 
-# --- chip rows --------------------------------------------------------------
-
-
-def test_a_chip_row_is_one_custom_submenu_row_of_tiles(profile: Path) -> None:
-    # Act
-    chips = _row(_widgets(profile, "1101"), "Genres")
-
-    # Assert
-    assert chips["path"] == "Custom_Submenu"
-    assert chips["widget_style"] == "Square"
-    assert [chip["label"] for chip in chips["submenu"]][:2] == ["Action & Adventure", "Comedy"]
+# --- strip and menu ---------------------------------------------------------
 
 
 @pytest.mark.parametrize("slot", MANAGED)
-def test_no_hub_carries_a_stacked_preview_row(profile: Path, slot: str) -> None:
-    """In Combined mode a Stacked Folder got a tab of its own and never shared the screen with its chips (seen on a Shield)."""
+def test_the_strip_holds_only_rows_of_titles(profile: Path, slot: str) -> None:
+    """A list of lists in the strip (tiles, or a preview that never shows) reads as clutter on the TV; those go in ▶."""
     # Act
     paths = [row["path"] for row in _widgets(profile, slot)]
 
     # Assert
-    assert "Stacked_Folder" not in paths
+    assert not [path for path in paths if path in ("Custom_Submenu", "Stacked_Folder")]
+    assert not [row for row in _widgets(profile, slot) if row.get("submenu")]
 
 
-def test_a_hub_page_opens_a_chip_row_as_a_folder_of_its_chips(profile: Path) -> None:
+@pytest.mark.parametrize(
+    ("slot", "expected"),
+    [
+        ("1101", ["Genres", "Streaming On", "By Decade", "Collections"]),
+        ("1102", ["Genres", "Networks", "International", "By Decade", "Collections"]),
+        ("1104", ["Past 12 Months", "Hidden Gems", "International"]),
+    ],
+)
+def test_each_hubs_menu_holds_its_lists_of_lists(profile: Path, slot: str, expected: list[str]) -> None:
+    # Act
+    submenu = _read(profile, f"{SKINVARS}/skinvariables-shortcut-{slot}submenu.json")
+
+    # Assert
+    assert [group["label"] for group in submenu[:-1]] == expected
+
+
+def test_a_hub_page_opens_a_menu_group_as_a_folder_of_its_rows(profile: Path) -> None:
     # Act
     node = _read(profile, f"{NODES}/movies_hub_main.json")
     genres = next(entry for entry in node["list"] if entry["name"] == "Genres")
@@ -420,7 +430,7 @@ def test_a_hub_page_opens_a_chip_row_as_a_folder_of_its_chips(profile: Path) -> 
     # Assert
     assert _params(genres) == {"info": "dir_custom_node", "filename": "movies_hub_main--genres.json"}
     folder = _read(profile, f"{NODES}/movies_hub_main--genres.json")
-    assert [entry["path"] for entry in folder["list"]] == [chip["path"] for chip in _chips(_widgets(profile, "1101"), "Genres")]
+    assert [entry["path"] for entry in folder["list"]] == [row["path"] for row in _menu(profile, "1101", "Genres")]
 
 
 def test_a_hub_page_lists_each_row_once(profile: Path) -> None:
@@ -430,7 +440,7 @@ def test_a_hub_page_lists_each_row_once(profile: Path) -> None:
 
     # Assert
     assert node["name"] == "MOVIES"
-    assert names == ["Resume Movies", "Added Movies", "New Releases", "Popular", "Genres", "Streaming On", "Coming Soon", "By Decade", "Collections"]
+    assert names == ["Resume Movies", "Added Movies", "New Releases", "Popular", "Coming Soon", "Genres", "Streaming On", "By Decade", "Collections"]
     assert all(entry["widget"] == "False" for entry in node["list"])
 
 
@@ -470,11 +480,13 @@ def test_group_nodes_from_a_previous_build_are_removed(tmp_path: Path) -> None:
 
 
 def test_two_groups_that_would_share_a_node_file_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A chip row and a sub-menu group with one label would overwrite each other's folder."""
+    """Two groups whose labels slug alike would overwrite each other's folder."""
     # Arrange
     row = {"label": "Picks", "discover": {"tmdb_type": "movie"}}
     layout = {
-        "hubs": {"1101": {"node": "m.json", "node_name": "M", "widgets": [{"label": "Picks", "chips": [row]}], "submenu": [{"label": "Picks", "rows": [row]}]}}
+        "hubs": {
+            "1101": {"node": "m.json", "node_name": "M", "widgets": [], "submenu": [{"label": "Picks", "rows": [row]}, {"label": "PICKS!", "rows": [row]}]}
+        }
     }
     monkeypatch.setattr("fleetctl.apps.kodi.transforms.hub_layout.load_layout", lambda name: layout)
 
