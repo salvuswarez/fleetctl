@@ -253,8 +253,13 @@ down per-user micro-customisation, so a design that needs a skin change will not
   Search, 1106 Next Aired, 1107 Live TV and 1108 Add-ons are built-in, each switched by
   `homeswitcher.<id>.toggle` (empty = off). Hubs cannot be reordered, and each loads its rows only
   while it is the current window, so a hub with many rows costs nothing until you switch to it.
-- **1106 Next Aired** reads the library when `HomeSwitcher.1106.UpNextMode` is `library_nextaired`.
-  No Trakt account needed.
+- **1106 Next Aired needs Trakt in both of its modes.** `HomeSwitcher.1106.UpNextMode` is passed
+  straight to TMDbHelper as `?info=<mode>`, and its "library" mode, `library_nextaired`, is
+  Trakt's `calendars/all/shows` filtered to library shows: the class sets
+  `trakt_authorization = True`. Without a Trakt login the hub shows "Unauthorised 401 Error
+  TraktAPI Token" (seen on a Shield, 2026-10-22). The Trakt-free equivalent is TMDbHelper's
+  `library_airingnext` (library shows, next episode per show from TMDb), but it ignores the
+  hub's per-day `startdate`, so it belongs in an ordinary row, not in this hub.
 - **Hub mode** is `HomeSwitcher.<id>.Mode`: `Standard`, `Combined` or `Wall`. Every device here runs
   `Combined`. Only one combined row set fits per hub; a second cannot be stacked under it.
 - **Spotlight is per hub**: `HomeSwitcher.<id>.Spotlight.{Path,Label,SortMethod,Limit,Target}`. Any
@@ -286,7 +291,10 @@ Rows can come from sources other than TMDb discover, none of which need Trakt:
 
 - **TMDbHelper 6.18:** `trending_day`, `trending_week`, `now_playing`, `upcoming`, `airing_today`,
   `on_the_air`, `popular`, `top_rated`, `genres`, `watch_providers`, `all_networks`,
-  `library_nextaired`. These are route names, so the path is `?info=<route>&tmdb_type=movie|tv`.
+  `library_airingnext`. These are route names, so the path is `?info=<route>&tmdb_type=movie|tv`.
+  A route under `items/directories/trakt/` is not automatically Trakt-only, nor safe: read its
+  class for `trakt_authorization` before relying on it (`library_nextaired` lives there and needs
+  a login; `library_airingnext` lives there and does not).
 - **script.embuary.helper 2.0.8:** `getinprogress&type=mixed` (in-progress movies *and* episodes
   in one row), `getnextup` (next unwatched episode per show), `getnewshows` (recently added
   unwatched), `getsimilar&pos=0` (similar to the last thing watched). These read the Kodi library,

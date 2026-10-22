@@ -14,7 +14,8 @@
 #   Movies    what movies are there? resume, library, new, popular, browse
 #   Series    what series are there? the same, plus next up and networks
 #   Discover  find something new     trending, the last year, international
-# 1106 Next Aired (the skin's own calendar) answers "when is my show on?".
+# "When is my show on?" is Series' Coming Up row: the skin's own Next Aired
+# calendar (1106) needs Trakt, which this household does not use.
 #
 # Labels stay at 15 characters or fewer: the row strip cuts anything longer
 # at 1080p ("Continue Watchi…"), and two rows differing only in a suffix
@@ -377,6 +378,10 @@ hubs:
     widgets:
       - {label: Resume Series, icon: "{skin}/clock-rotate-left.png", path: *lib_tv_progress, style: Landscape}
       - {label: Next Up, icon: "{skin}/clock-rotate-left.png", path: *emb_next_up, style: Landscape}
+      # The next episode to air of each show in the library, soonest first.
+      # `library_airingnext` seeds from the library and asks TMDb per show, so
+      # unlike the skin's Next Aired calendar it needs no Trakt login.
+      - {label: Coming Up, icon: "{tmdb}/airing.png", style: Landscape, tmdb: {info: library_airingnext, tmdb_type: tv}}
       - {label: New Episodes, icon: "{skin}/calendar.png", path: *emb_new_episodes, style: Landscape}
       - label: New Series
         icon: "{tmdb}/airing.png"
