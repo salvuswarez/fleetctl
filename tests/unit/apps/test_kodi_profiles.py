@@ -150,3 +150,28 @@ def test_an_unknown_profile_names_the_ones_that_ship() -> None:
     # Act / Assert
     with pytest.raises(FleetError, match="No Kodi profile 'nope'"):
         KodiApp().transforms_for("nope")
+
+
+SKIN_SETTINGS = "addon_data/skin.arctic.fuse.3/settings.xml"
+
+
+def test_the_gold_profile_switches_on_next_aired_and_names_discover() -> None:
+    # Act
+    skin = KodiApp("gold").recipe["apply_settings"]["settings"][SKIN_SETTINGS]
+
+    # Assert
+    assert skin["homeswitcher.1106.toggle"] == skin["HomeSwitcher.1106.Toggle"] == "true"
+    assert skin["homeswitcher.1106.upnextmode"] == "library_nextaired"
+    assert skin["homeswitcher.1104.name"] == skin["HomeSwitcher.1104.Name"] == "Discover"
+
+
+def test_every_managed_spotlight_is_set_in_both_spellings_and_none_repeats() -> None:
+    """Home and Browse both showed "Trending Today"; the skin reads whichever key spelling it finds first."""
+    # Act
+    skin = KodiApp("gold").recipe["apply_settings"]["settings"][SKIN_SETTINGS]
+    paths = {hub: skin[f"homeswitcher.{hub}.spotlight.path"] for hub in ("home", "1102", "1103", "1104")}
+
+    # Assert
+    assert skin["HomeSwitcher.Home.Spotlight.Path"] == paths["home"]
+    assert all(skin[f"HomeSwitcher.{hub}.Spotlight.Path"] == paths[hub] for hub in ("1102", "1103", "1104"))
+    assert len(set(paths.values())) == len(paths)
