@@ -119,6 +119,17 @@ class SmbArtifactStore:
     else keeps a session dropped 200MB into a 350MB build from leaving a file
     that lists, sizes and deploys exactly like a whole one.
 
+    Each transfer runs on a connection of its own, and nothing here touches
+    `smbclient`'s process-wide connection pool. `reset_connection_cache()`
+    with no cache closes **every** pooled connection in the process, and every
+    caller shares one connection per server. In Home Assistant that is one
+    process serving builds, deploys and the panel's listing at once, so a
+    hiccup in a listing (which the panel re-runs whenever any operation
+    finishes) reset the connection a 350MB transfer was using, and that
+    transfer's own retry reset everyone else's. Transfers failed there with
+    "SMB socket was closed" within a minute or two, while the same transfers
+    from a workstation, one job per process, ran clean.
+
     **PARAMETERS:**
         `settings` (SmbSettings): Where the share is and how to reach it.  <br>
     """
@@ -126,6 +137,8 @@ class SmbArtifactStore:
     def __init__(self, settings: SmbSettings) -> None:
         self._settings = settings
         self._configured = False
+        # Listings, existence checks and deletes: short calls that may share.
+        self._cache: dict[str, Any] = {}
 
     def _connect(self) -> None:
         if self._configured:
@@ -137,8 +150,8 @@ class SmbArtifactStore:
         smbclient.ClientConfig(username=self._settings.reveal_user(), password=self._settings.reveal_password())
         self._configured = True
 
-    def _retry(self, call: Callable[[], _T]) -> _T:
-        """Run `call`, resetting the session once if the connection was stale."""
+    def _retry(self, call: Callable[[], _T], cache: dict[str, Any]) -> _T:
+        """Run `call`, resetting `cache`'s connection once if it was stale. Never another caller's."""
         self._connect()
         import smbclient
 
@@ -157,20 +170,18 @@ class SmbArtifactStore:
                 if not _is_transient(exc):
                     raise
                 LOGGER.info("SMB session stale, reconnecting: %s", exc)
-                smbclient.reset_connection_cache()
-                self._configured = False
-                self._connect()
+                smbclient.reset_connection_cache(fail_on_error=False, connection_cache=cache)
         raise ArtifactError("SMB retry loop exhausted")
 
     def _path(self, *parts: str) -> str:
         return "\\\\" + "\\".join([self._settings.host, self._settings.share, self._settings.root, *parts])
 
-    def _remove_quietly(self, path: str) -> None:
+    def _remove_quietly(self, path: str, cache: dict[str, Any]) -> None:
         """Delete `path`, treating any failure as "it is not in the way"."""
         import smbclient
 
         try:
-            smbclient.remove(path)
+            smbclient.remove(path, connection_cache=cache)
         except Exception as exc:  # noqa: BLE001 - absent is the normal case, and a real problem resurfaces on the write
             LOGGER.debug("Nothing to clear at %s: %s", path, exc)
 
@@ -189,30 +200,33 @@ class SmbArtifactStore:
 
         created_at = datetime.now(timezone.utc).isoformat()
         record = {"created_at": created_at, "size": local_path.stat().st_size, **(meta or {})}
+        cache: dict[str, Any] = {}
 
         def _upload() -> None:
-            smbclient.makedirs(self._path(ref.kind), exist_ok=True)
+            smbclient.makedirs(self._path(ref.kind), exist_ok=True, connection_cache=cache)
             staged = self._path(ref.kind, ref.name + _UPLOADING)
             # A retry inherits whatever the dead session left behind, and the
             # server can still hold a handle on it — reopening that path for
             # write is refused outright. Clearing it first is what makes the
             # second attempt possible at all.
-            self._remove_quietly(staged)
-            with open(local_path, "rb") as source, smbclient.open_file(staged, mode="wb") as target:
+            self._remove_quietly(staged, cache)
+            with open(local_path, "rb") as source, smbclient.open_file(staged, mode="wb", connection_cache=cache) as target:
                 shutil.copyfileobj(source, target, _CHUNK)
-            with smbclient.open_file(self._path(ref.kind, ref.meta_name), mode="w", encoding="utf-8") as sidecar:
+            with smbclient.open_file(self._path(ref.kind, ref.meta_name), mode="w", encoding="utf-8", connection_cache=cache) as sidecar:
                 sidecar.write(json.dumps(record, indent=2, default=str))
             # Last, and the only step that publishes anything: the payload
             # appearing under its real name means it is whole and its sidecar
             # is already beside it.
-            smbclient.replace(staged, self._path(ref.kind, ref.name))
+            smbclient.replace(staged, self._path(ref.kind, ref.name), connection_cache=cache)
 
         try:
-            self._retry(_upload)
+            self._retry(_upload, cache)
         except ArtifactError:
             raise
         except Exception as exc:
             raise ArtifactError(f"SMB upload failed for {ref.wire}: {exc}", ref=ref.wire) from exc
+        finally:
+            smbclient.reset_connection_cache(fail_on_error=False, connection_cache=cache)
         return ArtifactInfo(ref=ref, size=int(record["size"]), created_at=created_at, meta=record)
 
     def get(self, ref: ArtifactRef, local_path: Path) -> Path:
@@ -237,13 +251,14 @@ class SmbArtifactStore:
         # Anything already here is from some earlier run, not this one: only a
         # retry inside this call may resume.
         local_path.unlink(missing_ok=True)
+        cache: dict[str, Any] = {}
 
         def _download() -> None:
-            expected = int(smbclient.stat(remote).st_size)
+            expected = int(smbclient.stat(remote, connection_cache=cache).st_size)
             offset = local_path.stat().st_size if local_path.exists() else 0
             if offset:
                 LOGGER.info("Resuming %s at %d of %d bytes", ref.wire, offset, expected)
-            with smbclient.open_file(remote, mode="rb", share_access=_SHARE_READ) as source, open(local_path, "ab") as target:
+            with smbclient.open_file(remote, mode="rb", share_access=_SHARE_READ, connection_cache=cache) as source, open(local_path, "ab") as target:
                 source.seek(offset)
                 shutil.copyfileobj(source, target, _CHUNK)
             landed = local_path.stat().st_size
@@ -251,7 +266,7 @@ class SmbArtifactStore:
                 raise ArtifactError(f"SMB download of {ref.wire} landed {landed} of {expected} bytes", ref=ref.wire)
 
         try:
-            self._retry(_download)
+            self._retry(_download, cache)
         except ArtifactError:
             raise
         except Exception as exc:
@@ -259,6 +274,8 @@ class SmbArtifactStore:
                 raise ArtifactError(f"No such artifact on SMB: {ref.wire}", ref=ref.wire) from exc
             landed = local_path.stat().st_size if local_path.exists() else 0
             raise ArtifactError(f"SMB download of {ref.wire} failed after {landed} bytes: {exc}", ref=ref.wire) from exc
+        finally:
+            smbclient.reset_connection_cache(fail_on_error=False, connection_cache=cache)
         return local_path
 
     def list(self, kind: str) -> list[ArtifactInfo]:
@@ -270,7 +287,7 @@ class SmbArtifactStore:
         import smbclient
 
         try:
-            names = self._retry(lambda: list(smbclient.listdir(self._path(kind))))
+            names = self._retry(lambda: list(smbclient.listdir(self._path(kind), connection_cache=self._cache)), self._cache)
         except Exception as exc:
             # An absent kind is normal and stays quiet. Anything else means
             # this returned "no artifacts" for a share that may be full — the
@@ -295,7 +312,7 @@ class SmbArtifactStore:
         import smbclient
 
         try:
-            return bool(self._retry(lambda: smbclient.path.exists(self._path(ref.kind, ref.name))))
+            return bool(self._retry(lambda: smbclient.path.exists(self._path(ref.kind, ref.name), connection_cache=self._cache), self._cache))
         except Exception:
             return False
 
@@ -305,7 +322,7 @@ class SmbArtifactStore:
 
         for name in (ref.name, ref.meta_name):
             try:
-                self._retry(lambda target=name: smbclient.remove(self._path(ref.kind, target)))  # type: ignore[misc]
+                self._retry(lambda target=name: smbclient.remove(self._path(ref.kind, target), connection_cache=self._cache), self._cache)  # type: ignore[misc]
             except Exception as exc:
                 LOGGER.debug("SMB delete skipped for %s: %s", name, exc)
 
@@ -324,7 +341,9 @@ class SmbArtifactStore:
         import smbclient
 
         try:
-            with smbclient.open_file(self._path(ref.kind, ref.meta_name), mode="r", encoding="utf-8", share_access=_SHARE_READ) as handle:
+            with smbclient.open_file(
+                self._path(ref.kind, ref.meta_name), mode="r", encoding="utf-8", share_access=_SHARE_READ, connection_cache=self._cache
+            ) as handle:
                 loaded = json.loads(handle.read())
         except Exception as exc:
             LOGGER.debug("No readable sidecar for %s: %s", ref.wire, exc)
