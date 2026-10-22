@@ -85,6 +85,18 @@ def _transport(tmp_path: Path, device: _StubDevice, *, use_netcat: bool = False)
     return transport
 
 
+def _reconnects_to(monkeypatch: pytest.MonkeyPatch, transport: AdbTransport, device: _StubDevice) -> list[int]:
+    """Make `connect` install `device` instead of dialling out. RETURNS: list[int]: One entry per reconnect."""
+    calls: list[int] = []
+
+    def _connect() -> None:
+        calls.append(1)
+        transport._device = device
+
+    monkeypatch.setattr(transport, "connect", _connect)
+    return calls
+
+
 def test_adb_transport_satisfies_the_protocol(tmp_path: Path) -> None:
     assert isinstance(_transport(tmp_path, _StubDevice()), Transport)
 
@@ -163,7 +175,7 @@ def test_a_failed_pull_raises(tmp_path: Path) -> None:
         transport.get("/sdcard/missing", tmp_path / "x")
 
 
-def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path) -> None:
+def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A reset mid-transfer is the failure that matters here, and buffering in
     memory discarded every byte of evidence with it. The partial file and the
     byte count in the message are the only way to tell a consistent cutoff from
@@ -179,7 +191,9 @@ def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path) -> No
                 raise ConnectionResetError(104, "Connection reset by peer")
 
     destination = tmp_path / "out" / "big.tar.gz"
-    transport = _transport(tmp_path, _DiesMidPull())
+    device = _DiesMidPull()
+    transport = _transport(tmp_path, device)
+    reconnects = _reconnects_to(monkeypatch, transport, device)
 
     # Act
     with pytest.raises(TransportError, match="after 15 bytes") as caught:
@@ -188,6 +202,7 @@ def test_a_failed_pull_keeps_what_landed_and_says_how_much(tmp_path: Path) -> No
     # Assert
     assert caught.value.target == "192.168.1.50"
     assert destination.read_bytes() == b"partial payload"
+    assert len(reconnects) == 1
 
 
 def test_get_hands_pull_a_path_not_an_open_handle(tmp_path: Path) -> None:
@@ -220,8 +235,10 @@ def test_the_pull_timeout_scales_with_the_file_size(tmp_path: Path) -> None:
     device = _StubDevice(responses={"stat -c %s /sdcard/big.tar.gz": "300000000", "/sdcard/big.tar.gz": "payload"})
     transport = _transport(tmp_path, device)
 
-    # Act
-    transport.get("/sdcard/big.tar.gz", tmp_path / "big.tar.gz")
+    # Act — the stub delivers 7 bytes of the 300 MB it reports, which the
+    # size check rightly rejects; only the timeout is under test here.
+    with pytest.raises(TransportError, match="landed 7 of 300000000"):
+        transport.get("/sdcard/big.tar.gz", tmp_path / "big.tar.gz")
 
     # Assert
     assert device.pull_timeouts == [480.0]
@@ -464,3 +481,59 @@ def test_a_refused_handshake_is_still_reported_as_unauthorized(tmp_path: Path, m
     # Assert
     assert not isinstance(caught.value, DeviceHandshakeTimeoutError)
     assert "did not authorize this key" in str(caught.value)
+
+
+class _DropsFirstPull(_StubDevice):
+    """Fails its first pull the way the Shield did on 2026-10-22, then works."""
+
+    def __init__(self, responses: dict[str, str]) -> None:
+        super().__init__(responses=responses)
+        self.dropped = False
+
+    def pull(self, remote: str, local_path: Any, transport_timeout_s: float = 0, read_timeout_s: float = 0) -> None:
+        if not self.dropped:
+            self.dropped = True
+            raise BrokenPipeError(32, "Broken pipe")
+        super().pull(remote, local_path, transport_timeout_s, read_timeout_s)
+
+
+def test_a_pull_whose_connection_dropped_reconnects_and_succeeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Shield capture built its archive in 70s, then the pull hit "Broken pipe" at byte 0 and the capture was lost."""
+    # Arrange
+    device = _DropsFirstPull(responses={"stat -c %s /sdcard/c.tar.gz": "7", "/sdcard/c.tar.gz": "archive"})
+    transport = _transport(tmp_path, device)
+    reconnects = _reconnects_to(monkeypatch, transport, device)
+
+    # Act
+    written = transport.get("/sdcard/c.tar.gz", tmp_path / "c.tar.gz")
+
+    # Assert
+    assert written == 7
+    assert (tmp_path / "c.tar.gz").read_bytes() == b"archive"
+    assert len(reconnects) == 1
+    assert device.closed is True
+
+
+def test_a_pull_that_fails_on_its_own_terms_is_not_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only a lost connection is worth a reconnect; anything else would just fail twice."""
+    # Arrange
+    device = _StubDevice(fail={"/sdcard/missing"})
+    transport = _transport(tmp_path, device)
+    reconnects = _reconnects_to(monkeypatch, transport, device)
+
+    # Act
+    with pytest.raises(TransportError):
+        transport.get("/sdcard/missing", tmp_path / "x")
+
+    # Assert
+    assert reconnects == []
+
+
+def test_a_pull_that_lands_short_is_an_error(tmp_path: Path) -> None:
+    """Size is the only check a pull gets; a short archive otherwise surfaces as a gzip error much later."""
+    # Arrange
+    transport = _transport(tmp_path, _StubDevice(responses={"stat -c %s /sdcard/a.tar.gz": "10", "/sdcard/a.tar.gz": "four"}))
+
+    # Act / Assert
+    with pytest.raises(TransportError, match="landed 4 of 10"):
+        transport.get("/sdcard/a.tar.gz", tmp_path / "a.tar.gz")
