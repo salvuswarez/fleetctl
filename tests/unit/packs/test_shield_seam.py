@@ -41,6 +41,7 @@ FIRETV_FACTS = {
 }
 
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+CLEAR_STAGING = "rm -rf /sdcard/fleetctl && mkdir -p /sdcard/fleetctl"
 
 
 def test_the_shield_pack_claims_a_shield() -> None:
@@ -207,9 +208,10 @@ def test_the_same_restore_produces_different_commands_per_quirk(tmp_path: Path) 
 
     def _responses() -> dict[str, str]:
         return {
-            "gzip -d /sdcard/build.tar.gz": "",
-            "tar xf /sdcard/build.tar -C " + KODI_ROOT: "",
-            "tar xzf /sdcard/build.tar.gz -C " + KODI_ROOT: "",
+            CLEAR_STAGING: "",
+            "gzip -d /sdcard/fleetctl/build.tar.gz": "",
+            "tar xf /sdcard/fleetctl/build.tar -C " + KODI_ROOT: "",
+            "tar xzf /sdcard/fleetctl/build.tar.gz -C " + KODI_ROOT: "",
             f"mkdir -p {KODI_ROOT}": "",
             f"ls -1 {KODI_ROOT}/addons 2>/dev/null | wc -l": "1",
             f"ls -1 {KODI_ROOT}/userdata 2>/dev/null | wc -l": "1",
@@ -239,10 +241,11 @@ def test_a_shield_capture_never_asks_toybox_to_compress_while_it_tars(tmp_path: 
     # Arrange
     transport = FakeTransport(
         responses={
-            "rm -f /sdcard/capture.tar.gz /sdcard/capture.tar": "",
-            f"tar cf /sdcard/capture.tar -C {posixpath.dirname(KODI_ROOT)} .kodi && echo __fleetctl_done__": "__fleetctl_done__",
-            "gzip /sdcard/capture.tar && echo __fleetctl_done__": "__fleetctl_done__",
-            "/sdcard/capture.tar.gz": "archive bytes",
+            CLEAR_STAGING: "",
+            "rm -f /sdcard/fleetctl/capture.tar.gz /sdcard/fleetctl/capture.tar": "",
+            f"tar cf /sdcard/fleetctl/capture.tar -C {posixpath.dirname(KODI_ROOT)} .kodi && echo __fleetctl_done__": "__fleetctl_done__",
+            "gzip /sdcard/fleetctl/capture.tar && echo __fleetctl_done__": "__fleetctl_done__",
+            "/sdcard/fleetctl/capture.tar.gz": "archive bytes",
         }
     )
 

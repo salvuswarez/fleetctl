@@ -17,6 +17,8 @@ LOGGER = logging.getLogger(__name__)
 
 PLATFORM = "android"
 _DONE = "__fleetctl_done__"
+# Owned outright by fleetctl, so everything in it is disposable. See `_clear_staging`.
+_STAGING_DIR = "fleetctl"
 
 
 class AndroidStateManager:
@@ -64,7 +66,7 @@ class AndroidStateManager:
             `TransportError`: If the archive could not be built or retrieved.  <br>
         """
         root = self.state_root(spec)
-        staged = posixpath.join(self._quirks.external_storage, destination.name)
+        staged = posixpath.join(self._clear_staging(), destination.name)
         plain = _plain(staged)
 
         for relative in spec.exclude:
@@ -72,7 +74,6 @@ class AndroidStateManager:
 
         parent, leaf = posixpath.split(root.rstrip("/"))
         timeout = self._transfer_timeout()
-        self._discard(staged, plain)
         # Split gzip holds the plain tar and its compressed copy at once.
         self._require_free(self._footprint(root) * (2 if self._quirks.split_gzip else 1))
 
@@ -96,13 +97,11 @@ class AndroidStateManager:
         """
         root = self.state_root(spec)
         size = archive.stat().st_size
-        self._require_free(int(size * self._quirks.disk_headroom))
-
-        staged = posixpath.join(self._quirks.external_storage, archive.name)
+        staged = posixpath.join(self._clear_staging(), archive.name)
         plain = _plain(staged)
         timeout = self._unpack_timeout(size)
 
-        self._discard(staged, plain)
+        self._require_free(int(size * self._quirks.disk_headroom))
         try:
             self._transport.put(archive, staged, effect=Effect.DESTRUCTIVE)
 
@@ -162,6 +161,24 @@ class AndroidStateManager:
             raise CommandFailedError(
                 f"{command.split()[0]} failed on {self._transport.target}: {output or 'no output'}", target=self._transport.target, command=command
             )
+
+    def _clear_staging(self) -> str:
+        """Empty the staging directory, creating it if absent, before any space is measured.
+
+        The `finally` in `snapshot` and `restore` cannot run when the process
+        itself dies. A capture interrupted by a Home Assistant restart left a
+        1.2GB `.tar` in a Fire Stick's `/sdcard`, and every deploy after it
+        failed the free-space check by 30MB. Staging in a directory nothing
+        else writes to makes whatever is in it safe to discard, so each run
+        reclaims what the last one could not.
+
+        **RETURNS:**
+            `str`: The staging directory.  <br>
+        """
+        staging = posixpath.join(self._quirks.external_storage, _STAGING_DIR)
+        quoted = shlex.quote(staging)
+        self._transport.exec(f"rm -rf {quoted} && mkdir -p {quoted}", effect=Effect.DESTRUCTIVE)
+        return staging
 
     def _discard(self, *paths: str) -> None:
         """Remove staging files, best effort. Runs from `finally`, so a failure here

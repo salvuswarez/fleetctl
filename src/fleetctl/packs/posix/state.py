@@ -17,6 +17,10 @@ from fleetctl.packs.posix.quirks import PosixQuirks
 LOGGER = logging.getLogger(__name__)
 
 PLATFORM = "linux"
+# Created under the configured `staging_dir` and owned outright by fleetctl.
+# That dir can be shared — `/tmp` on a generic host — so it is never cleared
+# itself; this one is. See `_clear_staging`.
+_STAGING_SUBDIR = "fleetctl-staging"
 
 
 class PosixStateManager:
@@ -60,6 +64,8 @@ class PosixStateManager:
     def snapshot(self, spec: AppStateSpec, destination: Path) -> Path:
         """Trim, archive, and retrieve the app's state.
 
+        The staging archive is removed however this exits.
+
         **RETURNS:**
             `Path`: `destination`.  <br>
 
@@ -67,25 +73,24 @@ class PosixStateManager:
             `TransportError`: If the archive could not be built or retrieved.  <br>
         """
         root = self.state_root(spec)
-        staged = posixpath.join(self._staging(), destination.name)
+        staged = posixpath.join(self._clear_staging(), destination.name)
         timeout = _TRANSFER_TIMEOUT_S
 
         for relative in spec.exclude:
             self._transport.exec_ok(f"rm -rf {shlex.quote(posixpath.join(root, relative))}", effect=Effect.DESTRUCTIVE)
-
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)}", effect=Effect.DESTRUCTIVE)
 
         # Archive the members by name from inside the root, so the archive is
         # flat — `addons/`, `userdata/`, `media/` at the top with no wrapping
         # directory. That layout is part of the build contract and is what
         # lets a restore extract straight into the state root.
         members = " ".join(shlex.quote(member) for member in spec.members) if spec.members else "."
-        # MUTATING, not READ: this writes an archive into the staging
-        # directory. Only the app's own state is left untouched.
-        self._transport.exec(f"tar czf {shlex.quote(staged)} -C {shlex.quote(root)} {members}", timeout_s=timeout)
-
-        self._transport.get(staged, destination)
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)}", effect=Effect.DESTRUCTIVE)
+        try:
+            # MUTATING, not READ: this writes an archive into the staging
+            # directory. Only the app's own state is left untouched.
+            self._transport.exec(f"tar czf {shlex.quote(staged)} -C {shlex.quote(root)} {members}", timeout_s=timeout)
+            self._transport.get(staged, destination)
+        finally:
+            self._discard(staged)
         return destination
 
     def restore(self, spec: AppStateSpec, archive: Path) -> None:
@@ -97,20 +102,21 @@ class PosixStateManager:
         """
         root = self.state_root(spec)
         size = archive.stat().st_size
-        self._require_space(size)
-
-        staged = posixpath.join(self._staging(), archive.name)
+        staging = self._clear_staging()
+        staged = posixpath.join(staging, archive.name)
         timeout = self._unpack_timeout(size)
 
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)}", effect=Effect.DESTRUCTIVE)
-        self._transport.put(archive, staged, effect=Effect.DESTRUCTIVE)
+        self._require_space(staging, size)
+        try:
+            self._transport.put(archive, staged, effect=Effect.DESTRUCTIVE)
 
-        for member in spec.members:
-            self._transport.exec_ok(f"rm -rf {shlex.quote(posixpath.join(root, member))}", effect=Effect.DESTRUCTIVE)
-        self._transport.exec(f"mkdir -p {shlex.quote(root)}")
+            for member in spec.members:
+                self._transport.exec_ok(f"rm -rf {shlex.quote(posixpath.join(root, member))}", effect=Effect.DESTRUCTIVE)
+            self._transport.exec(f"mkdir -p {shlex.quote(root)}")
 
-        self._transport.exec(f"tar xzf {shlex.quote(staged)} -C {shlex.quote(root)}", timeout_s=timeout)
-        self._transport.exec_ok(f"rm -f {shlex.quote(staged)}", effect=Effect.DESTRUCTIVE)
+            self._transport.exec(f"tar xzf {shlex.quote(staged)} -C {shlex.quote(root)}", timeout_s=timeout)
+        finally:
+            self._discard(staged)
 
         self._verify(root, spec)
 
@@ -121,27 +127,41 @@ class PosixStateManager:
             if not listing.strip():
                 raise TransportError(f"Restore verification failed: {root}/{member} is missing or empty", target=self._transport.target)
 
-    def _require_space(self, archive_size: int) -> None:
-        free = self._transport.free_bytes(self._staging())
+    def _require_space(self, staging: str, archive_size: int) -> None:
+        free = self._transport.free_bytes(staging)
         needed = int(archive_size * self._quirks.disk_headroom)
         if free and free < needed:
             raise FleetError(f"Not enough free space on {self._transport.target}: need ~{needed // (1024 * 1024)}MB, {free // (1024 * 1024)}MB available")
 
-    def _staging(self) -> str:
-        """Resolve the staging directory, creating it if it does not exist.
+    def _clear_staging(self) -> str:
+        """Empty fleetctl's staging directory, creating it if absent, before any space is measured.
 
         On an image-based host this must not be a system path: `/` is mounted
         read-only there, and a staged upload would fail after the transfer
         rather than before it.
 
+        A `finally` cannot run when the process itself dies. A capture
+        interrupted by a Home Assistant restart left a 1.2GB archive on a Fire
+        Stick that failed every later deploy's space check, so each run
+        reclaims whatever the last one could not.
+
         **RETURNS:**
             `str`: Absolute, home-expanded staging directory.  <br>
         """
-        staging = self._expand(self._quirks.staging_dir)
-        # A `~`-relative staging dir under a cache directory will not exist on
-        # a freshly-imaged host, and SFTP does not create parents.
-        self._transport.exec_ok(f"mkdir -p {shlex.quote(staging)}", effect=Effect.MUTATING)
+        staging = posixpath.join(self._expand(self._quirks.staging_dir), _STAGING_SUBDIR)
+        # `mkdir -p` because a `~`-relative staging dir under a cache directory
+        # will not exist on a freshly-imaged host, and SFTP does not create parents.
+        quoted = shlex.quote(staging)
+        self._transport.exec(f"rm -rf {quoted} && mkdir -p {quoted}", effect=Effect.DESTRUCTIVE)
         return staging
+
+    def _discard(self, staged: str) -> None:
+        """Remove a staged archive, best effort. Runs from `finally`, so a failure
+        here is logged and must never replace the exception that got it there."""
+        try:
+            self._transport.exec(f"rm -f {shlex.quote(staged)}", effect=Effect.DESTRUCTIVE)
+        except FleetError as exc:
+            LOGGER.warning("Could not remove staging file on %s: %s", self._transport.target, exc)
 
     def _expand(self, path: str) -> str:
         """RETURNS: str: `path` with a leading ``~`` resolved against the host's home directory."""

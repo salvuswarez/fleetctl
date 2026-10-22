@@ -44,11 +44,20 @@ HOME = "/home/deck"
 # Verified on hardware: the members sit directly in the Flatpak data dir.
 # There is no `.kodi` below it.
 KODI_ROOT = f"{HOME}/.var/app/tv.kodi.Kodi/data"
-STAGING = f"{HOME}/.cache/fleetctl"
+STAGING = f"{HOME}/.cache/fleetctl/fleetctl-staging"
+CLEAR_STAGING = f"rm -rf {STAGING} && mkdir -p {STAGING}"
 
 
 def _deck_transport(extra: dict[str, str] | None = None) -> FakeTransport:
-    return FakeTransport(responses={**STEAMOS_FACTS, "echo $HOME": HOME, **(extra or {})})
+    return FakeTransport(
+        responses={
+            **STEAMOS_FACTS,
+            "echo $HOME": HOME,
+            CLEAR_STAGING: "",
+            f"rm -f {STAGING}/build.tar.gz": "",
+            **(extra or {}),
+        }
+    )
 
 
 def test_the_deck_pack_claims_a_steamos_host() -> None:
@@ -210,7 +219,7 @@ def test_staging_lands_under_home_not_on_the_read_only_root(tmp_path: Path) -> N
     # Assert
     staged = [command for command in transport.commands() if "d.tar.gz" in command]
     assert staged and all(HOME in command for command in staged)
-    assert f"mkdir -p {STAGING}" in transport.commands()
+    assert CLEAR_STAGING in transport.commands()
 
 
 def _restore_responses() -> dict[str, str]:
@@ -261,6 +270,51 @@ def test_restore_refuses_when_the_device_lacks_headroom(tmp_path: Path) -> None:
     # Act / Assert
     with pytest.raises(FleetError, match="Not enough free space"):
         PosixStateManager(transport, SteamDeckPack().quirks).restore(state_spec(), archive)
+
+
+def test_restore_clears_staging_before_free_space_is_measured(tmp_path: Path) -> None:
+    """A run killed by a restart never reaches its `finally`, so what it staged
+    has to be reclaimed before space is measured or it fails every later run."""
+    # Arrange
+    archive = tmp_path / "build.tar.gz"
+    archive.write_bytes(b"x" * (100 * 1024 * 1024))
+    transport = _deck_transport(_restore_responses())
+    transport.free_space = 1024 * 1024
+
+    # Act
+    with pytest.raises(FleetError, match="Not enough free space"):
+        PosixStateManager(transport, SteamDeckPack().quirks).restore(state_spec(), archive)
+
+    # Assert
+    assert CLEAR_STAGING in transport.commands()
+
+
+def test_restore_removes_the_staged_archive_when_extraction_fails(tmp_path: Path) -> None:
+    # Arrange
+    archive = tmp_path / "build.tar.gz"
+    archive.write_bytes(b"x" * 4096)
+    responses = _restore_responses()
+    del responses[f"tar xzf {STAGING}/build.tar.gz -C {KODI_ROOT}"]
+    transport = _deck_transport(responses)
+
+    # Act
+    with pytest.raises(TransportError):
+        PosixStateManager(transport, SteamDeckPack().quirks).restore(state_spec(), archive)
+
+    # Assert
+    assert transport.commands()[-1] == f"rm -f {STAGING}/build.tar.gz"
+
+
+def test_snapshot_removes_the_staged_archive_when_the_pull_fails(tmp_path: Path) -> None:
+    # Arrange
+    transport = _deck_transport({f"tar czf {STAGING}/d.tar.gz -C {KODI_ROOT} addons userdata media": "", f"rm -f {STAGING}/d.tar.gz": ""})
+
+    # Act
+    with pytest.raises(TransportError):
+        PosixStateManager(transport, SteamDeckPack().quirks).snapshot(state_spec(exclude=()), tmp_path / "d.tar.gz")
+
+    # Assert
+    assert transport.commands()[-1] == f"rm -f {STAGING}/d.tar.gz"
 
 
 def test_the_deploy_upload_is_declared_destructive(tmp_path: Path) -> None:
