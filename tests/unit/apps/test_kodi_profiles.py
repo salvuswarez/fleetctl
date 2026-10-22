@@ -155,13 +155,13 @@ def test_an_unknown_profile_names_the_ones_that_ship() -> None:
 SKIN_SETTINGS = "addon_data/skin.arctic.fuse.3/settings.xml"
 
 
-def test_the_gold_profile_switches_on_next_aired_and_names_discover() -> None:
+def test_the_gold_profile_keeps_next_aired_off_and_names_discover() -> None:
+    """Next Aired needs Trakt in both modes; switched on, it showed a Trakt 401 on every visit."""
     # Act
     skin = KodiApp("gold").recipe["apply_settings"]["settings"][SKIN_SETTINGS]
 
     # Assert
-    assert skin["homeswitcher.1106.toggle"] == skin["HomeSwitcher.1106.Toggle"] == "true"
-    assert skin["homeswitcher.1106.upnextmode"] == "library_nextaired"
+    assert skin["homeswitcher.1106.toggle"] == skin["HomeSwitcher.1106.Toggle"] == ""
     assert skin["homeswitcher.1104.name"] == skin["HomeSwitcher.1104.Name"] == "Discover"
 
 

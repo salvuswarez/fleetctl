@@ -87,13 +87,14 @@ apply_settings:
       homeswitcher.1104.icon: "special://skin/extras/icons/compass.png"
       HomeSwitcher.1104.Icon: "special://skin/extras/icons/compass.png"
 
-      # 1106 is the skin's built-in Next Aired calendar: upcoming episodes of
-      # shows in the library. It was installed and switched off on every
-      # device. `library_nextaired` reads the library, so no Trakt account.
-      homeswitcher.1106.toggle: "true"
-      HomeSwitcher.1106.Toggle: "true"
-      homeswitcher.1106.upnextmode: "library_nextaired"
-      HomeSwitcher.1106.UpNextMode: "library_nextaired"
+      # 1106 is the skin's built-in Next Aired calendar. Off: it needs Trakt in
+      # both modes. Its "library" mode, TMDbHelper's `library_nextaired`, is
+      # Trakt's `calendars/all/shows` filtered to library shows and demands a
+      # Trakt login; switched on here, it showed "Unauthorised 401 Error
+      # TraktAPI Token". Series' "Coming Up" row covers the same question
+      # through `library_airingnext`, which asks TMDb instead.
+      homeswitcher.1106.toggle: ""
+      HomeSwitcher.1106.Toggle: ""
 
       # One spotlight per hub, each matching the hub's question. Home and 1104
       # both showed "Trending Today", and the crime hub's showed reality TV.

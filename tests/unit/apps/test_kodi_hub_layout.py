@@ -493,3 +493,13 @@ def test_two_groups_that_would_share_a_node_file_are_refused(tmp_path: Path, mon
     # Act / Assert
     with pytest.raises(FleetError, match="picks"):
         ApplyHubLayout().apply(tmp_path, {})
+
+
+def test_series_shows_what_airs_next_without_trakt(profile: Path) -> None:
+    """The skin's Next Aired calendar is Trakt's calendar under the hood and showed a 401; this route asks TMDb."""
+    # Act
+    row = _row(_widgets(profile, "1102"), "Coming Up")
+
+    # Assert
+    assert _params(row) == {"info": "library_airingnext", "tmdb_type": "tv", "widget": "True"}
+    assert not [r for slot in MANAGED for r in _widgets(profile, slot) if "trakt" in r["path"] or "nextaired" in r["path"]]
