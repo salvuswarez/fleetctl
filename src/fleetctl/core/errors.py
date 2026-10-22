@@ -49,6 +49,34 @@ class DeviceUnauthorizedError(TransportError):
         self.detail = detail
 
 
+class DeviceHandshakeTimeoutError(DeviceUnauthorizedError):
+    """The device answered on its port, but the auth handshake ran out of time.
+
+    Two causes look identical from this side: a key prompt on the device's
+    screen that nobody has accepted yet, or a network too slow to finish the
+    exchange. Reporting either as "did not authorize this key" sent a deploy's
+    reader to the device's settings while every Wi-Fi device on the network
+    was answering pings in 300-600ms. Still a `DeviceUnauthorizedError`, so
+    discovery goes on flagging a new device that is waiting at its prompt.
+
+    **PARAMETERS:**
+        `target` (str): Address or id of the device involved.  <br>
+        `timeout_s` (float): How long the handshake was given.  <br>
+        `detail` (str): What the underlying transport reported.  <br>
+    """
+
+    def __init__(self, target: str, timeout_s: float, detail: str = "") -> None:
+        # Skips DeviceUnauthorizedError's message, which is the misleading one.
+        TransportError.__init__(
+            self,
+            f"{target} answered but the auth handshake timed out after {timeout_s:g}s: either it is showing a key prompt "
+            f"nobody has accepted, or the network is too slow (check its ping)" + (f" ({detail})" if detail else ""),
+            target=target,
+        )
+        self.detail = detail
+        self.timeout_s = timeout_s
+
+
 class UnsupportedCapabilityError(TransportError):
     """A transport was asked for something it does not implement.
 
