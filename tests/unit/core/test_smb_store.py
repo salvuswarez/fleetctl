@@ -176,6 +176,12 @@ class _FakeSmb:
         # router-hosted share did on 2026-10-22: "SMB socket was closed".
         self.drop_reads_after = list(drop_reads_after or [])
         self.seeks: list[int] = []
+        # Which connection cache each call and each reset used, by identity.
+        # smbclient's real reset with no cache closes every pooled connection
+        # in the process; `global_resets` counts those.
+        self.calls: list[tuple[str, int]] = []
+        self.reset_caches: list[int] = []
+        self.global_resets = 0
         self.files: dict[str, bytes] = {}
         self.opens: list[tuple[str, str, str | None]] = []
         self.renames: list[tuple[str, str]] = []
@@ -187,39 +193,54 @@ class _FakeSmb:
     def ClientConfig(self, **kwargs: Any) -> None:  # noqa: N802 - mirrors smbclient's name
         return None
 
-    def reset_connection_cache(self) -> None:
+    def reset_connection_cache(self, fail_on_error: bool = True, connection_cache: dict[str, Any] | None = None) -> None:
+        if connection_cache is None:
+            self.global_resets += 1
+            self.resets += 1
+            return
+        self.reset_caches.append(id(connection_cache))
         self.resets += 1
 
-    def makedirs(self, path: str, exist_ok: bool = False) -> None:
+    def _record(self, name: str, kwargs: dict[str, Any]) -> None:
+        self.calls.append((name, id(kwargs.get("connection_cache"))))
+
+    def makedirs(self, path: str, exist_ok: bool = False, **kwargs: Any) -> None:
+        self._record("makedirs", kwargs)
         self.dirs.add(path)
 
-    def listdir(self, path: str) -> list[str]:
+    def listdir(self, path: str, **kwargs: Any) -> list[str]:
+        self._record("listdir", kwargs)
         if self.fail_times:
             self.fail_times -= 1
             raise self.fail_with or ConnectionError("session went stale")
         prefix = path + "\\"
         return [name[len(prefix) :] for name in self.files if name.startswith(prefix)]
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str, **kwargs: Any) -> bool:
+        self._record("exists", kwargs)
         return path in self.files
 
-    def stat(self, path: str) -> Any:
+    def stat(self, path: str, **kwargs: Any) -> Any:
+        self._record("stat", kwargs)
         if path not in self.files:
             raise FileNotFoundError(path)
         return type("Stat", (), {"st_size": len(self.files[path])})()
 
-    def remove(self, path: str) -> None:
+    def remove(self, path: str, **kwargs: Any) -> None:
+        self._record("remove", kwargs)
         if path not in self.files:
             raise FileNotFoundError(path)
         del self.files[path]
 
-    def replace(self, src: str, dst: str) -> None:
+    def replace(self, src: str, dst: str, **kwargs: Any) -> None:
+        self._record("replace", kwargs)
         if src not in self.files:
             raise FileNotFoundError(src)
         self.renames.append((src, dst))
         self.files[dst] = self.files.pop(src)
 
-    def open_file(self, path: str, mode: str = "rb", encoding: str | None = None, share_access: str | None = None) -> Any:
+    def open_file(self, path: str, mode: str = "rb", encoding: str | None = None, share_access: str | None = None, **kwargs: Any) -> Any:
+        self._record("open_file", kwargs)
         # Recorded so a test can assert reads permit other readers: opening a
         # file exclusively is what produced STATUS_SHARING_VIOLATION on a real
         # share whenever two listings overlapped.
@@ -531,9 +552,9 @@ def test_a_retry_clears_the_dead_sessions_staging_file(monkeypatch: pytest.Monke
     removed: list[str] = []
     original_remove = fake.remove
 
-    def _tracking_remove(path: str) -> None:
+    def _tracking_remove(path: str, **kwargs: Any) -> None:
         removed.append(path)
-        original_remove(path)
+        original_remove(path, **kwargs)
 
     fake.remove = _tracking_remove  # type: ignore[method-assign]
     monkeypatch.setitem(__import__("sys").modules, "smbclient", fake)
@@ -566,6 +587,7 @@ def test_a_download_that_drops_resumes_where_it_stopped(smb: _FakeSmb, tmp_path:
     """Two deploys lost the session 70 and 100 seconds into a 250MB build, and each retry began again at byte zero."""
     # Arrange
     ref, original = _seeded(smb, tmp_path, 4096)
+    smb.resets = 0
     smb.drop_reads_after = [1536]
 
     # Act
@@ -573,7 +595,8 @@ def test_a_download_that_drops_resumes_where_it_stopped(smb: _FakeSmb, tmp_path:
 
     # Assert
     assert restored.read_bytes() == original
-    assert smb.resets == 1
+    # One reconnect after the drop, then the transfer closing its own connection.
+    assert smb.resets == 2
     assert smb.seeks == [0, 1536]
 
 
@@ -631,3 +654,57 @@ def test_only_a_not_found_answer_means_missing(exc: BaseException) -> None:
     assert _is_missing(exc) is True
     assert _is_missing(_SocketClosed("SMB socket was closed")) is False
     assert _is_missing(_SmbOSError(0xC0000022, "STATUS_ACCESS_DENIED")) is False
+
+
+def test_no_call_ever_resets_the_process_wide_pool(smb: _FakeSmb, tmp_path: Path) -> None:
+    """smbclient's bare reset closes every connection in the process: in Home Assistant that killed
+    a 350MB transfer whenever the panel's listing (or another transfer) hit a hiccup."""
+    # Arrange
+    ref, _ = _seeded(smb, tmp_path, 4096)
+    smb.resets = 0
+    smb.drop_reads_after = [1024]
+    smb.fail_times = 1
+    store = _configured()
+
+    # Act
+    store.get(ref, tmp_path / "out.tar.gz")
+    store.list("builds")
+
+    # Assert
+    assert smb.global_resets == 0
+    # The download: a reconnect and its closing reset. The listing: one reconnect.
+    assert smb.resets == 3
+
+
+def test_a_transfer_runs_on_a_connection_no_listing_shares(smb: _FakeSmb, tmp_path: Path) -> None:
+    # Arrange
+    ref, _ = _seeded(smb, tmp_path, 1024)
+    store = _configured()
+    smb.calls.clear()
+
+    # Act
+    store.get(ref, tmp_path / "out.tar.gz")
+    transfer = {cache for name, cache in smb.calls}
+    smb.calls.clear()
+    store.list("builds")
+    listing = {cache for name, cache in smb.calls}
+
+    # Assert
+    assert len(transfer) == 1 and len(listing) == 1
+    assert transfer.isdisjoint(listing)
+    assert id(None) not in transfer | listing
+
+
+def test_a_transfer_closes_its_own_connection_when_done(smb: _FakeSmb, tmp_path: Path) -> None:
+    """A private connection per transfer must not outlive it: the router-hosted stack has few handles to spare."""
+    # Arrange
+    ref, _ = _seeded(smb, tmp_path, 1024)
+    smb.calls.clear()
+    smb.reset_caches.clear()
+
+    # Act
+    _configured().get(ref, tmp_path / "out.tar.gz")
+
+    # Assert
+    used = {cache for name, cache in smb.calls}
+    assert smb.reset_caches == list(used)
