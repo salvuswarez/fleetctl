@@ -74,11 +74,33 @@ def test_unmanaged_slots_are_never_written(profile: Path) -> None:
     assert not [name for name in names if "1103" in name or "1107" in name or "1108" in name]
 
 
-def test_a_hub_without_a_submenu_writes_no_submenu_file(profile: Path) -> None:
+def test_a_hub_that_owns_no_submenu_leaves_the_skins_file_alone(tmp_path: Path) -> None:
+    """Home's menu is the skin's own; the layout has no `submenu` key for it."""
+    # Arrange
+    skin_owned = tmp_path / SKINVARS / "skinvariables-shortcut-homesubmenu.json"
+    skin_owned.parent.mkdir(parents=True)
+    skin_owned.write_text('[{"label": "$LOCALIZE[3]"}]', encoding="utf-8")
+
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+
     # Assert
-    assert not (profile / SKINVARS / "skinvariables-shortcut-homesubmenu.json").exists()
-    assert not (profile / SKINVARS / "skinvariables-shortcut-1104submenu.json").exists()
-    assert (profile / SKINVARS / "skinvariables-shortcut-1101submenu.json").is_file()
+    assert skin_owned.read_text(encoding="utf-8") == '[{"label": "$LOCALIZE[3]"}]'
+
+
+def test_an_empty_submenu_replaces_one_left_by_the_capture(tmp_path: Path) -> None:
+    """Skipping the file left Browse's four duplicate menus on Discover after a real deploy."""
+    # Arrange
+    stale = tmp_path / SKINVARS / "skinvariables-shortcut-1104submenu.json"
+    stale.parent.mkdir(parents=True)
+    stale.write_text('[{"label": "Movie Genres", "path": "Custom_Submenu"}]', encoding="utf-8")
+
+    # Act
+    ApplyHubLayout().apply(tmp_path, {})
+
+    # Assert
+    submenu = _read(tmp_path, f"{SKINVARS}/skinvariables-shortcut-1104submenu.json")
+    assert [group["label"] for group in submenu] == [""]
 
 
 def test_submenus_end_with_the_skins_blank_slot(profile: Path) -> None:

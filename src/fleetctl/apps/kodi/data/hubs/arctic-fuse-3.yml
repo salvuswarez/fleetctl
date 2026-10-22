@@ -346,7 +346,8 @@ hubs:
       # Series > Crime & Mystery, surfaced on home. The filter is that row's
       # own, by anchor: a hand copy had dropped documentaries.
       - {label: Maddy's Picks, icon: "{tmdb}/discover.png", discover: *tv_crime_docs_mystery, style: Poster}
-    submenu: []
+    # No `submenu` key: Home's menu (Videos, Music, Pictures) is the skin's own
+    # and is disabled in its settings; this layout leaves the file alone.
 
   "1101":
     node: movies_hub_main.json

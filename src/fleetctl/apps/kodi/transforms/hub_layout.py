@@ -236,7 +236,11 @@ class ApplyHubLayout:
             written.append(f"{slot}: {len(widgets)} widget row(s)")
 
             groups = spec.get("submenu") or []
-            if groups:
+            # `submenu: []` means "this hub has none", and is written as such:
+            # skipping the file left a captured profile's old one in place, so
+            # Discover kept Browse's four duplicate menus after a deploy. No key
+            # at all means the skin owns the file (Home's Videos/Music/Pictures).
+            if "submenu" in spec:
                 submenu = [
                     {
                         "label": str(group["label"]),
