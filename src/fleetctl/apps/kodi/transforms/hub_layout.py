@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -20,6 +21,20 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_LAYOUT = "arctic-fuse-3"
 
 _TMDB = "plugin://plugin.video.themoviedb.helper/"
+# Opens a node file as a folder. Verified against TMDbHelper 6.18's
+# `basedir_nodes.py`: `filename` is resolved inside the addon's nodes dir.
+_OPEN_NODE = _TMDB + "?info=dir_custom_node&filename={filename}"
+# Separates a hub's node from the per-group nodes it links to, so a build can
+# remove the group nodes it wrote last time without touching anyone else's.
+_GROUP_NODE_SEP = "--"
+# Arctic Fuse 3's experimental row paths, read off its `widgets_row.xml`
+# generator template (3.2.15). A Custom Submenu row lists the items in its own
+# `submenu` key; a Stacked Folder row placed straight after it loads whatever
+# item is focused in the row above (`WidgetMeta.<prev id>.FolderPath`).
+_CUSTOM_SUBMENU = "Custom_Submenu"
+_STACKED_FOLDER = "Stacked_Folder"
+_CHIP_STYLE = "Square"
+_PREVIEW_STYLE = "Poster"
 _NODES_REL = "addon_data/plugin.video.themoviedb.helper/nodes"
 _SKINVARS_REL = "addon_data/script.skinvariables/nodes/skin.arctic.fuse.3"
 
@@ -81,10 +96,23 @@ def _guid(*parts: str) -> str:
 
 
 def _path(row: Mapping[str, Any]) -> str:
-    """RETURNS: str: The row's literal `path`, or one composed from its `discover` params."""
+    """Compose a row's path.
+
+    `tmdb` names any TMDbHelper list route (`trending_week`, `airing_today`)
+    with its params; `discover` is the common case of the `discover` route,
+    which also needs `with_id`.
+
+    **RETURNS:**
+        `str`: The row's literal `path`, or one composed from its `tmdb` or `discover` params.  <br>
+    """
     literal = row.get("path")
     if literal:
         return str(literal)
+    if row.get("tmdb"):
+        listing = dict(row["tmdb"])
+        info = listing.pop("info")
+        params = "".join(f"&{key}={value}" for key, value in listing.items())
+        return f"{_TMDB}?info={info}{params}&widget=True"
     discover = dict(row.get("discover") or {})
     tmdb_type = discover.pop("tmdb_type", "movie")
     params = "&".join(f"{key}={value}" for key, value in discover.items())
@@ -92,17 +120,65 @@ def _path(row: Mapping[str, Any]) -> str:
 
 
 def _rows(rows: Sequence[Mapping[str, Any]], icons: Mapping[str, str], scope: str) -> list[dict[str, Any]]:
-    """RETURNS: list[dict[str, Any]]: Rows with icons resolved, paths composed, and guids assigned."""
-    return [
-        {
-            "label": str(row["label"]),
-            "path": _path(row),
-            "icon": str(row.get("icon", "")).format(**icons),
-            "target": "videos",
-            "guid": _guid(scope, str(row["label"])),
-        }
-        for row in rows
-    ]
+    """RETURNS: list[dict[str, Any]]: Rows with icons resolved, paths composed, styles carried, and guids assigned."""
+    return [_row(row, icons, scope) for row in rows]
+
+
+def _row(row: Mapping[str, Any], icons: Mapping[str, str], scope: str) -> dict[str, Any]:
+    """RETURNS: dict[str, Any]: One row as skinvariables stores it; `widget_style` only when the layout sets one, so the skin default still applies otherwise."""
+    entry: dict[str, Any] = {
+        "label": str(row["label"]),
+        "path": _path(row),
+        "icon": str(row.get("icon", "")).format(**icons),
+        "target": "videos",
+        "guid": _guid(scope, str(row["label"])),
+    }
+    if row.get("style"):
+        entry["widget_style"] = str(row["style"])
+    return entry
+
+
+def _widgets(rows: Sequence[Mapping[str, Any]], icons: Mapping[str, str], scope: str) -> list[dict[str, Any]]:
+    """Expand a hub's rows into skinvariables widgets.
+
+    A row with `chips` becomes two: a Custom Submenu row of chips, then a
+    Stacked Folder row previewing whichever chip has focus. That replaces a
+    stack of one-genre rows with one row you scroll along, and the preview is
+    the only live query: the chips themselves load nothing until focused.
+
+    **RETURNS:**
+        `list[dict[str, Any]]`: Widgets in display order.  <br>
+    """
+    widgets: list[dict[str, Any]] = []
+    for row in rows:
+        if not row.get("chips"):
+            widgets.append(_row(row, icons, scope))
+            continue
+        label = str(row["label"])
+        widgets.append(
+            {
+                "label": label,
+                "path": _CUSTOM_SUBMENU,
+                "icon": str(row.get("icon", "")).format(**icons),
+                "target": "",
+                "guid": _guid(scope, "chips", label),
+                "widget_style": str(row.get("style") or _CHIP_STYLE),
+                "submenu": _rows(row["chips"], icons, f"{scope}:{label}"),
+            }
+        )
+        # The skin labels this row with the focused chip's name; ours is only
+        # what the customisation dialog shows.
+        widgets.append(
+            {
+                "label": label,
+                "path": _STACKED_FOLDER,
+                "icon": "",
+                "target": "",
+                "guid": _guid(scope, "preview", label),
+                "widget_style": str(row.get("preview_style") or _PREVIEW_STYLE),
+            }
+        )
+    return widgets
 
 
 def _blank_slot() -> dict[str, Any]:
@@ -154,7 +230,8 @@ class ApplyHubLayout:
 
         written: list[str] = []
         for slot, spec in hubs.items():
-            widgets = _rows(spec.get("widgets") or [], icons, str(slot))
+            rows = spec.get("widgets") or []
+            widgets = _widgets(rows, icons, str(slot))
             _write_json(skinvars / f"skinvariables-shortcut-{slot}widgets.json", widgets)
             written.append(f"{slot}: {len(widgets)} widget row(s)")
 
@@ -175,12 +252,58 @@ class ApplyHubLayout:
                 _write_json(skinvars / f"skinvariables-shortcut-{slot}submenu.json", submenu)
                 written.append(f"{slot}: {len(submenu) - 1} sub-tab(s)")
 
-            _write_json(nodes / str(spec["node"]), self._node(spec, widgets, groups, icons))
+            # Chip rows get a folder on the hub page just as sub-tab groups do.
+            chip_groups = [{"label": row["label"], "icon": row.get("icon", ""), "rows": row["chips"]} for row in rows if row.get("chips")]
+            files = self._write_group_nodes(nodes, spec, [*chip_groups, *groups], icons)
+            chip_files = {str(group["label"]): filename for group, filename in zip(chip_groups, files)}
+            _write_json(nodes / str(spec["node"]), self._node(spec, rows, chip_files, groups, files[len(chip_groups) :], icons))
 
         return written
 
+    def _write_group_nodes(self, nodes: Path, spec: Mapping[str, Any], groups: Sequence[Mapping[str, Any]], icons: Mapping[str, str]) -> list[str]:
+        """Write one node per sub-tab group, so the hub page can open the whole group.
+
+        The hub page used to link each group to its *first row*: "Genres" opened
+        Action & Adventure, "By Network" opened Netflix. A group needs a folder
+        of its own to land in, and a TMDbHelper node is that folder.
+
+        Group nodes from the previous build are removed first, so a renamed or
+        dropped group does not linger in TMDbHelper's node list.
+
+        **RETURNS:**
+            `list[str]`: The file written for each group, in order, or ``""`` for a group with no rows.  <br>
+
+        **RAISES:**
+            `FleetError`: If two groups on one hub would write the same node file.  <br>
+        """
+        stem = Path(str(spec["node"])).stem
+        slugs = [_slug(str(group["label"])) for group in groups]
+        clashes = sorted({slug for slug in slugs if slugs.count(slug) > 1})
+        if clashes:
+            raise FleetError(f"Hub {spec.get('node_name', stem)} has two groups that would share a node file: {', '.join(clashes)}")
+        for stale in nodes.glob(f"{stem}{_GROUP_NODE_SEP}*.json"):
+            stale.unlink()
+
+        files: list[str] = []
+        for group in groups:
+            rows = group.get("rows") or []
+            if not rows:
+                files.append("")
+                continue
+            filename = f"{stem}{_GROUP_NODE_SEP}{_slug(str(group['label']))}.json"
+            entries = [{"name": row["label"], "icon": row["icon"], "path": row["path"], "widget": "False"} for row in _rows(rows, icons, filename)]
+            _write_json(nodes / filename, {"name": str(group["label"]), "icon": str(group.get("icon", "")).format(**icons), "list": entries})
+            files.append(filename)
+        return files
+
     def _node(
-        self, spec: Mapping[str, Any], widgets: Sequence[Mapping[str, Any]], groups: Sequence[Mapping[str, Any]], icons: Mapping[str, str]
+        self,
+        spec: Mapping[str, Any],
+        rows: Sequence[Mapping[str, Any]],
+        chip_files: Mapping[str, str],
+        groups: Sequence[Mapping[str, Any]],
+        group_files: Sequence[str],
+        icons: Mapping[str, str],
     ) -> dict[str, Any]:
         """Build the TMDbHelper node that mirrors a hub's home rows.
 
@@ -192,12 +315,22 @@ class ApplyHubLayout:
         **RETURNS:**
             `dict[str, Any]`: The node document.  <br>
         """
-        entries = [{"name": row["label"], "icon": row["icon"], "path": row["path"], "widget": "False"} for row in widgets]
-        for group in groups:
-            rows = group.get("rows") or []
-            if rows:
-                entries.append({"name": str(group["label"]), "icon": str(group.get("icon", "")).format(**icons), "path": _path(rows[0]), "widget": "False"})
+        entries: list[dict[str, Any]] = []
+        for row in rows:
+            icon = str(row.get("icon", "")).format(**icons)
+            filename = chip_files.get(str(row["label"]), "") if row.get("chips") else ""
+            path = _OPEN_NODE.format(filename=filename) if filename else _path(row)
+            entries.append({"name": str(row["label"]), "icon": icon, "path": path, "widget": "False"})
+        for group, filename in zip(groups, group_files):
+            if filename:
+                path = _OPEN_NODE.format(filename=filename)
+                entries.append({"name": str(group["label"]), "icon": str(group.get("icon", "")).format(**icons), "path": path, "widget": "False"})
         return {"name": str(spec["node_name"]), "icon": f"{icons.get('tmdb', '')}/discover.png", "list": entries}
+
+
+def _slug(label: str) -> str:
+    """RETURNS: str: `label` lowercased with every run of non-alphanumerics collapsed to one hyphen, safe in a URL and a filename."""
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
 
 
 def _write_json(path: Path, payload: Any) -> None:

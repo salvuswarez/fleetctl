@@ -56,12 +56,18 @@ class ApplySettings:
 
         root = tree.getroot()
         by_id = {element.get("id"): element for element in root.iter("setting")}
+        # A skin's settings.xml types every entry (`type="string"`/`"bool"`)
+        # and an addon's does not. A created entry follows the file's own
+        # convention, so a new skin string is not an untyped one Kodi skips.
+        typed = any(element.get("type") for element in by_id.values())
         changes: list[str] = []
         for setting_id, value in entries.items():
             element = by_id.get(setting_id)
             if element is None:
                 element = ElementTree.SubElement(root, "setting")
                 element.set("id", setting_id)
+                if typed:
+                    element.set("type", "string")
             if (element.text or "") != value:
                 element.text = value
                 # `default="true"` asserts the value *is* Kodi's default, and

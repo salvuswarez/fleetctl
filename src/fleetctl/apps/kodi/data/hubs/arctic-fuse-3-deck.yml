@@ -12,9 +12,11 @@ extends: arctic-fuse-3
 
 add_widgets:
   home:
-    - label: Downloaded Shows
+    # "Offline", not "Downloaded": the row strip cuts labels at about 15
+    # characters, and "Downloaded Sho…" / "Downloaded Mov…" read the same.
+    - label: Offline Shows
       icon: "{tmdb}/download.png"
       path: /run/media/deck/SC400/kodi/TVShows/
-    - label: Downloaded Movies
+    - label: Offline Movies
       icon: "{tmdb}/download.png"
       path: /run/media/deck/SC400/kodi/Movies/

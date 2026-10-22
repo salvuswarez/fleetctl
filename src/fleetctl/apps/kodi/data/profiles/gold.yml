@@ -79,9 +79,42 @@ apply_settings:
       homeswitcher.1102.name: "Series"
       HomeSwitcher.1102.Name: "Series"
       HomeSwitcher.1102.Shortcut.label: "Series"
-      homeswitcher.1104.name: "Browse"
-      HomeSwitcher.1104.Name: "Browse"
-      HomeSwitcher.1104.Shortcut.label: "Browse"
+      homeswitcher.1104.name: "Discover"
+      HomeSwitcher.1104.Name: "Discover"
+      HomeSwitcher.1104.Shortcut.label: "Discover"
+      # The side rail shows icons, not names, so the rename needs an icon of
+      # its own; 1104 shared Series' TV icon.
+      homeswitcher.1104.icon: "special://skin/extras/icons/compass.png"
+      HomeSwitcher.1104.Icon: "special://skin/extras/icons/compass.png"
+
+      # 1106 is the skin's built-in Next Aired calendar: upcoming episodes of
+      # shows in the library. It was installed and switched off on every
+      # device. `library_nextaired` reads the library, so no Trakt account.
+      homeswitcher.1106.toggle: "true"
+      HomeSwitcher.1106.Toggle: "true"
+      homeswitcher.1106.upnextmode: "library_nextaired"
+      HomeSwitcher.1106.UpNextMode: "library_nextaired"
+
+      # One spotlight per hub, each matching the hub's question. Home and 1104
+      # both showed "Trending Today", and the crime hub's showed reality TV.
+      # `reload` is the token TMDbHelper bumps to refresh a widget; the skin's
+      # own spotlight paths carry it, so these do too.
+      homeswitcher.home.spotlight.path: "plugin://script.embuary.helper/?info=getnextup&type=tvshow"
+      HomeSwitcher.Home.Spotlight.Path: "plugin://script.embuary.helper/?info=getnextup&type=tvshow"
+      homeswitcher.home.spotlight.label: "Next Up"
+      HomeSwitcher.Home.Spotlight.Label: "Next Up"
+      homeswitcher.1102.spotlight.path: "plugin://plugin.video.themoviedb.helper/?info=airing_today&tmdb_type=tv&reload=$INFO[Window(Home).Property(TMDbHelper.Widgets.Reload)]&widget=true"
+      HomeSwitcher.1102.Spotlight.Path: "plugin://plugin.video.themoviedb.helper/?info=airing_today&tmdb_type=tv&reload=$INFO[Window(Home).Property(TMDbHelper.Widgets.Reload)]&widget=true"
+      homeswitcher.1102.spotlight.label: "Airing Today"
+      HomeSwitcher.1102.Spotlight.Label: "Airing Today"
+      homeswitcher.1103.spotlight.path: "plugin://plugin.video.themoviedb.helper/?info=discover&tmdb_type=tv&with_networks=244&with_id=True&sort_by=popularity.desc&reload=$INFO[Window(Home).Property(TMDbHelper.Widgets.Reload)]&widget=true"
+      HomeSwitcher.1103.Spotlight.Path: "plugin://plugin.video.themoviedb.helper/?info=discover&tmdb_type=tv&with_networks=244&with_id=True&sort_by=popularity.desc&reload=$INFO[Window(Home).Property(TMDbHelper.Widgets.Reload)]&widget=true"
+      homeswitcher.1103.spotlight.label: "Investigation Discovery"
+      HomeSwitcher.1103.Spotlight.Label: "Investigation Discovery"
+      homeswitcher.1104.spotlight.path: "plugin://plugin.video.themoviedb.helper/?info=trending_week&tmdb_type=movie&reload=$INFO[Window(Home).Property(TMDbHelper.Widgets.Reload)]&widget=true"
+      HomeSwitcher.1104.Spotlight.Path: "plugin://plugin.video.themoviedb.helper/?info=trending_week&tmdb_type=movie&reload=$INFO[Window(Home).Property(TMDbHelper.Widgets.Reload)]&widget=true"
+      homeswitcher.1104.spotlight.label: "Trending This Week"
+      HomeSwitcher.1104.Spotlight.Label: "Trending This Week"
 
       # Hides the Addons tab (slot 1108), leaving Live TV as the last one.
       # The skin gates visibility on `!String.IsEmpty(...)`, so empty is off.
