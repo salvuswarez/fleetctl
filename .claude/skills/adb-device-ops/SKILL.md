@@ -50,7 +50,14 @@ Scale timeouts with data size. A flat timeout is how the predecessor silently tr
 
 **`adb_shell`'s `push()` does not work against these devices.** Measured against a real Fire TV: it moved *zero* bytes and hung until timeout for anything beyond a few MB — the destination file was never created — from both a workstation and Home Assistant. Netcat moves the same payload at 5–12 MB/s.
 
-`shell()` and `pull()` are unaffected and work fine. Do not "unify" pull onto netcat.
+`shell()` is unaffected. **`pull()` was thought unaffected too, and that rule ("do not unify pull onto
+netcat") was reversed on 2026-10-22.** A Shield on Wi-Fi lost four captures in a row: each time
+`adb_shell`'s pull died with "Broken pipe" 0–17MB into a 363MB archive, while the stock `adb` client
+pulled the same file over the same link in 133s and netcat uploads to the same device succeeded all
+day. Pulls on a netcat device now stream through `toybox nc -l -p 5599 < file`, reading exactly the
+size `stat` reports. Verified on that Shield (3 MB/s) and on a Fire Stick: the device-side `nc`
+serves the file and exits by itself when the reader hangs up. A pull of unknown size still uses
+`pull()`. If a pull ever fails over netcat but works natively, that is the evidence to revisit this.
 
 **The Shield uses netcat too, as of 2026-08-14 — but not for this reason.** Native push moved a 160MB build and a 64MB APK intact on that device on 2026-08-12, and the 330MB deploy that failed two days later died on the missing `read_timeout_s` above, not on the transfer. It was switched on throughput (5-12 MB/s against roughly 1 MB/s), which stops being academic at 300MB+. Recording it as "push is broken on the Shield" would be a false finding, and the pack's `quirks.yml` says so explicitly.
 
