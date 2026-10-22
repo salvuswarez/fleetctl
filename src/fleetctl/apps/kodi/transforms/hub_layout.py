@@ -27,11 +27,6 @@ _OPEN_NODE = _TMDB + "?info=dir_custom_node&filename={filename}"
 # Separates a hub's node from the per-group nodes it links to, so a build can
 # remove the group nodes it wrote last time without touching anyone else's.
 _GROUP_NODE_SEP = "--"
-# Arctic Fuse 3's experimental row path, read off its `widgets_row.xml`
-# generator template (3.2.15): a Custom Submenu row lists the items in its own
-# `submenu` key, each opening its list when picked.
-_CUSTOM_SUBMENU = "Custom_Submenu"
-_CHIP_STYLE = "Square"
 _NODES_REL = "addon_data/plugin.video.themoviedb.helper/nodes"
 _SKINVARS_REL = "addon_data/script.skinvariables/nodes/skin.arctic.fuse.3"
 
@@ -135,42 +130,6 @@ def _row(row: Mapping[str, Any], icons: Mapping[str, str], scope: str) -> dict[s
     return entry
 
 
-def _widgets(rows: Sequence[Mapping[str, Any]], icons: Mapping[str, str], scope: str) -> list[dict[str, Any]]:
-    """Expand a hub's rows into skinvariables widgets.
-
-    A row with `chips` becomes a Custom Submenu row: one tile per list, each
-    opening its list when picked. That replaces a stack of one-genre rows with
-    one row you scroll along, and the tiles cost no query at all.
-
-    No Stacked Folder preview follows it. The skin can preview the focused
-    chip in a second row, but only in its Standard hub mode, where rows stack.
-    In Combined mode, which every hub here uses, a row shows only while its
-    own tab is selected, so the preview had a tab of its own and never shared
-    the screen with the chips it followed. Verified on hardware.
-
-    **RETURNS:**
-        `list[dict[str, Any]]`: Widgets in display order.  <br>
-    """
-    widgets: list[dict[str, Any]] = []
-    for row in rows:
-        if not row.get("chips"):
-            widgets.append(_row(row, icons, scope))
-            continue
-        label = str(row["label"])
-        widgets.append(
-            {
-                "label": label,
-                "path": _CUSTOM_SUBMENU,
-                "icon": str(row.get("icon", "")).format(**icons),
-                "target": "",
-                "guid": _guid(scope, "chips", label),
-                "widget_style": str(row.get("style") or _CHIP_STYLE),
-                "submenu": _rows(row["chips"], icons, f"{scope}:{label}"),
-            }
-        )
-    return widgets
-
-
 def _blank_slot() -> dict[str, Any]:
     """RETURNS: dict[str, Any]: The empty trailing entry the skin's own editor keeps as an "add item" affordance."""
     return {"label": "", "icon": "", "path": "", "target": "", "submenu": [], "widgets": [], "guid": _guid("blank")}
@@ -221,7 +180,7 @@ class ApplyHubLayout:
         written: list[str] = []
         for slot, spec in hubs.items():
             rows = spec.get("widgets") or []
-            widgets = _widgets(rows, icons, str(slot))
+            widgets = _rows(rows, icons, str(slot))
             _write_json(skinvars / f"skinvariables-shortcut-{slot}widgets.json", widgets)
             written.append(f"{slot}: {len(widgets)} widget row(s)")
 
@@ -246,11 +205,8 @@ class ApplyHubLayout:
                 _write_json(skinvars / f"skinvariables-shortcut-{slot}submenu.json", submenu)
                 written.append(f"{slot}: {len(submenu) - 1} sub-tab(s)")
 
-            # Chip rows get a folder on the hub page just as sub-tab groups do.
-            chip_groups = [{"label": row["label"], "icon": row.get("icon", ""), "rows": row["chips"]} for row in rows if row.get("chips")]
-            files = self._write_group_nodes(nodes, spec, [*chip_groups, *groups], icons)
-            chip_files = {str(group["label"]): filename for group, filename in zip(chip_groups, files)}
-            _write_json(nodes / str(spec["node"]), self._node(spec, rows, chip_files, groups, files[len(chip_groups) :], icons))
+            group_files = self._write_group_nodes(nodes, spec, groups, icons)
+            _write_json(nodes / str(spec["node"]), self._node(spec, widgets, groups, group_files, icons))
 
         return written
 
@@ -293,8 +249,7 @@ class ApplyHubLayout:
     def _node(
         self,
         spec: Mapping[str, Any],
-        rows: Sequence[Mapping[str, Any]],
-        chip_files: Mapping[str, str],
+        widgets: Sequence[Mapping[str, Any]],
         groups: Sequence[Mapping[str, Any]],
         group_files: Sequence[str],
         icons: Mapping[str, str],
@@ -309,12 +264,7 @@ class ApplyHubLayout:
         **RETURNS:**
             `dict[str, Any]`: The node document.  <br>
         """
-        entries: list[dict[str, Any]] = []
-        for row in rows:
-            icon = str(row.get("icon", "")).format(**icons)
-            filename = chip_files.get(str(row["label"]), "") if row.get("chips") else ""
-            path = _OPEN_NODE.format(filename=filename) if filename else _path(row)
-            entries.append({"name": str(row["label"]), "icon": icon, "path": path, "widget": "False"})
+        entries = [{"name": row["label"], "icon": row["icon"], "path": row["path"], "widget": "False"} for row in widgets]
         for group, filename in zip(groups, group_files):
             if filename:
                 path = _OPEN_NODE.format(filename=filename)
