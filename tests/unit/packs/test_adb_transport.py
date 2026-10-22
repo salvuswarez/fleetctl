@@ -537,3 +537,102 @@ def test_a_pull_that_lands_short_is_an_error(tmp_path: Path) -> None:
     # Act / Assert
     with pytest.raises(TransportError, match="landed 4 of 10"):
         transport.get("/sdcard/a.tar.gz", tmp_path / "a.tar.gz")
+
+
+class _FakeStream:
+    """The reader's end of a netcat stream: serves `data` in chunks, optionally failing after `fail_after` bytes."""
+
+    def __init__(self, data: bytes, fail_after: int | None = None) -> None:
+        self.data, self.fail_after, self.sent, self.closed = data, fail_after, 0, False
+
+    def settimeout(self, value: float) -> None:
+        pass
+
+    def recv(self, size: int) -> bytes:
+        if self.fail_after is not None and self.sent >= self.fail_after:
+            raise ConnectionResetError(104, "Connection reset by peer")
+        chunk = self.data[self.sent : self.sent + min(size, 4)]
+        self.sent += len(chunk)
+        return chunk
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeListener:
+    commands: list[str] = []
+
+    def __init__(self, address: str, keys: object, port: int, command: str) -> None:
+        _FakeListener.commands.append(command)
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+
+def _netcat(monkeypatch: pytest.MonkeyPatch, transport: AdbTransport, streams: list[_FakeStream]) -> None:
+    import fleetctl.packs.android.transport as module
+
+    _FakeListener.commands = []
+    monkeypatch.setattr(module, "_NetcatListener", _FakeListener)
+    monkeypatch.setattr(transport, "_connect_to_listener", lambda: streams.pop(0))
+
+
+def test_a_netcat_device_streams_a_pull_through_nc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ADB protocol's own pull died 0-17MB into a 363MB archive four times over Wi-Fi; netcat moved it."""
+    # Arrange — the stream carries more than the file, so stopping at the reported size is under test.
+    device = _StubDevice(responses={"stat -c %s /sdcard/c.tar.gz": "10"})
+    transport = _transport(tmp_path, device, use_netcat=True)
+    _netcat(monkeypatch, transport, [_FakeStream(b"0123456789trailing")])
+
+    # Act
+    written = transport.get("/sdcard/c.tar.gz", tmp_path / "c.tar.gz")
+
+    # Assert
+    assert written == 10
+    assert (tmp_path / "c.tar.gz").read_bytes() == b"0123456789"
+    assert _FakeListener.commands == ["toybox nc -l -p 5599 < /sdcard/c.tar.gz"]
+    assert device.pull_timeouts == []
+
+
+def test_a_netcat_stream_that_ends_early_fails_the_size_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    transport = _transport(tmp_path, _StubDevice(responses={"stat -c %s /sdcard/c.tar.gz": "10"}), use_netcat=True)
+    _netcat(monkeypatch, transport, [_FakeStream(b"0123")])
+
+    # Act / Assert
+    with pytest.raises(TransportError, match="landed 4 of 10"):
+        transport.get("/sdcard/c.tar.gz", tmp_path / "c.tar.gz")
+
+
+def test_a_netcat_device_falls_back_to_adb_when_the_size_is_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reading to a known size is what ends a netcat download; without one, the ADB pull is the safe path."""
+    # Arrange
+    device = _StubDevice(responses={"/sdcard/a.xml": "<a/>"})
+    transport = _transport(tmp_path, device, use_netcat=True)
+    _netcat(monkeypatch, transport, [])
+
+    # Act
+    transport.get("/sdcard/a.xml", tmp_path / "a.xml")
+
+    # Assert
+    assert _FakeListener.commands == []
+    assert device.pull_timeouts == [180.0]
+
+
+def test_a_netcat_stream_that_resets_reconnects_and_streams_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    device = _StubDevice(responses={"stat -c %s /sdcard/c.tar.gz": "10"})
+    transport = _transport(tmp_path, device, use_netcat=True)
+    _netcat(monkeypatch, transport, [_FakeStream(b"0123456789", fail_after=4), _FakeStream(b"0123456789")])
+    reconnects = _reconnects_to(monkeypatch, transport, device)
+
+    # Act
+    written = transport.get("/sdcard/c.tar.gz", tmp_path / "c.tar.gz")
+
+    # Assert
+    assert written == 10
+    assert (tmp_path / "c.tar.gz").read_bytes() == b"0123456789"
+    assert len(reconnects) == 1

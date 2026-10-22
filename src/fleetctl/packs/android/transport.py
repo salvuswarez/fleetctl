@@ -215,6 +215,54 @@ class AdbTransport:
             `TransportError`: If the pull failed, or landed short.  <br>
         """
         expected = self._remote_size(remote_path)
+        if self._use_netcat and expected > 0:
+            self._pull_via_netcat(remote_path, local_path, expected)
+        else:
+            self._pull_native(remote_path, local_path, expected)
+        landed = local_path.stat().st_size
+        # -1 means `stat` could not say, which is no reason to reject a pull.
+        if expected >= 0 and landed != expected:
+            raise TransportError(f"ADB pull of {remote_path} from {self._address} landed {landed} of {expected} bytes", target=self._address)
+        return landed
+
+    def _pull_via_netcat(self, remote_path: str, local_path: Path, expected: int) -> None:
+        """Stream a file off the device through `nc`, as uploads already are.
+
+        The ADB protocol's own pull kept dying on a Shield over Wi-Fi: four
+        captures in a row lost the connection 0-17MB into a 363MB archive,
+        while the stock `adb` client pulled the same file over the same link
+        in 133s, and netcat uploads to the same device succeeded all day.
+        Reads exactly `expected` bytes rather than waiting for EOF, so the
+        transfer ends the same way whether or not this toybox's `nc` closes
+        after its input. Verified on a Shield and a Fire Stick: the
+        device-side `nc` exits by itself once the reader hangs up.
+
+        **RAISES:**
+            `TransportError`: If the stream failed. The partial file is kept, and the error says how much landed.  <br>
+        """
+        listener = _NetcatListener(self._address, self._keys, self._port, f"toybox nc -l -p {NC_PORT} < {shlex.quote(remote_path)}")
+        listener.start()
+        received = 0
+        try:
+            sock = self._connect_to_listener()
+            try:
+                sock.settimeout(_SHELL_TIMEOUT_S)
+                with open(local_path, "wb") as handle:
+                    while received < expected:
+                        chunk = sock.recv(min(_CHUNK, expected - received))
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+                        received += len(chunk)
+            finally:
+                sock.close()
+        except OSError as exc:
+            raise TransportError(f"ADB pull failed for {remote_path} on {self._address} after {received} bytes: {exc}", target=self._address) from exc
+        finally:
+            listener.stop()
+
+    def _pull_native(self, remote_path: str, local_path: Path, expected: int) -> None:
+        """Pull through the ADB protocol, for devices without netcat or files of unknown size."""
         timeout = self._transfer_timeout_for(expected)
         # Streamed to disk rather than accumulated in a BytesIO. A profile
         # archive runs past 300MB, and buffering meant growing that in memory
@@ -236,11 +284,6 @@ class AdbTransport:
                 f"ADB pull failed for {remote_path} on {self._address} after {landed} bytes: {exc}",
                 target=self._address,
             ) from exc
-        landed = local_path.stat().st_size
-        # -1 means `stat` could not say, which is no reason to reject a pull.
-        if expected >= 0 and landed != expected:
-            raise TransportError(f"ADB pull of {remote_path} from {self._address} landed {landed} of {expected} bytes", target=self._address)
-        return landed
 
     def free_bytes(self, remote_path: str) -> int:
         """RETURNS: int: Free bytes on the filesystem holding `remote_path`, or 0 if `df` output could not be parsed."""
@@ -300,7 +343,7 @@ class AdbTransport:
         return self._transfer_timeout_s + size / _TRANSFER_FLOOR_BYTES_PER_S
 
     def _stream_via_netcat(self, local_path: Path, remote_path: str, size: int) -> None:
-        listener = _NetcatListener(self._address, self._keys, self._port, remote_path)
+        listener = _NetcatListener(self._address, self._keys, self._port, f"toybox nc -l -p {NC_PORT} > {shlex.quote(remote_path)}")
         listener.start()
         try:
             sock = self._connect_to_listener()
@@ -353,20 +396,20 @@ class AdbTransport:
 
 
 class _NetcatListener:
-    """Holds `nc -l` running on the device for the lifetime of one upload.
+    """Holds `nc -l` running on the device for the lifetime of one transfer.
 
     **PARAMETERS:**
         `address` (str): Device address, dialled again on its own connection — the listener's command blocks for the whole transfer, so it cannot share the caller's.  <br>
         `keys` (AdbKeyStore): Shared signer cache, so the second connection presents the same authorized identity.  <br>
         `port` (int): ADB port.  <br>
-        `remote_path` (str): Where the listener writes what it receives.  <br>
+        `command` (str): The device-side `nc` command: one writing what it receives to a file (upload), or one reading a file out to the reader (download).  <br>
     """
 
-    def __init__(self, address: str, keys: AdbKeyStore, port: int, remote_path: str) -> None:
+    def __init__(self, address: str, keys: AdbKeyStore, port: int, command: str) -> None:
         self._address = address
         self._keys = keys
         self._port = port
-        self._remote_path = remote_path
+        self._command = command
         self._error: Exception | None = None
         self._thread = threading.Thread(target=self._run, daemon=True, name=f"nc-listener-{address}")
 
@@ -381,7 +424,7 @@ class _NetcatListener:
             LOGGER.debug("Netcat listener on %s ended with: %s", self._address, self._error)
 
     def _run(self) -> None:
-        command = f"toybox nc -l -p {NC_PORT} > {shlex.quote(self._remote_path)}"
+        command = self._command
         try:
             transport = AdbTransport(self._address, self._keys, port=self._port, use_netcat=False)
             transport.connect()
